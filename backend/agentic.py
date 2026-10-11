@@ -162,7 +162,9 @@ error message, or how others solve this problem (official docs, known issues, a 
 something fundamentally different, or explain what is blocking you.
 - Before editing a file, read_file the part you will change. Use edit_file for targeted changes \
 (copy 'old' exactly, without the line-number prefix) and write_file for new files or full rewrites. \
-After changing code, run it or its tests (run_tests, or powershell) when that is practical. Every write is \
+Comment the code you write: a docstring for each module, class and non-trivial function, and a short comment \
+wherever the reason is not obvious from the code (a workaround, a platform quirk, an invariant, why this approach) \
+— not comments that restate what a line does. When editing, keep the file's existing style. After changing code, run it or its tests (run_tests, or powershell) when that is practical. Every write is \
 code-checked automatically (syntax, undefined names): fix what the check reports before running. When something \
 fails, find where: command output marks "[Error located]" with the file and line; debug_run shows a script's local \
 variables at a crash or at any line (probe); browser_eval inspects a local web page's state.
@@ -1492,6 +1494,7 @@ class AgentEngine:
         self.turn = {}
         self._recent = collections.deque(maxlen=10)
         self._fail_streak = 0
+        self._debugging = False          # a failure / traceback / failing test is being worked on (more thinking)
         self._force_answer = False
         self._since_tracker = 0
         self._compact_req = False
@@ -3712,6 +3715,7 @@ class AgentEngine:
         self.turn = {"steps": 0, "tool_calls": 0, "prompt_tokens": 0, "completion_tokens": 0,
                      "t0": time.time(), "advisor_cost": 0.0, "compactions": 0, "failed_calls": 0}
         self._fail_streak, self._force_answer, self._since_tracker = 0, False, 0
+        self._debugging = False
         self._best_passes, self._textcall_while_off = -1, False
         self._reality_checks, self._reality_note, self._claim_checks = 0, "", 0
         self._attempts, self._watched_files, self._effect_seq = collections.deque(maxlen=16), {}, 0
@@ -4708,6 +4712,20 @@ class AgentEngine:
     _PASS_RX = re.compile(r"\b(\d+)\s*/\s*\d+\s+(?:tests?\s+)?pass(?:ed|ing)?\b|\b(\d+) pass(?:ed|ing)\b|^# pass (\d+)",
                           re.I | re.M)
 
+    _BROKEN_RX = re.compile(r"Traceback \(most recent call last\)|\b[1-9]\d* (?:failed|errors?)\b|"
+                            r"^(?:FAIL|ERROR|not ok)\b|^tests: FAILED|\bAssertionError\b", re.M)
+
+    def _run_broken(self, name, text):
+        """Did a program or test run show a bug? -> True (traceback, failing tests), False (a clean test run),
+        None (not a run, or nothing to tell). Failing tests are information, not a failed call, so the fail streak
+        misses them — this is what marks the steps after them as debugging."""
+        if name not in ("powershell", "run_tests", "debug_run", "python_host", "python_sandbox", "bg_output"):
+            return None
+        t = (text or "")[-6000:]
+        if self._BROKEN_RX.search(t):
+            return True
+        return False if self._test_passes(name, text) else None
+
     def _test_passes(self, name, text):
         """How many tests passed, when this output is a test run (pytest, node --test, a runner printing
         'N/M passed' or PASS lines) -> int, else None."""
@@ -4809,6 +4827,11 @@ class AgentEngine:
         if failed:
             self.turn["failed_calls"] = self.turn.get("failed_calls", 0) + 1
         self._fail_streak = self._fail_streak + 1 if failed else 0
+        broken = self._run_broken(name, text)
+        if failed or broken:
+            self._debugging = True
+        elif broken is False:
+            self._debugging = False              # a clean test/program run: the bug hunt is over
         if name == "update_tracker":
             if isinstance(args, dict):
                 self._last_tracker_args = json.dumps(args, sort_keys=True, default=str)
@@ -5269,7 +5292,7 @@ class AgentEngine:
         if str(self.cfg.get("effort") or "").lower() == "max":
             return "high"
         eff = getattr(self, "_think_effort", "medium") or "medium"
-        if self._fail_streak >= 2 and eff != "high":
+        if (self._fail_streak >= 1 or getattr(self, "_debugging", False)) and eff != "high":
             eff = {"none": "low", "low": "medium", "medium": "high"}[eff]
         return eff
 
@@ -5278,6 +5301,8 @@ class AgentEngine:
         (a quick task's answer needs no extra thought) — never above the user's cap."""
         eff = self._effective_effort()
         b = EFFORT_THINK[eff] * (2 if self._wrapping_up() and eff in ("medium", "high") else 1)
+        if getattr(self, "_debugging", False) or self._fail_streak >= 1:
+            b = max(b, EFFORT_THINK["high"])    # debugging: half-finished reasoning about a bug costs more steps
         cap = think_max(self.cfg)
         return b if cap < 0 else min(b, cap)
 
@@ -5295,7 +5320,8 @@ class AgentEngine:
             if self._need_plan and self.turn.get("planned"):
                 return False                        # a plan was just written: the checklist only transcribes it
             return True
-        if self._fail_streak >= 1 or self._handoff:  # something went wrong / the executor gave up
+        if self._fail_streak >= 1 or self._handoff or getattr(self, "_debugging", False):
+            # something is broken (a failed call, a traceback, failing tests) / the executor gave up
             return True
         if step == 1 and not self.turn.get("planned"):
             return True                             # no plan this turn: think about the first move instead

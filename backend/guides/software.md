@@ -29,6 +29,10 @@ per feature (each with its tests), last milestone: run every acceptance test and
   port, a query string the router doesn't expect, a dropped base URL) are departures from it.
 - **Build a thin end-to-end slice first:** one real request through every layer (client → server → storage and
   back), tested, before any other feature. Then add features one at a time and re-run the tests after each.
+- **Comment the why.** Each file opens with a docstring or header comment saying what it is responsible for;
+  each class and non-trivial function says what it does, its inputs/outputs and errors. Add a short comment wherever
+  a reader would ask "why?": a workaround, a platform quirk (file locking on Windows, encodings), an invariant, a
+  choice between approaches, a bug a line prevents. Don't narrate what each line does.
 - Anything time-based gets a fixed step in tests so scripted runs are repeatable.
 - Every state that changes must have a path that changes it back (flags cleared, timers reset).
 
