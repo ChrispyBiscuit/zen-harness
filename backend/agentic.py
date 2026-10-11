@@ -1674,7 +1674,7 @@ class AgentEngine:
             _ensure_args = (model, self._n_slots, int(c.get("num_ctx") or 16384))
             _ensure_kw = dict(extra_args=args + list(c.get("llama_args") or []),
                               unified=bool(c.get("kv_unified", True)) and self._n_slots > 1,
-                              exe_dir=c.get("llama_dir") or None)    # profile: its own llama.cpp build
+                              exe_dir=paths.resolve_llama_dir(c.get("llama_dir")) or None)    # profile: its own build
             # kept so a later turn can start the server again if it died (crash, OOM, killed): the chat otherwise
             # got "connection refused" on every message until the app restarted
             self._llama_ensure = lambda: llama_local.ensure(*_ensure_args, lambda s: self.emit("status", text=s),

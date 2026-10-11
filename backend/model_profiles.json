@@ -1,6 +1,21 @@
 {
-  "_note": "Built-in per-model settings, used when the user's settings.json has no profile of the same name (a user profile replaces the preset key by key). Paths are relative to the models folder; '~' is the user's home. Measured on an 8 GB RTX 3070 Laptop + 16 GB RAM.",
+  "_note": "Built-in per-model settings, used when the user's settings.json has no profile of the same name (a user profile replaces the preset key by key). model_file/mmproj paths are relative to the models folder; llama_dir is relative to the app's folder (installed) or the home folder, or '~/...'. default_order: the model a fresh install starts on is the first of these whose file is present (the installer downloads them). Measured on an 8 GB RTX 3070 Laptop + 16 GB RAM.",
+  "default_order": [
+    "ornith-1.5-9b",
+    "qwen3.6-35b-a3b-reap48",
+    "ternary-bonsai-2-27b"
+  ],
   "profiles": {
+    "ornith-1.5-9b": {
+      "model_file": "Ornith-1.5-9B-Q4_K_M.gguf",
+      "mmproj": "mmproj-Ornith-1.5-9B-BF16.gguf",
+      "num_ctx": 65536,
+      "kv_cache": "q8_0",
+      "kv_cache_v": "q4_0",
+      "spec_ngram": "ngram-simple",
+      "ubatch": 128,
+      "parallel": 1
+    },
     "gemma4:12b-it-qat": {
       "kv_cache": "q4_0",
       "spec_ngram": "draft-mtp,ngram-simple",
@@ -54,7 +69,7 @@
     },
     "ternary-bonsai-2-27b": {
       "model_file": "Ternary-Bonsai-2-27B-PTQ1_0.gguf",
-      "llama_dir": "~/llama.cpp-prism",
+      "llama_dir": "llama-prism",
       "num_ctx": 65536,
       "kv_cache": "q8_0",
       "parallel": 1,

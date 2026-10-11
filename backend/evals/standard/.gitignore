@@ -1,0 +1,4 @@
+# run outputs: shared by sending them, not committed
+logs/
+results.jsonl
+results.md

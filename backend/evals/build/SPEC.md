@@ -1,0 +1,1 @@
+I want an expense tracker my roommates and I can all use from our own laptops on the home Wi-Fi. Everyone logs their own expenses, and each month we want to see totals by category. Using it from the terminal is fine. Make sure it actually works. Put it in {ws}.

@@ -1,0 +1,8 @@
+# Standard benchmark runner (evals/standard). Pinned to the versions it was tested with on 2026-10-11.
+inspect_ai==0.3.278
+inspect_evals==0.24.0
+openai==3.29.0
+anthropic==1.13.0
+tiktoken==0.14.0
+# IFEval's scorer (inspect_evals names this exact repository as its optional dependency)
+instruction_following_eval @ git+https://github.com/josejg/instruction_following_eval@0c495b2f95155e8b10acb919ae283bfb4d5be6e2

@@ -46,6 +46,22 @@ def llama_dir():
                                                 else os.path.join(HOME, "llama.cpp"))
 
 
+def resolve_llama_dir(p):
+    """A profile's own llama.cpp build (llama_dir): absolute or '~/' as is; relative = next to the app's bundled
+    build when installed (the installer puts PrismML's in <install>\\llama-prism), else in the home folder.
+    '' when the profile names none (use llama_dir())."""
+    p = str(p or "").strip()
+    if not p:
+        return ""
+    p = os.path.expanduser(p)
+    if os.path.isabs(p):
+        return p
+    for base in (EXE_DIR, HOME):
+        if os.path.isfile(os.path.join(base, p, "llama-server.exe")):
+            return os.path.join(base, p)
+    return os.path.join(EXE_DIR if FROZEN else HOME, p)
+
+
 def resolve_model(p):
     """A profile's model path: absolute as is; relative = inside the models dir (portable settings)."""
     p = str(p or "").strip()

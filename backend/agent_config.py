@@ -63,6 +63,23 @@ def model_presets():
         return {}
 
 
+def default_preset():
+    """The first built-in profile (model_profiles.json "default_order") whose model file is present, or ""."""
+    import json
+    import paths
+    try:
+        with open(paths.resource("model_profiles.json"), encoding="utf-8") as f:
+            doc = json.load(f)
+    except (OSError, ValueError):
+        return ""
+    profs = doc.get("profiles") or {}
+    for name in doc.get("default_order") or []:
+        mf = paths.resolve_model((profs.get(name) or {}).get("model_file") or "")
+        if mf and os.path.isfile(mf):
+            return name
+    return ""
+
+
 def model_profile(cfg, name):
     """The settings for model `name`: its preset, then the user's model_overrides entry over it."""
     prof = dict(model_presets().get(name) or {})
