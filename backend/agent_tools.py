@@ -2170,7 +2170,15 @@ GUIDE_ALIASES = {"pptx": "powerpoint", "ppt": "powerpoint", "slides": "powerpoin
                  "style": "clear_writing", "ste": "clear_writing", "communication": "clear_writing",
                  "simplified_english": "clear_writing", "acw": "clear_writing", "hard": "hard_search",
                  "hard_target": "hard_search", "playbook": "hard_search", "search_playbook": "hard_search",
-                 "deep_search": "hard_search", "hard_search_playbook": "hard_search"}
+                 "deep_search": "hard_search", "hard_search_playbook": "hard_search",
+                 "operators": "hard_search_operators", "search_operators": "hard_search_operators",
+                 "archive": "hard_search_archives", "archives": "hard_search_archives", "wayback": "hard_search_archives",
+                 "paywall": "hard_search_archives", "blocked": "hard_search_archives",
+                 "specialist_indexes": "hard_search_sources", "databases": "hard_search_sources",
+                 "sources": "hard_search_sources", "site_excavation": "hard_search_sites", "sitemap": "hard_search_sites",
+                 "wikidata": "hard_search_sites", "sparql": "hard_search_sites", "structured_queries": "hard_search_sites",
+                 "techniques": "hard_search_techniques", "verification": "hard_search_techniques",
+                 "verify": "hard_search_techniques"}
 
 
 def t_read_guide(a, c):
