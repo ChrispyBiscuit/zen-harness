@@ -133,7 +133,8 @@ def test_load(prof):
     try:
         llama_local.stop("main")                   # one GPU: the chat model makes room for the test
         base = llama_local.ensure(path, parallel=1, num_ctx=int(prof.get("num_ctx") or 8192),
-                                  extra_args=server_args(prof), slot="test")
+                                  extra_args=server_args(prof), slot="test",
+                                  exe_dir=prof.get("llama_dir") or None)    # a model that needs its own llama.cpp build
         load_s = time.time() - t0
         body = json.dumps({"prompt": "Write one sentence about the sea.", "n_predict": 48,
                            "temperature": 0.7}).encode()

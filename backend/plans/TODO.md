@@ -49,3 +49,28 @@ The agent's engineering features are sparse. Research how other harnesses do it,
 - Compaction trigger based on a free-space reserve (~12K tokens) instead of a fixed 75%; optional "focus cap".
 - A hint when the agent runs its own test runner through PowerShell: point it at run_tests.
 - Graphical polish v2 phases 2–6 (plan: plans/graphical-polish-v2.md; phases 0–1 done).
+
+## Hierarchical harness loading (queued 2026-10-11 — investigate/plan first, don't build yet)
+The full path sends ~17K tokens before any conversation (measured offline, chars/3.6; the model's tokenizer likely
+~11K): system prompt ~4.2K + **71 tool schemas ~12.7K on every step** (stable_tools overrides tool_gate so the
+llama.cpp prompt cache never breaks — any change to the tool list makes the hybrid model re-read everything).
+Biggest groups: code ~2.5K, browser ~2.1K, files ~1.8K, shell ~1.4K; biggest tools browser_devtools ~500,
+update_tracker ~490, record ~460, python_sandbox ~400. Prompt sections: How to work ~1.8K, Checklist ~1.0K,
+What you can do ~1.0K. Existing levels: lean pass ~1.8K → basic path ~1K + core tools → full ~17K.
+Proposal (cache-safe: decide the toolset once, early; only ever append):
+1. Per-conversation toolset profiles (research / code / documents / full) chosen by the lean pass; one-time,
+   logged upgrade to full.
+2. Trim tool descriptions to 1-2 lines; usage detail moves to read_guide('tool:<name>') (appended = cache-safe).
+3. Rare/heavy tools (browser devtools, schedules, artifacts, screen, record/query_data) as a one-line catalog
+   behind use_tool(name, args) with on-demand schema fetch.
+4. Layered system prompt: core ~1.5K; checklist rules appended when the first plan is made; detail stays in guides.
+Target ~5-7K for a typical code/research task (estimate). Before building: real counts via llama.cpp /tokenize;
+tool-usage stats per task type from agent_log.jsonl to define the profiles; A/B the expense-tracker build and a
+10-task battery sample (score, time, tool-call errors) with and without.
+
+## Bonsai 2 27B: more context by trimming GPU overhead (queued 2026-10-11 — after the bonsai1 expense-tracker benchmark)
+Profile ternary-bonsai-2-27b (PrismML llama.cpp, C:\Users\user\llama.cpp-prism) runs q8_0 K / q4_0 V at 60K in ~7.8 GB.
+Same-type quantized KV (q8/q8, q4/q4) outputs "////" on long prompts in this build; mixed types work.
+Try: smaller compute buffers (-ub 128 / 256, -b), fewer ctx checkpoints, check CUDA context size; measure the largest
+-c that loads with VRAM < ~7.9 GB and no WDDM shared spill, then a 17K-token prompt for correctness and tok/s.
+Expected maybe ~80-90K (unmeasured). 128K needs CPU offload of layers or KV (big slowdown) — separate decision.

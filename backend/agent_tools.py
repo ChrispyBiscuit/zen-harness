@@ -395,6 +395,14 @@ def t_write_file(a, c):
         old_n, new_n = len(old.splitlines()), len(new.splitlines())
         sig = (os.path.abspath(p).lower(), hashlib.md5(new.encode("utf-8", "replace")).hexdigest())
         ok = c.__dict__.setdefault("_shrink_ok", set())
+        if old_n >= 20 and new_n <= max(3, old_n * 0.15):
+            # almost nothing left: a cut-off or placeholder write, not a rewrite. Resending must NOT confirm it (a model
+            # resent a truncated 1-line write and wiped a 206-line file)
+            raise ToolError(f"this would replace {old_n} lines of {os.path.basename(p)} with {new_n} — that looks like a "
+                            f"cut-off or incomplete write, so it was not done (resending it won't change that). Change "
+                            f"part of the file with edit_file, add with append=true, or write the new version in parts "
+                            f"(first part, then append=true). To really start the file over, move the old one to the "
+                            f"trash first (trash_path), then write the new file.")
         if old_n >= 20 and new_n < old_n * 0.4 and sig not in ok:
             ok.add(sig)                                  # sending the same write again confirms it
             raise ToolError(f"this would replace {old_n} lines of {os.path.basename(p)} with {new_n} — most of the "
@@ -3991,6 +3999,11 @@ def is_web_tool(name):
     return bool(WEB_TOOL_RX.match(low) or WEB_TOOL_RX.match(alias)) or low in WEB_TOOLS or alias in WEB_TOOLS
 
 
+# the placeholder agentic._slim_call_args leaves in history for old bulky args — never real content
+_HISTORY_STUB = re.compile(r"\[\d[\d,]* chars omitted [—-]+ already applied")
+_STUB_TOOLS = {"write_file", "edit_file", "run_python", "run_command", "write_artifact"}
+
+
 class Registry:
     def __init__(self, ctx, mcp=None, enabled=None, screen=False, delegate=False, advisor=False, fanout=False):
         """screen: offer the screen/mouse/keyboard tools (otherwise only enable_screen_control).
@@ -4112,6 +4125,11 @@ class Registry:
             raise ToolError("web_fetch reads internet pages (it extracts text and caches by URL). For a server on "
                             "this PC use http_request(method, url, json=...) — it shows the real status, headers and "
                             "body, and never returns a cached answer.")
+        if name in _STUB_TOOLS and any(isinstance(v, str) and _HISTORY_STUB.search(v) for v in args.values()):
+            raise ToolError("this call contains '[N chars omitted — already applied …]'. That is a placeholder the "
+                            "harness puts in your conversation history in place of a long earlier tool argument; it "
+                            "is not file content, and writing it would replace the real text. Nothing was changed. "
+                            "Read the file with read_file to see its current text, then send the actual content.")
         res = t["fn"](args, self.ctx)
         if (name in ("read_file", "edit_file", "undo_file") or (name == "write_file" and
                 (not args.get("append") or appending))) and args.get("path"):

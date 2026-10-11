@@ -47,6 +47,19 @@ If it works, **Save** the profile and optionally **Use as default**.
 - **Vision**: an `mmproj-*.gguf` file next to the model enables image input.
 - **Speed-up draft model**: a matching `mtp-<model>.gguf` file enables speculative decoding (faster generation).
 
+### Models that need their own llama.cpp build
+Some models only run on a fork of llama.cpp (for example Ternary Bonsai 2 needs PrismML's build for its 1-bit
+format). Their entry in `settings.json` → `agent.model_overrides.<model>` can carry:
+
+- `llama_dir` — folder holding that build's `llama-server.exe` (and its CUDA DLLs). Used for this model only.
+- `kv_cache_v` — a separate precision for the V half of the cache (for example `kv_cache` `q8_0` + `kv_cache_v`
+  `q4_0`). Bonsai 2 on PrismML's build produces garbage on long prompts with a same-type quantized cache
+  (q8/q8, q4/q4); mixed types or f16 work.
+- `strict_template: true` — sends exactly one leading system message and always-valid JSON tool arguments, for chat
+  templates that reject anything else with an HTTP 500.
+- `reasoning_off_field: true` — turns thinking off with `reasoning_effort: "none"` as well, for templates that
+  ignore `enable_thinking`.
+
 ## Cloud models
 
 Settings → General → Model also lists OpenAI and Anthropic models once you add an API key. Cloud models are much

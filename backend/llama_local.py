@@ -566,7 +566,7 @@ def _free_vram_mib():
 
 
 def ensure(model_name, parallel=2, num_ctx=10000, status=lambda s: None, extra_args=(), slot="main", gpu=True,
-           high_priority=False, unified=False):
+           high_priority=False, unified=False, exe_dir=None):
     """Start (or reuse) the server for `model_name` in `slot`; returns its base URL.
     gpu=False: all layers on the CPU (llama.cpp still uses the GPU briefly to read prompts, ~0.25 GB).
     unified=True: the parallel slots share ONE num_ctx context pool (--kv-unified) instead of num_ctx each."""
@@ -574,7 +574,8 @@ def ensure(model_name, parallel=2, num_ctx=10000, status=lambda s: None, extra_a
     extra_args = [str(a) for a in extra_args]
     if unified and parallel > 1:
         extra_args += ["--kv-unified"]
-    key = (model_name, parallel, int(num_ctx), tuple(extra_args))
+    exe_dir = os.path.expanduser(exe_dir) if exe_dir else llama_dir()   # a profile may need its own llama.cpp build
+    key = (model_name, parallel, int(num_ctx), tuple(extra_args), exe_dir)
     st = _slots[slot]
     with _lock:
         proc = st["proc"]
@@ -583,8 +584,8 @@ def ensure(model_name, parallel=2, num_ctx=10000, status=lambda s: None, extra_a
         _stop_locked(slot)
         _kill_stale(slot)
         reap_orphans()
-        if not available():
-            raise RuntimeError(f"llama.cpp not found: put llama-server.exe in {llama_dir()}")
+        if not os.path.isfile(os.path.join(exe_dir, "llama-server.exe")):
+            raise RuntimeError(f"llama.cpp not found: put llama-server.exe in {exe_dir}")
         blob = ollama_blob(model_name)
         status(f"Starting llama.cpp server for {model_name}…")
         _unload_ollama()
@@ -594,7 +595,7 @@ def ensure(model_name, parallel=2, num_ctx=10000, status=lambda s: None, extra_a
         big = gpu and bool(free_mib) and size_mib + FIXED_OVERHEAD_MB + MARGIN_MB > free_mib   # weights alone don't fit
         if big:
             parallel = 1                  # every extra slot is more context memory we do not have
-            key = (model_name, parallel, int(num_ctx), tuple(extra_args))
+            key = (model_name, parallel, int(num_ctx), tuple(extra_args), exe_dir)
             status(f"{model_name} is {size_mib / 1024:.0f} GB and only {free_mib / 1024:.1f} GB "
                    f"of GPU memory is free: llama.cpp will split it between GPU and CPU "
                    f"(one request at a time, slower to load).")
@@ -608,10 +609,10 @@ def ensure(model_name, parallel=2, num_ctx=10000, status=lambda s: None, extra_a
                  ["--fit", "on", "--fit-target", "1024", "--fit-ctx", str(ctx)] if big else ["-ngl", "99"])
         port = _free_port({"main": PORT, "exec": PORT + 1, "speech": PORT + 3, "gopher": PORT + 5, "test": PORT + 7}.get(slot, PORT + 4))
         st["port"] = port
-        cmd = [exe_path(), "-m", blob, "-c", str(ctx)] + place + [
+        cmd = [os.path.join(exe_dir, "llama-server.exe"), "-m", blob, "-c", str(ctx)] + place + [
                "-fa", "on", "--port", str(port), "--host", "127.0.0.1",
                "--parallel", str(parallel)] + extra_args
-        proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, cwd=llama_dir(),
+        proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, cwd=exe_dir,
                                 # no console window; high priority for CPU servers: their threads work in lockstep,
                                 # so at normal priority any background program stalls every token (measured: 0.6 vs
                                 # 6.7 tok/s per worker under the same load)

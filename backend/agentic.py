@@ -287,6 +287,37 @@ _OUTCOME_RX = re.compile(r"exit code|\bPASS\b|\bFAIL|passed|failed|error|Error|T
 _BULKY_ARGS = ("content", "new", "old", "code", "text", "html", "body")
 
 
+def _strict_template_messages(messages):
+    """For chat templates that reject anything unusual (profile setting strict_template; e.g. Ternary Bonsai 2 on
+    PrismML llama.cpp answers HTTP 500): exactly one system message, first; every tool call's arguments valid JSON
+    ("{}" when empty). A copy — the history itself is untouched."""
+    out, sys_parts = [], []
+    for m in messages:
+        if m.get("role") == "system":
+            if not out:
+                sys_parts.append(str(m.get("content") or ""))
+            else:                                   # a later system message becomes a user note
+                out.append({"role": "user", "content": str(m.get("content") or "")})
+            continue
+        if m.get("tool_calls"):
+            calls = []
+            for tc in m["tool_calls"]:
+                fn = dict(tc.get("function") or {})
+                args = fn.get("arguments")
+                try:
+                    json.loads(args) if isinstance(args, str) and args.strip() else None
+                    ok = isinstance(args, str) and args.strip()
+                except ValueError:
+                    ok = False
+                if not ok:
+                    fn["arguments"] = json.dumps(args) if isinstance(args, dict) else "{}"
+                calls.append(dict(tc, function=fn))
+            m = dict(m, tool_calls=calls)
+        out.append(m)
+    head = [{"role": "system", "content": "\n\n".join(p for p in sys_parts if p)}] if sys_parts else []
+    return head + out
+
+
 def _text_only(messages):
     """The messages with image parts replaced by a note — for a model server that cannot take images."""
     out = []
@@ -1639,7 +1670,8 @@ class AgentEngine:
             self._n_slots = max(1, int(c.get("parallel") or 1))
             _ensure_args = (model, self._n_slots, int(c.get("num_ctx") or 16384))
             _ensure_kw = dict(extra_args=args + list(c.get("llama_args") or []),
-                              unified=bool(c.get("kv_unified", True)) and self._n_slots > 1)
+                              unified=bool(c.get("kv_unified", True)) and self._n_slots > 1,
+                              exe_dir=c.get("llama_dir") or None)    # profile: its own llama.cpp build
             # kept so a later turn can start the server again if it died (crash, OOM, killed): the chat otherwise
             # got "connection refused" on every message until the app restarted
             self._llama_ensure = lambda: llama_local.ensure(*_ensure_args, lambda s: self.emit("status", text=s),
@@ -5816,6 +5848,8 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
         self._held_hidden = False
         if executor or not self._sees():
             messages = _text_only(messages)        # a server without an image projector rejects the whole request
+        if be == "llama" and c.get("strict_template") and not executor:
+            messages = _strict_template_messages(messages)
         body = {"model": model, "messages": messages, "stream": True,
                 "stream_options": {"include_usage": True}}
         if executor:
@@ -5843,6 +5877,10 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
             body.update(_sampling(c))
         if be == "llama" and (executor or no_think or not self._thinking_now()):
             body["chat_template_kwargs"] = {"enable_thinking": False}
+            if c.get("reasoning_off_field"):
+                # some templates ignore enable_thinking and turn reasoning off only with reasoning_effort "none"
+                # (Ternary Bonsai 2 / PrismML llama.cpp: a thinking budget of 0 does not stop it)
+                body["reasoning_effort"] = "none"
         elif be == "llama" and not c.get("think_budget") and getattr(self, "_step_think_budget", None):
             # this step's thinking budget (the agent's effort, capped by the user's max)
             body["thinking_budget_tokens"] = int(self._step_think_budget)
@@ -5931,6 +5969,7 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
         last_call_status = 0.0
         drafts = {}                      # stream index -> draft card id (cards shown while a call is being written)
         cut_now = False                  # _should_cut said stop: leave BOTH loops (it used to fire again every ~40 chars)
+        finish = None                    # the server's stop reason: "length" = cut off at the output limit
         with resp:
             for raw in resp:
                 if self.should_stop():
@@ -5977,6 +6016,7 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
                     ptok = ev["usage"].get("prompt_tokens", ptok)
                 for ch in ev.get("choices") or []:
                     d = ch.get("delta") or {}
+                    finish = ch.get("finish_reason") or finish
                     r = d.get("reasoning_content") or d.get("reasoning")
                     if reading and (r or d.get("content") or d.get("tool_calls")):
                         reading = False                      # first output: the read is over
@@ -6047,6 +6087,8 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
             if slot is not None:
                 slot.pop("_drafted", None)
                 self.emit("tool_draft_delta", id=did, name=slot["function"]["name"], args=slot["function"]["arguments"][-24000:])
+        if finish == "length" and calls and not too_long:
+            return self._truncated_call(calls, drafts, ntok, ptok)
         if too_long:
             for did in drafts.values():
                 self.emit("tool_draft_end", id=did, note="stopped: the code was too long")
@@ -6068,6 +6110,25 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
             if not tc["id"]:
                 tc["id"] = f"call_{abs(hash(json.dumps(tc))) % 10**9}"
         return msg, ntok or len(content) // 4, ptok
+
+    def _truncated_call(self, calls, drafts, ntok, ptok):
+        """The reply hit the output-token limit while writing a tool call: its arguments are incomplete, so the call
+        is NOT run (a cut-off write_file once replaced a 206-line file with 1 line). Tell the model and retry."""
+        names = sorted({str((c.get("function") or {}).get("name") or "?") for c in calls.values()})
+        for did in drafts.values():
+            self.emit("tool_draft_end", id=did, note="stopped: the reply was cut off at the output limit")
+        n = self.__dict__.setdefault("_truncations", 0) + 1
+        self._truncations = n
+        self.emit("status", text=f"The reply was cut off while writing {', '.join(names)} — asking for smaller steps")
+        _log({"truncated_call": names, "n": n, "tokens": ntok, "conv": self.ctx.conv_id})
+        self.history.append({"role": "user", "content": f"{REMINDER_TAG}\nYour last reply was cut off at the output "
+                             f"limit while you were writing a {', '.join(names)} call, so that call was NOT run — its "
+                             "arguments were incomplete and nothing was changed. Make it smaller: write a big file in "
+                             "parts (write_file the first ~120 lines, then write_file with append=true for each further "
+                             "part), change existing files with edit_file instead of rewriting them, and think less before "
+                             "a long write." + (" This has happened several times: keep every call short."
+                                                if n >= 3 else "") + "\n</system-reminder>"})
+        return {"role": "assistant", "content": "", "tool_calls": None, "_cut": True}, ntok or 0, ptok
 
     def _call_ollama(self, messages, tools=True, max_tokens=None, no_think=False):
         c = self.cfg
