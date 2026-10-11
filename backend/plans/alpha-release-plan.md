@@ -140,3 +140,16 @@ RAG indexes and datasets (`*_rag_index.npy`, `*_rag_meta.jsonl`, `*_dataset.json
 ## 6. Execution log
 - 2026-10-11: plans written; Inno Setup installed; user chose private repo / PyInstaller + Inno / first-run model
   download.
+- 2026-10-11: Phase A done — monorepo at `C:\Users\user\dev\zen-harness` (code only; secrets/data excluded and
+  scanned), offline suite in backend/tests (pytest: 140 pass, 2 xfail probes), pinned requirements, private repo
+  https://github.com/ChrispyBiscuit/zen-harness.
+- 2026-10-11: Phase B done — `paths.py` (data/resources/models/llama dirs; installed builds use
+  `%LOCALAPPDATA%\ZenHarness`); llama.cpp logs/pids moved to the data dir. Security fix: the UI routes and `/ws`
+  refuse cross-origin requests (a browser page could read chats/token over the websocket before).
+- 2026-10-11: Phase C done — docs/ (7 pages) + title-bar Help menu (docs, About, Licences, diagnostics); Settings →
+  Models (catalog, inspect/propose, test load, download, file picker); Connect apps (Claude Desktop / Claude Code /
+  Cursor snippets, test connection); first-run Welcome (hardware check, recommended model, auto setup, cloud key).
+  Licences: `packaging/gen_licenses.py` (python, npm, llama.cpp, CUDA runtime, Qt, Python, models); espeak-ng
+  (GPL-3.0) kept out of the installer.
+- 2026-10-11: Phase D — PyInstaller onedir (`ZenHarness.exe` + `zenharness-cli.exe`), roles via flags, bundled Python
+  for agent scripts / tests / the Python tool's kernel, Inno Setup per-user installer, `packaging/build.ps1`.

@@ -33,6 +33,8 @@ UninstallDisplayIcon={app}\ZenHarness.exe
 LicenseFile=..\LICENSE
 Compression=lzma2/ultra64
 SolidCompression=yes
+; the CUDA DLLs are huge: compress in a separate 64-bit process (the 32-bit compiler runs out of memory)
+LZMAUseSeparateProcess=yes
 LZMANumBlockThreads=4
 WizardStyle=modern
 CloseApplications=yes

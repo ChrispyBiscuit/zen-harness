@@ -28,7 +28,7 @@ CUDA build (set `LLAMA_CPP_DIR`, default `%USERPROFILE%\llama.cpp`). Models: GGU
 (default `%USERPROFILE%\models`).
 
 ```powershell
-git clone https://github.com/<you>/zen-harness.git
+git clone https://github.com/ChrispyBiscuit/zen-harness.git
 cd zen-harness
 py -3.13 -m venv backend\venv
 backend\venv\Scripts\pip install -r backend\requirements.txt

@@ -227,7 +227,7 @@ def stdio_main():
         out.flush()
 
     for line in stdin:
-        line = line.strip()
+        line = line.strip().removeprefix(b"\xef\xbb\xbf")      # a UTF-8 BOM some shells prepend
         if not line:
             continue
         try:
