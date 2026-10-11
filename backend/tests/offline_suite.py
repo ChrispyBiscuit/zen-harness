@@ -1132,6 +1132,57 @@ def gated_tool_is_enabled_and_runs():
     assert "was not enabled" not in out and "did not run" not in out, out[:200]
 
 
+# =====================================================================================================================
+# read_file honesty: a file under the line limit but over the result clip used to be "shown whole" and then cut at
+# MAX_RESULT, so the model never saw its end and every offset read returned line 1 again (bonsai2, 2026-10-11)
+@test
+def read_file_pages_long_lines_and_states_size():
+    import re
+    d = tmpdir("read")
+    p = os.path.join(d, "server.py")
+    body = [f"def handler_{i}(request):  # " + "x" * 30 for i in range(330)]
+    with open(p, "w", encoding="utf-8") as f:
+        f.write("\n".join(body) + "\n")
+    reg = at.Registry(at.Ctx([d]), None, None)
+    seen, off, pages = set(), None, 0
+    while pages < 10:
+        out, _ = reg.call("read_file", {"path": p} if off is None else {"path": p, "offset": off})
+        pages += 1
+        head = out.splitlines()[0]
+        assert head.startswith("[server.py: 330 lines,"), head            # the full size, on every read
+        assert "truncated," not in out and "whole file is shown" not in out, out[:300]
+        seen.update(int(ln.split("\t")[0]) for ln in out.splitlines() if "\t" in ln and ln.split("\t")[0].strip().isdigit())
+        m = re.search(r"continue with offset=(\d+)", head)
+        if not m:
+            assert "0 after" in head, head
+            break
+        off = int(m.group(1))
+    assert seen == set(range(1, 331)) and 2 <= pages <= 4, (len(seen), pages)
+    # an offset read of a long-lined file starts where it was asked, not at line 1
+    out, _ = reg.call("read_file", {"path": p, "offset": 200, "limit": 20})
+    assert "showing lines 200-" in out.splitlines()[0], out.splitlines()[0]
+    # a small file is still shown whole, and says so
+    q = os.path.join(d, "small.py")
+    with open(q, "w", encoding="utf-8") as f:
+        f.write("x = 1\n" * 50)
+    out, _ = reg.call("read_file", {"path": q, "offset": 20, "limit": 5})
+    assert "showing the whole file" in out.splitlines()[0] and "    50\t" in out, out[:200]
+
+
+@test
+def prd_check_finds_the_project_prd_above_tests():
+    e = engine()
+    d = tmpdir("proj")
+    os.makedirs(os.path.join(d, "docs"))
+    os.makedirs(os.path.join(d, "tests"))
+    code = "\n".join(f"x{i} = {i}" for i in range(120))
+    t = os.path.join(d, "tests", "test_api.py")
+    assert e._is_new_program("write_file", {"path": t, "content": code})          # no PRD anywhere yet
+    with open(os.path.join(d, "docs", "PRD.md"), "w", encoding="utf-8") as f:
+        f.write("# PRD\n")
+    assert not e._is_new_program("write_file", {"path": t, "content": code})      # docs/PRD.md one level up
+
+
 def main():
     t_all = time.time()
     for fn in TESTS:

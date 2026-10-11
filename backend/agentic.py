@@ -2465,8 +2465,17 @@ class AgentEngine:
         path, content = str(args.get("path") or ""), str(args.get("content") or "")
         if not self._CODE_EXT_RX.search(path) or content.count("\n") < 80:
             return False
-        folder = os.path.dirname(path) or "."
-        return not any(os.path.isfile(os.path.join(d, "PRD.md")) for d in (folder, os.path.join(folder, "docs")))
+        # the project's PRD may sit a few levels up: a test file in tests/ belongs to the project above it (bonsai2
+        # wrote tests/test_*.py, docs/PRD.md existed one level up, and the write was refused)
+        folder = os.path.abspath(os.path.dirname(path) or ".")
+        for _ in range(4):
+            if any(os.path.isfile(os.path.join(d, "PRD.md")) for d in (folder, os.path.join(folder, "docs"))):
+                return False
+            parent = os.path.dirname(folder)
+            if parent == folder:
+                break
+            folder = parent
+        return True
 
     def _fan_workers(self):
         """How many fan-out workers run at once (Settings → fan-out); the model is told this number."""

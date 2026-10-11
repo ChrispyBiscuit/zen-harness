@@ -243,6 +243,10 @@ def _read_image(p, c):
 
 
 READ_WHOLE, READ_MIN = 600, 200
+# characters of numbered lines one read may show: results are clipped at MAX_RESULT, and the outline and notes
+# need room. A file that fits is shown whole; a longer one is paged, never silently cut.
+READ_BUDGET = MAX_RESULT - 1800
+OUTLINE_BUDGET = 1200        # of the 1,800 left: the outline, the size header and the continue note
 
 
 def t_read_file(a, c):
@@ -263,7 +267,9 @@ def t_read_file(a, c):
     # deadlock for an hour: the lock in _logout and the second lock in _auth were never on screen together).
     # A file up to READ_WHOLE lines is always shown whole; a bigger one at least READ_MIN lines at a time.
     asked = (start, limit) if (a.get("offset") or a.get("limit")) else None
-    if len(lines) <= READ_WHOLE:
+    cut = [ln if len(ln) <= 2000 else ln[:2000] + "…" for ln in lines]
+    fits = len(_numbered(cut, 1)) <= READ_BUDGET
+    if len(lines) <= READ_WHOLE and fits:
         start, limit = 1, max(len(lines), 1)
         if asked and asked[0] > 1:
             a["_whole_note"] = (f"(The whole file is shown — {len(lines)} lines is small enough. The lines you asked "
@@ -271,11 +277,24 @@ def t_read_file(a, c):
                                 f"read it again.)\n")
     else:
         limit = max(limit, READ_MIN)
-    seg = [ln if len(ln) <= 2000 else ln[:2000] + "…" for ln in lines[start - 1:start - 1 + limit]]
+    # page by characters too: a 330-line file of long lines used to be "shown whole" and then clipped at
+    # MAX_RESULT — the model was told it had the whole file, asked for the rest, and got line 1 again, forever
+    seg, used = [], 0
+    for ln in cut[start - 1:start - 1 + limit]:
+        used += len(ln) + 8                            # the line-number prefix and newline
+        if seg and used > READ_BUDGET:
+            break
+        seg.append(ln)
     end = start + len(seg) - 1
     c.display = {"type": "file", "path": p, "start": start, "end": end, "total": len(lines)}
     if not lines:
         return f"{p} is empty"
+    # the file's full size and the exact part shown, on every read: the model must know whether it has seen it all
+    whole = start == 1 and end == len(lines)
+    head = (f"[{os.path.basename(p)}: {len(lines)} lines, {sum(len(x) + 1 for x in lines):,} characters — "
+            + ("showing the whole file]\n" if whole else
+               f"showing lines {start}-{end}; {start - 1} line(s) before, {len(lines) - end} after"
+               + (f" — continue with offset={end + 1}" if end < len(lines) else "") + "]\n"))
     out = a.pop("_whole_note", "") + _numbered(seg, start)
     if p.lower().endswith(TABLE_EXT):
         out = _table_hint(p).lstrip("\n") + "\n" + out
@@ -283,10 +302,12 @@ def t_read_file(a, c):
         out += f"\n…[lines {start}-{end} of {len(lines)}; call again with offset={end + 1} for more]"
         if start == 1:
             ol = _outline(p, lines)
+            if ol and len(ol) > OUTLINE_BUDGET:          # it must fit beside the page, or the clip cuts the page
+                ol = ol[:OUTLINE_BUDGET].rsplit("\n", 1)[0] + "\n… (more definitions: search_text for a name)"
             if ol:
                 out = (f"OUTLINE of {os.path.basename(p)} ({len(lines)} lines) — jump with offset=, or "
                        f"search_text(pattern, root=this file, context='function'):\n{ol}\n\n" + out)
-    return out
+    return head + out
 
 
 _OUTLINE_RX = re.compile(r"^\s*(?:export\s+)?(?:async\s+)?(?:def|class|function|interface|struct|impl|fn|func|"
