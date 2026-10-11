@@ -1586,6 +1586,20 @@ class AgentEngine:
         if be == "llama" and llama_local.running("speech"):
             self.emit("status", text="Unloading the speech-mode model…")
             llama_local.stop("speech")
+        if be == "llama" and c.get("ctx_auto", True) and c.get("tuned_vram_mib"):
+            # a profile tuned for a smaller card (the built-in ones: 8 GB) on a bigger GPU: use the extra memory for
+            # a better cache, more context, or more experts on the GPU, instead of leaving it idle
+            auto = llama_local.auto_size(model, int(c.get("num_ctx") or 16384), str(c.get("kv_cache") or "q8_0"),
+                                         kv_v=c.get("kv_cache_v") or None, tuned_mib=int(c["tuned_vram_mib"]),
+                                         cap=c.get("ctx_auto_max"),
+                                         reserve_mib=reserve + (llama_local.DRAFTER_MIB if draft else 0))
+            if auto:
+                c["num_ctx"], c["kv_cache"], c["kv_cache_v"] = auto["ctx"], auto["kv"], auto["kv_v"]
+                if auto["moe"]:
+                    c.pop("n_cpu_moe", None)          # the 8 GB count kept experts in RAM that now fit on the GPU
+                c["_auto_ctx"] = True
+                self.emit("status", text="Auto-sized for this GPU — " + auto["note"])
+                _log({"ctx_auto": auto, "conv": self.ctx.conv_id})
         if be == "llama":
             fit = llama_local.fit_context(model, int(c.get("num_ctx") or 16384), str(c.get("kv_cache") or "auto"),
                                           reserve_mib=reserve, kv_v=c.get("kv_cache_v") or None)
@@ -1593,8 +1607,8 @@ class AgentEngine:
                 self.emit("status", text=fit["note"])
                 _log({"context_fit": fit, "conv": self.ctx.conv_id})
             c["num_ctx"], c["kv_cache"] = fit["ctx"], fit["kv"]    # this engine's copy of the settings only
-            if draft and c.get("spec_draft_gpu", True):
-                # measured on the 8 GB RTX 3070 (ubatch 256): Gemma 4 12B q4 + drafter: 20k = 7.59 GB (45.7 tok/s),
+            if draft and c.get("spec_draft_gpu", True) and not c.get("_auto_ctx"):
+                # (auto sizing already kept the drafter's memory free) measured on the 8 GB RTX 3070 (ubatch 256): Gemma 4 12B q4 + drafter: 20k = 7.59 GB (45.7 tok/s),
                 # 40k = 7.78 GB; Qwen3.5 9B q8 + drafter: 48k = 7.41 GB (61.8 tok/s), 64k = 7.83 GB. Fan-out workers
                 # add ~0.24 GB, so the default cap is lower with fan-out on.
                 cap = int(c.get("spec_draft_ctx") or (20480 if use_fan else 40960))
@@ -4328,7 +4342,11 @@ class AgentEngine:
         if not hasattr(self, "_calls_seen"):
             self._calls_seen, self._change_seq = {}, 0
         key = self._gate_key(name, t, args)
-        if ok and t and (t["kind"] in (at.WRITE, at.EXEC, at.INPUT)    # a refused or failed write changed nothing
+        # a POST/PUT/PATCH/DELETE changes a running server's data with no file changing: the same GET after it is a
+        # new question, not a repeat (http_request is a NET tool, which otherwise changes nothing)
+        sends = (name == "http_request" and isinstance(args, dict)
+                 and str(args.get("method") or "GET").upper() not in ("GET", "HEAD", "OPTIONS"))
+        if ok and t and (t["kind"] in (at.WRITE, at.EXEC, at.INPUT) or sends   # a refused or failed write changed nothing
                          or name in ("artifact_create", "artifact_edit")):   # note tools that change what a read returns
             self._change_seq += 1                 # anything that may change files or state invalidates earlier results
             if t["kind"] == at.WRITE:             # files still changing = work still moving (see the progress check)
@@ -4793,7 +4811,13 @@ class AgentEngine:
         toks = set(self._TOKEN_RX.findall((name + " " + json.dumps(args, default=str)).lower()))
         target = ""                                   # what the call acts on: a different one = a different attempt
         if isinstance(args, dict):
-            target = " ".join(str(args.get(k) or "") for k in ("path", "src", "dst", "url", "urls", "file", "id")).lower()
+            # the part of a file counts too: reading pages 1, 2, 3 of one file is progress, not the same attempt
+            target = " ".join(str(args.get(k) or "") for k in ("path", "src", "dst", "url", "urls", "file", "id",
+                                                               "offset", "start_line")).lower()
+            if name == "http_request":                # a different body is a different test (bad-input checks)
+                target += " " + str(args.get("method") or "GET").upper() + " " + json.dumps(
+                    args.get("json") if args.get("json") is not None else args.get("data") or args.get("body") or "",
+                    sort_keys=True, default=str)
         win = self.__dict__.setdefault("_attempts", collections.deque(maxlen=16))
         same = [w for w in win if w[0] == name and w[2] == seq and toks and (w[3] == target or not target) and
                 len(toks & w[1]) / max(1, len(toks | w[1])) >= 0.7]

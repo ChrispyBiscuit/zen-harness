@@ -47,6 +47,18 @@ If it works, **Save** the profile and optionally **Use as default**.
 - **Vision**: an `mmproj-*.gguf` file next to the model enables image input.
 - **Speed-up draft model**: a matching `mtp-<model>.gguf` file enables speculative decoding (faster generation).
 
+### Bigger graphics cards: automatic sizing
+The built-in profiles are tuned for an 8 GB card. On a card with more memory (12, 16, 24 GB…) the app uses the extra
+automatically when it loads a model, and says so in the status line:
+- **Most models**: a full-precision cache first (better quality) if it still holds the tuned context, otherwise more
+  context with the tuned cache — up to 128K tokens or the model's own limit.
+- **Mixture-of-experts models** (e.g. Qwen3.6 35B-A3B): more of the model's experts go on the GPU instead of system
+  RAM, which is faster.
+
+Calculated from the model files (not yet measured on such cards): a 12 GB card gets Bonsai 2 27B at 84K with a full-precision cache and the 35B
+with every expert on the GPU; 16 GB gets Bonsai at 128K. Your own profiles are left as you set them. To turn it off
+set `ctx_auto` to `false` (agent settings); `ctx_auto_max` changes the 128K cap.
+
 ### Models that need their own llama.cpp build
 Some models only run on a fork of llama.cpp (for example Ternary Bonsai 2 needs PrismML's build for its 1-bit
 format). Their entry in `settings.json` → `agent.model_overrides.<model>` can carry:

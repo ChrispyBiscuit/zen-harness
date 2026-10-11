@@ -220,7 +220,7 @@ def ollama_projector(name):
 def gguf_meta(path, keys=("block_count", "head_count_kv", "key_length", "value_length", "full_attention_interval",
                           "embedding_length", "architecture", "head_count", "sliding_window", "expert_count",
                           "expert_used_count", "nextn_predict_layers", "sliding_window_pattern", "key_length_swa",
-                          "value_length_swa")):
+                          "value_length_swa", "context_length")):
     """The scalar metadata of a GGUF file whose key ends with one of `keys` (reads only the header)."""
     import struct
     sz = {0: 1, 1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 4, 7: 1, 10: 8, 11: 8, 12: 8}
@@ -489,6 +489,45 @@ def _fit_moe(blob, meta, want_ctx, kv_choice, total_mib, kv_v=None):
             "layers": len(per_layer), "experts_gpu_layers": on_gpu, "experts_cpu_gib": round(cpu_bytes / 2**30, 2),
             "non_expert_gib": round(non_expert / 2**30, 2), "mtp": bool(meta.get("nextn_predict_layers")),
             "weights_mib": round(os.path.getsize(blob) / 1048576), "total_mib": total_mib}
+
+
+AUTO_CTX_MAX = 131072              # auto sizing never goes past this (or the model's trained context)
+DRAFTER_MIB = 900                  # an MTP drafter's weights + cache, kept free when sizing automatically
+
+
+def auto_size(model_name, tuned_ctx, kv="q8_0", kv_v=None, tuned_mib=8192, cap=None, reserve_mib=0):
+    """On a GPU with clearly more memory than the profile was tuned for, spend the extra instead of leaving it idle.
+    Dense model: first a full-precision (f16) cache if it still holds the tuned context (better quality), else the
+    tuned cache type with more context — up to `cap` and the model's trained context. Mixture-of-experts: the tuned
+    context, with the CPU-expert count left to fit_context (more experts on the GPU is faster than more context).
+    -> dict(ctx, kv, kv_v, moe, note) or None (no bigger card / unknown model: keep the profile as it is)."""
+    total = gpu_total_mib()
+    if not total or total <= int(tuned_mib) + 512:
+        return None
+    try:
+        meta = gguf_meta(ollama_blob(model_name))
+    except Exception:
+        return None
+    trained = int(meta.get("context_length") or 0)
+    cap = int(cap or AUTO_CTX_MAX)
+    if trained:
+        cap = min(cap, trained)
+    tuned_ctx = min(int(tuned_ctx), cap)
+    gb = f"{total / 1024:.0f} GB card (profile tuned for {int(tuned_mib) / 1024:.0f} GB)"
+    if meta.get("expert_count"):
+        return {"ctx": tuned_ctx, "kv": kv, "kv_v": kv_v, "moe": True,
+                "note": f"{gb}: more of the model's experts go on the GPU"}
+    f16 = fit_context(model_name, cap, "f16", reserve_mib=reserve_mib)
+    if f16.get("partial"):
+        return None
+    if int((f16.get("max") or {}).get("f16") or 0) >= tuned_ctx:
+        ctx = max(tuned_ctx, min(cap, int(f16["max"]["f16"])))
+        return {"ctx": ctx, "kv": "f16", "kv_v": None, "moe": False,
+                "note": f"{gb}: {ctx // 1024}k context with a full-precision cache"}
+    q = fit_context(model_name, cap, kv, reserve_mib=reserve_mib, kv_v=kv_v)
+    ctx = max(tuned_ctx, min(cap, int(q.get("ctx") or tuned_ctx)))
+    return {"ctx": ctx, "kv": kv, "kv_v": kv_v, "moe": False,
+            "note": f"{gb}: {ctx // 1024}k context ({kv}{'/' + kv_v if kv_v and kv_v != kv else ''} cache)"}
 
 
 def vram_need_mib(model_name, ctx, kv="q8_0"):

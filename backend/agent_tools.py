@@ -4197,9 +4197,15 @@ class Registry:
     SAVE_RESULTS = {"gather", "read_document", "web_fetch", "browser_read", "browser_links", "query_data", "search_documents",
                     "memory_search", "web_search", "artifact_read", "bg_output", "task_status", "wait_task"}
 
+    # curated reference text the model asks for on purpose: a guide cut at MAX_RESULT lost its last sections
+    # (software.md is 11 KB, hard_search_techniques.md 15 KB) and the tool catalog lost its last groups
+    RESULT_LIMITS = {"read_guide": 16000, "available_tools": 12000}
+
     def _keep_result(self, name, text):
         """Long results of reading tools are saved whole to the chat's folder, so the model can hand them to code
         (python_sandbox files=[...]) instead of re-typing them — a model has no copy & paste."""
+        if name in self.RESULT_LIMITS:
+            return clip(text, self.RESULT_LIMITS[name])
         if name in self.HEAD_TAIL and len(text) > MAX_RESULT:
             try:
                 import debug_tools as dbg

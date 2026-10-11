@@ -1181,6 +1181,60 @@ def slimmed_history_call_has_no_content_to_copy():
 
 
 @test
+def guide_and_catalog_are_not_cut_at_the_default_limit():
+    reg = at.Registry(at.Ctx([tmpdir("g")]), None, None)
+    long = "x" * 15000
+    assert reg._keep_result("read_guide", long) == long                  # software.md is 11 KB, the biggest 15 KB
+    assert "truncated," in reg._keep_result("read_file_unknown_tool", long)
+
+
+@test
+def paging_through_a_file_is_not_the_same_attempt():
+    e = engine()
+    e._role = "main"
+    notes = [e._same_attempt("read_file", {"path": "C:/p/server.py", "offset": o}) for o in (None, 137, 280, 400)]
+    assert not any(notes), notes
+    again = [e._same_attempt("read_file", {"path": "C:/p/server.py", "offset": 137}) for _ in range(2)]
+    assert any("3rd attempt" in (n or "") for n in again), again        # the same page again still counts
+    url = "http://127.0.0.1:9/api/expense"
+    bad = [{"user": "a", "amount": -5}, {"user": "a"}, {"user": "a", "amount": "abc"}, {"amount": 3}]
+    notes = [e._same_attempt("http_request", {"method": "POST", "url": url, "json": b}) for b in bad]
+    assert not any(notes), notes                                        # bad-input checks are different tests
+
+
+@test
+def a_post_makes_the_same_get_a_new_question():
+    e = engine()
+    t = e.reg.by_name["http_request"]
+    get = {"method": "GET", "url": "http://127.0.0.1:9/totals"}
+    e._record_call("http_request", t, get, "HTTP 200 {}")
+    assert e._repeat_of("http_request", t, get)                     # the same GET, nothing in between: refused
+    e._record_call("http_request", t, {"method": "POST", "url": "http://127.0.0.1:9/add", "json": {"a": 1}}, "HTTP 201")
+    assert not e._repeat_of("http_request", t, get)                 # after a POST the server's data changed
+
+
+@test
+def auto_size_uses_a_bigger_gpu_and_leaves_the_tuned_one_alone():
+    import llama_local as ll
+    saved = (ll.gpu_total_mib, ll.gguf_meta, ll.ollama_blob, ll.fit_context)
+    try:
+        ll.ollama_blob = lambda m: m
+        ll.gguf_meta = lambda p: {"context_length": 262144}
+        ll.fit_context = lambda m, want, kv, reserve_mib=0, kv_v=None: {
+            "ctx": min(want, 90112), "kv": kv, "max": {"f16": 86016 if ll.gpu_total_mib() > 12000 else 24576}}
+        ll.gpu_total_mib = lambda: 8192
+        assert ll.auto_size("m", 65536, "q8_0", "q4_0", tuned_mib=8192) is None          # the card it was tuned on
+        ll.gpu_total_mib = lambda: 12282
+        a = ll.auto_size("m", 65536, "q8_0", "q4_0", tuned_mib=8192)
+        assert a["kv"] == "f16" and a["ctx"] == 86016 and not a["moe"], a                # better cache, more context
+        ll.gguf_meta = lambda p: {"context_length": 262144, "expert_count": 128}
+        a = ll.auto_size("m", 65536, "bf16", None, tuned_mib=8192)
+        assert a["moe"] and a["ctx"] == 65536, a                                         # MoE: experts move instead
+    finally:
+        ll.gpu_total_mib, ll.gguf_meta, ll.ollama_blob, ll.fit_context = saved
+
+
+@test
 def prd_check_finds_the_project_prd_above_tests():
     e = engine()
     d = tmpdir("proj")
