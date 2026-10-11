@@ -306,6 +306,25 @@ def _origin_ok(req):
     return (urlparse(o).hostname or "") in LOOPBACK
 
 
+UI_DEV_PORTS = (5173, 5174, 5180, 5181)        # vite dev server and replay/preview (ui/vite.config.ts)
+
+
+def _ui_origin_ok(req):
+    """The app's own pages only: no Origin (same-origin GETs, the Qt window's navigations, non-browser clients), or a
+    loopback origin on the app's port or the UI dev-server ports. Pages served by the agent's own test servers
+    (localhost:8790…) and every other site are refused."""
+    o = req.headers.get("Origin")
+    if not o:
+        return True
+    if o == "null":
+        return False
+    u = urlparse(o)
+    if (u.hostname or "") not in LOOPBACK:
+        return False
+    port = u.port or (443 if u.scheme == "https" else 80)
+    return port == int(getattr(wb, "PORT", 8765)) or port in UI_DEV_PORTS
+
+
 _HITS = collections.defaultdict(collections.deque)
 
 
@@ -342,6 +361,10 @@ async def middleware(req, handler):
     if not (api or mcp):
         if not _is_loopback(req):                      # the UI and /api/* never answer other devices
             return _err(403, "the app UI is only available on this computer")
+        if not _ui_origin_ok(req):
+            # a web page in the user's normal browser could otherwise open ws://127.0.0.1:8765/ws (websockets
+            # ignore CORS: chats, settings, token) or fire "simple" POSTs at /api/send (agent runs with a shell)
+            return _err(403, "cross-origin requests to the app are not allowed")
         return await handler(req)
     t0 = time.time()
     resp = await _guarded(req, handler, api, mcp)
