@@ -1062,6 +1062,13 @@ async def api_shutdown(req):
     return J({"ok": True})
 
 
+@routes.get("/api/commands")
+async def api_commands(req):
+    """Slash commands for the composer's autocomplete: every playbook and guide that '/<name>' can invoke."""
+    import slash_commands
+    return J({"commands": await asyncio.to_thread(slash_commands.catalog)})
+
+
 @routes.get("/api/fit")
 async def api_fit(req):
     import llama_local

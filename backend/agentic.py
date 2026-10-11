@@ -3604,6 +3604,33 @@ class AgentEngine:
     def run(self, user_text, images=None):
         """One user turn. Returns the final answer text."""
         self._turn_request = str(user_text or "")
+        # slash commands: "/<playbook or guide> <request>" runs the request with that playbook/guide from the start;
+        # "/help" lists them (answered by the app, no model call)
+        self._forced_cmd, self._direct_reply = None, ""
+        if not self.ctx.is_subagent and self._role in ("main", None, ""):
+            try:
+                import slash_commands
+                cmd = slash_commands.parse(user_text)
+            except Exception:
+                cmd = None
+            if cmd and cmd.get("help"):
+                self._direct_reply = slash_commands.help_text()
+            elif cmd and cmd.get("unknown") is not None:
+                self._direct_reply = (f"There's no playbook or guide called `/{cmd['unknown']}`.\n\n"
+                                      + slash_commands.help_text())
+            elif cmd and cmd.get("entry"):
+                e = cmd["entry"]
+                if cmd["rest"]:
+                    self._forced_cmd = e
+                    user_text = cmd["rest"]
+                else:
+                    self._direct_reply = (f"`/{e['name']}` — {e['title']} ({e['kind']}). Type `/{e['name']}` followed "
+                                          f"by your request to run it with this {e['kind']}.")
+            elif cmd is None:
+                try:                               # "use the hard search playbook" names one in plain words
+                    self._forced_cmd = slash_commands.named_in(user_text)
+                except Exception:
+                    self._forced_cmd = None
         if getattr(self, "_llama_ensure", None) and not self.ctx.is_subagent and not llama_local.running("main"):
             self.emit("status", text="The model server had stopped — starting it again…")
             try:
@@ -3622,6 +3649,18 @@ class AgentEngine:
         self._recall_text = self._recall(user_text)     # also given to the lean first pass (without guide hints)
         # guide hints ("read the web_research guide") only matter on the extensive path: added there, not here
         self._hint, self._turn_user_msg = self._guide_hint(user_text), self.history[-1]
+        if self._forced_cmd:
+            import slash_commands
+            e = self._forced_cmd
+            note = (f"\n\n{REMINDER_TAG}\nThe user invoked /{e['name']}: follow this {e['kind']} — \"{e['title']}\" — "
+                    f"for this request from the start (adapt the specifics):\n\n{slash_commands.body(e)}\n</system-reminder>")
+            m = self.history[-1]
+            if isinstance(m["content"], list):
+                m["content"][0]["text"] += note
+            else:
+                m["content"] += note
+            if e["kind"] == "playbook":
+                self._playbook = self.ctx.playbook = e["name"]
         recall = self._recall_text
         if recall:                       # appended to the new message: earlier prompt (and its cache) unchanged
             m = self.history[-1]
@@ -3656,6 +3695,8 @@ class AgentEngine:
         self._fetch_sizes = {}
         self._checkin_ignored = 0
         self._tracker_bounces, self._guides_read = 0, set()
+        if self._forced_cmd and self._forced_cmd["kind"] == "guide":
+            self._guides_read.add(self._forced_cmd["name"].lower())    # already in the message: no re-read, no hint
         self._hard_search_hinted = False                               # one hard_search pointer per turn
         self._fc_rounds, self._fc_from = 0, len(self.history) - 1     # fact check: rounds this turn, turn start
         self._check_level, self._fc_claims = "full", None              # how much checking (the router decides)
@@ -3693,6 +3734,10 @@ class AgentEngine:
         if self._role == "main" or not self._role:
             self.emit_context()          # the gauge shows this chat right away, not after the first reply
         try:
+            if self._direct_reply:                 # /help and friends: the app answers, no model call
+                self.emit("ans_delta", text=self._direct_reply)
+                self.history.append({"role": "assistant", "content": self._direct_reply})
+                raise _LeanDone(self._direct_reply)
             # FIRST, the lean pass: a short prompt (no harness, no tool list) and one tool, get_tools. It answers
             # directly when it can; calling get_tools loads the full harness for this message.
             self._escalated, self._depth, self._basic, self._upgrade = False, "", False, ""
@@ -3786,7 +3831,7 @@ class AgentEngine:
                     else:
                         m["content"] = (m.get("content") or "") + note
                 if (self.cfg.get("playbooks", True) and not resuming and not self.ctx.is_subagent
-                        and not self._NO_PLAN_RX.match(user_text or "")):
+                        and not self._forced_cmd and not self._NO_PLAN_RX.match(user_text or "")):
                     self._apply_playbook(user_text)
                 if not resuming and self._need_plan:
                     if need:
