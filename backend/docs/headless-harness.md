@@ -88,8 +88,8 @@ Tools: `run_task(task, conversation_id?, read_only?, wait_seconds?)`, `get_run(r
 and starts the tray service if needed:
 
 ```json
-{ "mcpServers": { "zen-headless-harness": { "command": "C:\\Users\\user\\OneDrive\\Desktop\\Diffusion\\web-agent\\venv\\Scripts\\python.exe",
-                                   "args": ["C:\\Users\\user\\OneDrive\\Desktop\\Diffusion\\web-agent\\harness_mcp.py", "--stdio"] } } }
+{ "mcpServers": { "zen-headless-harness": { "command": "%USERPROFILE%\\OneDrive\\Desktop\\Diffusion\\web-agent\\venv\\Scripts\\python.exe",
+                                   "args": ["%USERPROFILE%\\OneDrive\\Desktop\\Diffusion\\web-agent\\harness_mcp.py", "--stdio"] } } }
 ```
 
 Settings → Headless shows both snippets with your token filled in, ready to copy.

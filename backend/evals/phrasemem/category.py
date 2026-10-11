@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 import encyclopedia  # noqa: E402
 import proto  # noqa: E402
 
-GGUF_DIR = os.environ.get("PM_GGUF_DIR", r"C:\Users\user\models\hf-qwen3-0.6b")
+GGUF_DIR = os.environ.get("PM_GGUF_DIR", os.path.expanduser(r"~\models\hf-qwen3-0.6b"))
 GGUF = os.environ.get("PM_GGUF", "qwen3-0.6b.gguf")
 HF_DIR = os.path.join(GGUF_DIR, "hf")
 SAMPLE = int(os.environ.get("PM_SAMPLE", "9000"))

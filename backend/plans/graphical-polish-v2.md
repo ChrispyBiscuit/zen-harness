@@ -1,6 +1,6 @@
 # Graphical polish v2: plan (and rename to Zen Harness)
 
-**Goal:** lift the whole Power Harness UI (`C:/Users/user/dev/lws-web`) a few levels in polish, dynamics,
+**Goal:** lift the whole Power Harness UI (`%USERPROFILE%/dev/lws-web`) a few levels in polish, dynamics,
 interactivity and design, without making it heavier, slower or less stable in the embedded window.
 
 **Character to aim for:** a quiet, precise instrument. The dark engineering look with one cyan→violet accent

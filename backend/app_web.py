@@ -341,7 +341,6 @@ def main():
         return
     if "--browser" in sys.argv:               # serve in this process and open the normal browser
         if not port_in_use(PORT) or _stale_server_replaced():
-            web_backend.start_telegram()
             threading.Thread(target=web_backend.serve, daemon=True).start()
         webbrowser.open(URL)
         threading.Event().wait()              # keep serving until Ctrl+C

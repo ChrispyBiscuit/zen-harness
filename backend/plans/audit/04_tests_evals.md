@@ -2,7 +2,7 @@
 
 Date: 2026-10-09 · Scope: `web-agent/` (engine `agentic.py`, tools `agent_tools.py`, `debug_tools.py`, `history_archive.py`,
 `artifacts.py`, `evals/`). Nothing contacted 127.0.0.1:8765/8099, the GPU wasn't used, and no project file was changed.
-The new suite is at `C:/Users/user/AppData/Local/Temp/claude/audit/offline_suite.py`.
+The new suite is at `%USERPROFILE%/AppData/Local/Temp/claude/audit/offline_suite.py`.
 
 ## TL;DR
 - **All the evals are live-model runs.** The only offline check the project has is `selftest_classes.py`, which tests the
@@ -74,7 +74,7 @@ browser tools in general.
 
 ## 3. Offline suite: results
 
-`venv\Scripts\python.exe C:\Users\user\AppData\Local\Temp\claude\audit\offline_suite.py` gives **56 tests, 15.7 s:
+`venv\Scripts\python.exe %USERPROFILE%\AppData\Local\Temp\claude\audit\offline_suite.py` gives **56 tests, 15.7 s:
 52 PASS, 1 FAIL, 3 WARN, 0 ERROR** (exit code 1 because of the FAIL). Per-test JSON is in
 `.../audit/offline_suite_results.json`. Isolation: LWS_DATA_DIR, `at.TRACKERS`, `at.TRASH`, `at.BACKUPS` and `agentic.LOG`
 all point to a temp dir, and `agentic._log` is a no-op. Afterwards I checked that nothing new appeared in the real

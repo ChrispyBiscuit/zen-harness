@@ -12,8 +12,8 @@ import sys
 import time
 import urllib.request
 
-LLAMA = r"C:\Users\user\llama.cpp\llama-server.exe"
-DRAFT = os.environ.get("DRAFT") or r"C:\Users\user\models\originals\mtp-qwen3.5-9b-q4head.gguf"
+LLAMA = os.path.expanduser(r"~\llama.cpp\llama-server.exe")
+DRAFT = os.environ.get("DRAFT") or os.path.expanduser(r"~\models\originals\mtp-qwen3.5-9b-q4head.gguf")
 PORT = 8131
 model = sys.argv[1]
 label = sys.argv[2] if len(sys.argv) > 2 else os.path.basename(model)

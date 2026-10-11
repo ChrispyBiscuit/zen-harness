@@ -30,7 +30,6 @@ import agent_host
 import agent_tools as at
 import agentic
 import bg_tasks
-import chris_rag
 import doc_extract
 from agent_config import DEFAULT_AGENT
 
@@ -73,6 +72,13 @@ class Store:
                 s["agent"]["num_ctx"] = 131072
             s["agent"]["screen_control"] = False
             s["agent"]["_v2"] = True
+        if not s["agent"].get("model") and s["agent"].get("backend", "llama") == "llama":
+            # models the installer downloaded: start on the first built-in profile whose file is here, instead of
+            # the first-run "download a model" welcome
+            from agent_config import default_preset
+            name = default_preset()
+            if name:
+                s["agent"]["model"] = name
         return s
 
     def _load_convs(self):
@@ -936,8 +942,7 @@ def list_models():
         names = [m.model for m in ollama.Client().list().models]
     except Exception:
         names = []
-    names = [n for n in names if n != chris_rag.BACKEND and "embed" not in n.lower()]
-    personas = list(chris_rag.PERSONAS)
+    names = [n for n in names if "embed" not in n.lower()]
     import llama_local
     # tuned profiles (settings agent.model_overrides with a model_file on disk, e.g. ornith-1.5:9b): listed by name so
     # picking one uses its profile (drafter, context, cache) rather than the bare .gguf file
@@ -949,7 +954,7 @@ def list_models():
                     and os.path.isfile(paths.resolve_model(v["model_file"])) and k not in names]
     except Exception:
         profiles = []
-    return (personas + sorted(n for n in names if n not in personas) + sorted(profiles)
+    return (sorted(names) + sorted(profiles)
             + llama_local.local_gguf_models())
 
 
@@ -1820,25 +1825,6 @@ async def _reap_models(app):
         pass
 
 
-def start_telegram():
-    if os.environ.get("LWS_NO_TELEGRAM"):        # tests / second instances must not start a second bot
-        return None
-    try:
-        import telegram_chris
-        if not telegram_chris.read_cfg().get("token"):
-            return None
-        stop = threading.Event()
-        threading.Thread(target=telegram_chris.run_bot, kwargs={
-            "get_opts": lambda: {"temperature": STORE.settings.get("temperature", 0.7),
-                                 "num_ctx": STORE.settings.get("num_ctx", 4096),
-                                 "think": STORE.settings["ui"].get("think", True)},
-            "stop_event": stop}, daemon=True).start()
-        return stop
-    except Exception as e:
-        print("telegram bot not started:", e, flush=True)
-        return None
-
-
 def bind_host():
     """127.0.0.1, or every interface when Settings → Headless → LAN is on (only /v1 and /mcp answer other devices)."""
     return "0.0.0.0" if (STORE.settings.get("headless") or {}).get("lan") else "127.0.0.1"
@@ -1885,10 +1871,8 @@ def serve_headless(idle_exit=300):
                 finally:
                     os._exit(0)
     threading.Thread(target=watchdog, daemon=True).start()
-    start_telegram()
     serve()
 
 
 if __name__ == "__main__":
-    start_telegram()
     serve()

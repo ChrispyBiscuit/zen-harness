@@ -25,9 +25,9 @@ import thinking  # noqa: E402
 OUT = os.path.join(HERE, "results")
 os.makedirs(OUT, exist_ok=True)
 PORT = 8133
-LLAMA = r"C:\Users\user\llama.cpp\llama-server.exe"
-MODEL_FILE = os.environ.get("TJ_MODEL", r"C:\Users\user\models\Qwen3.5-9B-IQ4_XS.gguf")
-DRAFT = os.environ.get("TJ_DRAFT", r"C:\Users\user\models\originals\mtp-qwen3.5-9b-q4head.gguf")
+LLAMA = os.path.expanduser(r"~\llama.cpp\llama-server.exe")
+MODEL_FILE = os.environ.get("TJ_MODEL", os.path.expanduser(r"~\models\Qwen3.5-9B-IQ4_XS.gguf"))
+DRAFT = os.environ.get("TJ_DRAFT", os.path.expanduser(r"~\models\originals\mtp-qwen3.5-9b-q4head.gguf"))
 JUDGE = os.environ.get("TJ_JUDGE", "gpt-6-luna")
 SYSTEM = "You are a helpful, careful assistant. Answer the user's message directly and practically."
 

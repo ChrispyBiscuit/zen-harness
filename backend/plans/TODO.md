@@ -28,7 +28,7 @@ Builds on the text factcheck.build_evidence already collects; the near-copy dete
 - Measure first from battery logs (edit misses, quote/figure redrafts, repeated artifact edits); add copy-heavy tasks.
 
 ## Queued in the harness work (2026-10-10)
-- After the gpt-5-nano battery: add a Groq backend (OpenAI-compatible, key in C:\Users\user\.groq_key — the user
+- After the gpt-5-nano battery: add a Groq backend (OpenAI-compatible, key in %USERPROFILE%\.groq_key — the user
   creates it) and run the same 200 tasks on Llama 3.1 8B with rate-limit waits; three-way comparison 9B / nano / 8B.
 - Then: test against Claude Haiku 4.5 (decide: the harness with an Anthropic backend, or a bare Claude session in
   the browser as an unharnessed reference).
@@ -69,7 +69,7 @@ tool-usage stats per task type from agent_log.jsonl to define the profiles; A/B 
 10-task battery sample (score, time, tool-call errors) with and without.
 
 ## Bonsai 2 27B: more context by trimming GPU overhead (queued 2026-10-11 — after the bonsai1 expense-tracker benchmark)
-Profile ternary-bonsai-2-27b (PrismML llama.cpp, C:\Users\user\llama.cpp-prism) runs q8_0 K / q4_0 V at 60K in ~7.8 GB.
+Profile ternary-bonsai-2-27b (PrismML llama.cpp, %USERPROFILE%\llama.cpp-prism) runs q8_0 K / q4_0 V at 60K in ~7.8 GB.
 Same-type quantized KV (q8/q8, q4/q4) outputs "////" on long prompts in this build; mixed types work.
 Try: smaller compute buffers (-ub 128 / 256, -b), fewer ctx checkpoints, check CUDA context size; measure the largest
 -c that loads with VRAM < ~7.9 GB and no WDDM shared spill, then a 17K-token prompt for correctness and tok/s.

@@ -191,7 +191,6 @@ def run_server(svc, port):
             break
         time.sleep(10)
     wb.NOTIFIER = svc.notify
-    wb.start_telegram()
 
     def ready():
         svc.state = "serving"

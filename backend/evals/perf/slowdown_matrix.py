@@ -38,9 +38,9 @@ import psutil
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 APP = os.path.dirname(os.path.dirname(HERE))
-LS = r"C:\Users\user\llama.cpp\llama-server.exe"
+LS = os.path.expanduser(r"~\llama.cpp\llama-server.exe")
 MAIN_PORT, WORK_PORT = 8196, 8195
-WORKER_MODEL = r"C:\Users\user\models\MiniCPM5-2B-Q4_K_M.gguf"
+WORKER_MODEL = os.path.expanduser(r"~\models\MiniCPM5-2B-Q4_K_M.gguf")
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--rounds", type=int, default=1)

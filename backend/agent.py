@@ -17,7 +17,6 @@ import datetime
 import ollama
 
 import tools
-import chris_rag
 
 _THINK_BLOCK = re.compile(r"<think>.*?</think>", re.S | re.I)
 
@@ -128,7 +127,7 @@ def preload_model(model: str = MODEL, emit=None, num_ctx: int = NUM_CTX):
             emit(kind, data)
     try:
         client = ollama.Client()
-        backend = chris_rag.BACKEND if model == "chris-rag" else model
+        backend = model
         try:
             if any(m.model == backend for m in client.ps().models):
                 return  # already warm
@@ -172,7 +171,7 @@ def compress_history(history, model, num_ctx, summary="", force=False):
     text = "\n".join(lines)
     if len(text) > num_ctx * 2:
         text = text[:num_ctx // 2] + "\n…\n" + text[-num_ctx * 3 // 2:]
-    backend = chris_rag.BACKEND if model in chris_rag.PERSONAS else model
+    backend = model
     r = ollama.Client().chat(model=backend, stream=False, think=False,
                              messages=[{"role": "user", "content": f"{CHAT_SUMMARY_PROMPT}\n\n{text}"}],
                              options={"num_ctx": num_ctx, "temperature": 0.2, "num_predict": 900})
@@ -200,10 +199,7 @@ def run_agent_events(question: str, model: str = MODEL, emit=None,
     try:
         client = ollama.Client()
 
-        # RAG personas (chris-rag / marx-rag / chris-marx-rag) = coherent character via
-        # untouched base + retrieved real exemplars, NO fine-tune. All share one backend.
-        rag = (model in chris_rag.PERSONAS)
-        backend = chris_rag.BACKEND if rag else model
+        backend = model
 
         # --- ensure the model is resident in memory, with a visible load phase ---
         already_loaded = False
@@ -224,31 +220,14 @@ def run_agent_events(question: str, model: str = MODEL, emit=None,
             say("loaded", round(time.time() - t0, 1))
 
         today = datetime.date.today().strftime("%B %d, %Y")
-        if rag:
-            # persona + retrieved real exemplars; the coherent base does the reasoning
-            messages = chris_rag.build_messages(history, question, today, persona=model)
-            tools_arg = None
-            temperature = 0.6
-        else:
-            # a fine-tuned persona model (chris-*) → be that person, no tools, no search
-            is_persona = "chris" in model.lower()
-            if is_persona:
-                # a fine-tuned chris-* model ALWAYS gets the tight persona prompt — never the
-                # web-search SYSTEM stored in settings (that field is only for search models).
-                sys_text = PERSONA_TIGHT.replace("{today}", today)
-            else:
-                sys_text = (system_prompt if system_prompt is not None else SYSTEM)
-                sys_text = sys_text.replace("{today}", today) + CHAT_MODE_NOTE
-            tools_arg = None if is_persona else TOOL_SCHEMAS
-            if is_persona:
-                # FORCE the sweet spot regardless of the settings temp (which is for search
-                # models): >~0.45 rambles into word-salad, <~0.3 loops.
-                temperature = max(0.3, min(temperature, 0.4))
-            messages = [{"role": "system", "content": sys_text}]
-            for turn in (history or []):
-                if turn.get("content"):
-                    messages.append({"role": turn["role"], "content": turn["content"]})
-            messages.append({"role": "user", "content": question})
+        sys_text = (system_prompt if system_prompt is not None else SYSTEM)
+        sys_text = sys_text.replace("{today}", today) + CHAT_MODE_NOTE
+        tools_arg = TOOL_SCHEMAS
+        messages = [{"role": "system", "content": sys_text}]
+        for turn in (history or []):
+            if turn.get("content"):
+                messages.append({"role": turn["role"], "content": turn["content"]})
+        messages.append({"role": "user", "content": question})
 
         def stopped():
             return bool(should_stop and should_stop())

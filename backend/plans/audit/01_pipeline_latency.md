@@ -1,9 +1,9 @@
 # Audit 01: Pipeline, Latency and Waste (agent_log.jsonl, 2026-10-08 to 2026-10-09)
 
 Read-only audit. Sources: `agent_log.jsonl` (4,252 lines), `conversations.json` (36 chats, 65 user messages),
-`app_server.log` (process restarts), `C:\Users\user\llama.cpp\swarm_server.log` (llama-server timings for the
+`app_server.log` (process restarts), `%USERPROFILE%\llama.cpp\swarm_server.log` (llama-server timings for the
 last server session, about 21:21 to 21:35 on 10-09). Helper scripts are in
-`C:\Users\user\AppData\Local\Temp\claude\audit\` (`main.py`, `sup*.py`, `fc.py`, `conv_sum.py`, `rx.py`).
+`%USERPROFILE%\AppData\Local\Temp\claude\audit\` (`main.py`, `sup*.py`, `fc.py`, `conv_sum.py`, `rx.py`).
 
 ## 0. Method and caveats
 

@@ -66,7 +66,7 @@ headless.py (tray service, autostart) → same web_backend + harness_api
 7. **Duplicated helpers**: atomic JSON write ×6, safe-name ×5, port helpers ×4, "is this the app's process" ×2,
    think-tag stripping ×4, tool-markup regexes ×3, OpenAI-compatible HTTP calls ×6, two API-key lookups, two memory
    stores (`agent_memory.md` + `agent_memory.db`).
-8. **Hardcoded user paths**: `C:\Users\user\...` in agent.py, chris_rag.py, evals, tests; ~12 absolute model paths in
+8. **Hardcoded user paths**: `%USERPROFILE%\...` in agent.py, chris_rag.py, evals, tests; ~12 absolute model paths in
    settings.json; the MTP drafter lookup ignores `LWS_MODELS_DIR`; Vite's `outDir` is an absolute path into the
    backend folder.
 9. **Tests**: nothing in `tests/` covers agentic or agent_tools. The only coverage is the 72-test offline suite that

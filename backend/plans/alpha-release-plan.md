@@ -22,7 +22,7 @@ Decisions already made by the user (2026-10-11): repo **private**; build tools *
 
 | Topic | Decision | Why |
 |---|---|---|
-| Repo | **Monorepo** `zen-harness/` with `backend/`, `ui/`, `docs/`, `packaging/`, outside OneDrive (`C:\Users\user\dev\zen-harness`) | one version for UI+backend; the UI build output feeds the backend; OneDrive sync and `.git`/`node_modules`/venvs don't mix |
+| Repo | **Monorepo** `zen-harness/` with `backend/`, `ui/`, `docs/`, `packaging/`, outside OneDrive (`%USERPROFILE%\dev\zen-harness`) | one version for UI+backend; the UI build output feeds the backend; OneDrive sync and `.git`/`node_modules`/venvs don't mix |
 | Freeze | PyInstaller **onedir** (not onefile) | Qt WebEngine + CUDA DLLs are huge; onefile would unpack ~2 GB to %TEMP% on every start |
 | Installer | Inno Setup, per-user (`PrivilegesRequired=lowest`), installs to `%LOCALAPPDATA%\Programs\Zen Harness` | no admin prompt; clean uninstall |
 | Install vs data | install folder is **read-only at runtime**; all user data in `%LOCALAPPDATA%\ZenHarness\` (`settings.json`, chats, memory, logs, attachments, trackers, browser profiles, `models\`) — overridable by `LWS_DATA_DIR` | required for an install; also what refactor Stage 1 does |
@@ -43,7 +43,7 @@ recommended 9B, more for larger ones.
 ## 3. Work breakdown (execution order)
 
 ### Phase A — Repository (refactor Stage 0)
-1. Create `C:\Users\user\dev\zen-harness`; copy backend **code only** into `backend/` (no data, no `*.bak-*`, no
+1. Create `%USERPROFILE%\dev\zen-harness`; copy backend **code only** into `backend/` (no data, no `*.bak-*`, no
    venv, no datasets/RAG indexes, no logs, no `agent_*` data folders, no `openai_key.txt`/`telegram_config.json`);
    copy `dev/lws-web` source into `ui/` (no `node_modules`, no `dist`).
 2. `.gitignore` (models, venvs, data, logs, build outputs, secrets — see §5), `settings.example.json` (secrets and
@@ -140,7 +140,7 @@ RAG indexes and datasets (`*_rag_index.npy`, `*_rag_meta.jsonl`, `*_dataset.json
 ## 6. Execution log
 - 2026-10-11: plans written; Inno Setup installed; user chose private repo / PyInstaller + Inno / first-run model
   download.
-- 2026-10-11: Phase A done — monorepo at `C:\Users\user\dev\zen-harness` (code only; secrets/data excluded and
+- 2026-10-11: Phase A done — monorepo at `%USERPROFILE%\dev\zen-harness` (code only; secrets/data excluded and
   scanned), offline suite in backend/tests (pytest: 140 pass, 2 xfail probes), pinned requirements, private repo
   https://github.com/ChrispyBiscuit/zen-harness.
 - 2026-10-11: Phase B done — `paths.py` (data/resources/models/llama dirs; installed builds use

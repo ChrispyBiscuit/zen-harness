@@ -1,7 +1,7 @@
 """Public-harness survey: the same battery tasks through other agent harnesses, all on the SAME local model
 (the app's llama-server, Ornith 9B, OpenAI-compatible at 127.0.0.1:8099), graded with the battery's checks.
 
-  C:\\Users\\user\\survey-env\\Scripts\\python.exe evals\\survey\\run_survey.py --harness oi|smol|goose [--only ids]
+  %USERPROFILE%\\survey-env\\Scripts\\python.exe evals\\survey\\run_survey.py --harness oi|smol|goose [--only ids]
 
 Zen Harness itself runs the same tasks with evals\\battery\\run_battery.py --only <ids> (see SURVEY.md).
 Do NOT run while something else uses the local model (the user's rule: one LLM user at a time).
@@ -35,7 +35,7 @@ ap.add_argument("--minutes", type=float, default=10)
 a = ap.parse_args()
 RUN = os.path.join(os.path.expanduser("~"), "survey-runs", a.harness)       # task folders (outside OneDrive)
 OUT = os.path.join(HERE, "runs", a.harness + ".jsonl")
-GOOSE = r"C:\Users\user\survey-tools\goose\goose-package\goose.exe"
+GOOSE = os.path.expanduser(r"~\survey-tools\goose\goose-package\goose.exe")
 PY = sys.executable
 
 
