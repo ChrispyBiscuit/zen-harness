@@ -299,8 +299,20 @@ def step_budget_levels_and_caps():
     e = engine(effort="auto")
     e._think_effort = "low"
     assert e._step_budget(True, 2) == 512
-    e._fail_streak = 2
-    assert e._step_budget(True, 2) == 2048            # one level up after repeated failures
+    e._fail_streak = 1
+    assert e._effective_effort() == "medium"          # one level up from the first failure
+    assert e._step_budget(True, 2) == 8192            # debugging: at least the high budget
+    e._fail_streak = 0
+    e._watch_progress("run_tests", {}, True, "== 4 failed, 6 passed in 1.2s ==")
+    assert e._debugging and e._fail_streak == 0      # failing tests are not a failed call, but they are debugging
+    e._watch_progress("read_file", {}, True, "1| import os")
+    assert e._debugging and e._wants_thinking(True, 5) and e._step_budget(True, 5) == 8192
+    e._watch_progress("run_tests", {}, True, "== 10 passed in 1.0s ==")
+    assert not e._debugging and e._step_budget(True, 2) == 512
+    e.cfg["effort"] = "low"
+    e._watch_progress("powershell", {}, True, "exit code 1\nTraceback (most recent call last):\nValueError")
+    assert e._debugging and e._step_budget(True, 2) == 1024   # debugging never goes above the user's cap
+    e.cfg["effort"], e._debugging = "auto", False
     e._fail_streak, e._think_effort = 0, "high"
     e._fc_rounds = 1                                  # wrapping up (after a fact check): doubled
     assert e._step_budget(True, 2) == 16384
