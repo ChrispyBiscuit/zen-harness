@@ -942,7 +942,9 @@ def list_models():
     # tuned profiles (settings agent.model_overrides with a model_file on disk, e.g. ornith-1.5:9b): listed by name so
     # picking one uses its profile (drafter, context, cache) rather than the bare .gguf file
     try:
-        ov = (STORE.settings.get("agent") or {}).get("model_overrides") or {}
+        from agent_config import model_presets, model_profile
+        ag = STORE.settings.get("agent") or {}
+        ov = {k: model_profile(ag, k) for k in set(model_presets()) | set(ag.get("model_overrides") or {})}
         profiles = [k for k, v in ov.items() if isinstance(v, dict) and v.get("model_file")
                     and os.path.isfile(paths.resolve_model(v["model_file"])) and k not in names]
     except Exception:

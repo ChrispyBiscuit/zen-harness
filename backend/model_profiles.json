@@ -1,0 +1,76 @@
+{
+  "_note": "Built-in per-model settings, used when the user's settings.json has no profile of the same name (a user profile replaces the preset key by key). Paths are relative to the models folder; '~' is the user's home. Measured on an 8 GB RTX 3070 Laptop + 16 GB RAM.",
+  "profiles": {
+    "gemma4:12b-it-qat": {
+      "kv_cache": "q4_0",
+      "spec_ngram": "draft-mtp,ngram-simple",
+      "spec_draft_ctx": 20480,
+      "num_ctx": 20480
+    },
+    "qwen3.5:9b": {
+      "kv_cache": "q8_0",
+      "spec_ngram": "draft-mtp,ngram-simple",
+      "num_ctx": 65536,
+      "spec_draft_ctx": 65536,
+      "model_file": "Qwen3.5-9B-IQ4_XS.gguf",
+      "spec_draft_model": "originals/mtp-qwen3.5-9b-q4head.gguf",
+      "spec_draft_kv": "q4_0",
+      "ubatch": 128,
+      "kv_cache_v": "q4_0",
+      "parallel": 1,
+      "mmproj": "mmproj/mmproj-qwen3.5-9b-F16.gguf"
+    },
+    "ornith-1.5:9b": {
+      "kv_cache": "q8_0",
+      "spec_ngram": "draft-mtp,ngram-simple",
+      "num_ctx": 98304,
+      "spec_draft_ctx": 98304,
+      "model_file": "Ornith-1.5-9B-IQ4_XS.gguf",
+      "spec_draft_model": "originals/mtp-ornith-1.5-9b-q4head.gguf",
+      "spec_draft_kv": "q4_0",
+      "ubatch": 128,
+      "kv_cache_v": "q4_0",
+      "spec_draft_max_mtp": 2,
+      "mmproj": "mmproj/mmproj-qwen3.5-9b-F16.gguf"
+    },
+    "qwen3.6-35b-a3b-reap48": {
+      "model_file": "Qwen3.6-35B-A3B-REAP-48-v2.gguf",
+      "mmproj": "mmproj/mmproj-qwen3.6-35b-a3b-F16.gguf",
+      "num_ctx": 65536,
+      "kv_cache": "bf16",
+      "spec_ngram": "ngram-simple",
+      "n_cpu_moe": 19,
+      "cache_ram_mib": 512
+    },
+    "qwen3.8-27b-gsq-iq2xs": {
+      "model_file": "Qwen3.8-27B-GSQ-RCO-IQ2_XS-mtp.gguf",
+      "num_ctx": 32768,
+      "kv_cache": "q8_0",
+      "kv_cache_v": "q4_0",
+      "spec_ngram": "",
+      "spec_draft_max_mtp": 2,
+      "fit_target_mib": 256,
+      "mtp": false
+    },
+    "ternary-bonsai-2-27b": {
+      "model_file": "Ternary-Bonsai-2-27B-PTQ1_0.gguf",
+      "llama_dir": "~/llama.cpp-prism",
+      "num_ctx": 65536,
+      "kv_cache": "q8_0",
+      "parallel": 1,
+      "kv_unified": false,
+      "spec_ngram": "",
+      "mtp": false,
+      "cache_ram_mib": 1024,
+      "ctx_checkpoints": 4,
+      "strict_template": true,
+      "reasoning_off_field": true,
+      "temperature": 1.0,
+      "top_p": 0.95,
+      "top_k": 20,
+      "min_p": 0.05,
+      "presence_penalty": 0.0,
+      "kv_cache_v": "q4_0"
+    }
+  }
+}

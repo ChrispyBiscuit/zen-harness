@@ -298,9 +298,15 @@ async def api_list(req):
         files = [describe(p) for p in _gguf_files(paths.models_dir())] if os.path.isdir(paths.models_dir()) else []
         ag = wb.STORE.settings.get("agent") or {}
         profs = {}
-        for name, p in (ag.get("model_overrides") or {}).items():
+        from agent_config import model_presets, model_profile
+        own = ag.get("model_overrides") or {}
+        for name in list(own) + [n for n in model_presets() if n not in own]:
+            p = model_profile(ag, name)
             mf = paths.resolve_model(p.get("model_file") or "")
-            profs[name] = {"profile": p, "exists": bool(mf and os.path.isfile(mf)), "path": mf}
+            if name not in own and not (mf and os.path.isfile(mf)):
+                continue                           # a built-in preset only shows once its model file is here
+            profs[name] = {"profile": p, "exists": bool(mf and os.path.isfile(mf)), "path": mf,
+                           "preset": name not in own}
         return {"models_dir": paths.models_dir(), "files": files, "profiles": profs, "default": ag.get("model") or "",
                 "gpu_mib": llama_local.gpu_total_mib(), "ram_mib": (llama_local.system_ram_mib() or (0, 0))[0]}
     return web.json_response(await asyncio.to_thread(build))

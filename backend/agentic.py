@@ -1530,9 +1530,9 @@ class AgentEngine:
         c = self.cfg
         # per-model settings (Settings → model_overrides): switching the model brings its own context, cache and
         # speculation setup — e.g. Gemma 12B at 20k with its drafter, Qwen3.5 9B at 48k with its drafter
-        ov = (c.get("model_overrides") or {}).get(str(c.get("model") or ""))
-        if isinstance(ov, dict):
-            c.update(ov)
+        # (a built-in preset from model_profiles.json first, the user's own entry over it)
+        from agent_config import model_profile
+        c.update(model_profile(c, str(c.get("model") or "")))
         if c.get("mcp_servers") and self.mcp is None:
             self.emit("status", text="Starting MCP servers…")
             self.mcp = MCPManager(c["mcp_servers"])

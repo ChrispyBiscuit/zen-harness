@@ -22,6 +22,7 @@ datas = [
     (os.path.join(BE, "licenses"), "licenses"),
     (os.path.join(BE, "thinking_library.json"), "."),
     (os.path.join(BE, "model_catalog.json"), "."),
+    (os.path.join(BE, "model_profiles.json"), "."),
     (os.path.join(ROOT, "docs"), "docs"),
     (os.path.join(ROOT, "VERSION"), "."),
     (os.path.join(ROOT, "LICENSE"), "."),

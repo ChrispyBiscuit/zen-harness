@@ -49,3 +49,24 @@ DEFAULT_AGENT = {
     "spec_ngram": "",                 # n-gram speculative decoding for the main llama.cpp model ("" = off, e.g. "ngram-mod")
     "custom_instructions": "",        # the user's own system-prompt text (Settings → Instructions), added to every agent chat
 }
+
+
+def model_presets():
+    """Built-in per-model settings (model_profiles.json): context, cache, speculation and file names measured for an
+    8 GB GPU. The user's own model_overrides entry is applied on top, key by key."""
+    import json
+    import paths
+    try:
+        with open(paths.resource("model_profiles.json"), encoding="utf-8") as f:
+            return dict(json.load(f).get("profiles") or {})
+    except (OSError, ValueError):
+        return {}
+
+
+def model_profile(cfg, name):
+    """The settings for model `name`: its preset, then the user's model_overrides entry over it."""
+    prof = dict(model_presets().get(name) or {})
+    own = (cfg.get("model_overrides") or {}).get(name)
+    if isinstance(own, dict):
+        prof.update(own)
+    return prof
