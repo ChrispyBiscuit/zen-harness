@@ -18,10 +18,11 @@ import time
 import numpy as np
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(os.environ.get("LWS_DATA_DIR") or APP_DIR, "agent_memory.db")
-OLD_MEMORY_MD = os.path.join(APP_DIR, "agent_memory.md")
+import paths
+DB_PATH = paths.data("agent_memory.db")
+OLD_MEMORY_MD = paths.data("agent_memory.md")
 EMBED_MODEL = "BAAI/bge-small-en-v1.5"
-EMBED_CACHE = os.path.join(os.path.expanduser("~"), "models", "fastembed")
+EMBED_CACHE = os.path.join(paths.models_dir(), "fastembed")
 DIM = 384
 RRF_K = 60
 CHUNK = 900                         # characters per conversation chunk

@@ -51,7 +51,8 @@ def _crash_log(name):
     """Native crashes (Qt, lxml…) write the Python stack here instead of vanishing (pythonw has no console)."""
     import faulthandler
     try:
-        f = open(os.path.join(HERE, name), "a", buffering=1, encoding="utf-8")
+        import paths
+        f = open(os.path.join(paths.logs_dir(), name), "a", buffering=1, encoding="utf-8")
         import time
         f.write(f"\n=== started {time.strftime('%Y-%m-%d %H:%M:%S')} pid {os.getpid()} ===\n")
         faulthandler.enable(f, all_threads=True)
@@ -387,7 +388,7 @@ def main():
     agent_browser = None
     if native:
         try:
-            agent_browser = qt_browser.AgentBrowser(view, os.environ.get("LWS_DATA_DIR") or HERE)
+            agent_browser = qt_browser.AgentBrowser(view, __import__("paths").data_dir())
             qt_browser.register_with_server(URL, qt_browser.start_relay(agent_browser, devtools_port))
         except Exception as e:                # the agent falls back to Edge
             print("native agent browser failed:", repr(e))

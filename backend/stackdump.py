@@ -12,7 +12,8 @@ import tempfile
 import time
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-HOOK_DIR = os.path.join(APP_DIR, "agent_bg", "pyhook")
+import paths
+HOOK_DIR = paths.data("agent_bg", "pyhook")
 DUMP_DIR = os.path.join(tempfile.gettempdir(), "zen_stackdumps")
 
 HOOK = '''# Zen Harness: lets the app ask this Python process where it is stuck (a stack dump on request). Harmless otherwise.

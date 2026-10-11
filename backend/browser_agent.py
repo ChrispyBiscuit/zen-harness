@@ -18,8 +18,9 @@ import threading
 import time
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-PROFILE = os.path.join(APP_DIR, "agent_browser_profile")
-SHOTS = os.path.join(APP_DIR, "agent_browser_shots")
+import paths
+PROFILE = paths.data("agent_browser_profile")
+SHOTS = paths.data("agent_browser_shots")
 VIEW_W, VIEW_H = 1280, 800
 HOST = {}                         # {"endpoint": DevTools relay of the app window, "t": last registration}
 

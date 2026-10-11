@@ -22,7 +22,8 @@ _lock = threading.Lock()
 _slots = {"main": {"proc": None, "key": None, "log": None, "port": PORT},
           "exec": {"proc": None, "key": None, "log": None, "port": PORT + 1},
           "speech": {"proc": None, "key": None, "log": None, "port": PORT + 3},
-          "gopher": {"proc": None, "key": None, "log": None, "port": PORT + 5}}     # fan-out workers (CPU)
+          "gopher": {"proc": None, "key": None, "log": None, "port": PORT + 5},     # fan-out workers (CPU)
+          "test": {"proc": None, "key": None, "log": None, "port": PORT + 7}}       # Settings → Models → Test load
 _state = _slots["main"]
 
 
@@ -107,8 +108,16 @@ def reap_orphans():
     return killed
 
 
+def _state_dir():
+    """Logs and pid files: the data folder (the llama.cpp folder is read-only in an installed app)."""
+    import paths
+    d = paths.data("llama_state")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
 def _pid_file(slot="main"):
-    return os.path.join(llama_dir(), "swarm_server.pid" if slot == "main" else f"swarm_server_{slot}.pid")
+    return os.path.join(_state_dir(), "swarm_server.pid" if slot == "main" else f"swarm_server_{slot}.pid")
 
 
 def _kill_stale(slot="main"):
@@ -128,7 +137,8 @@ def _kill_stale(slot="main"):
 
 
 def llama_dir():
-    return os.environ.get("LLAMA_CPP_DIR") or os.path.join(os.path.expanduser("~"), "llama.cpp")
+    import paths
+    return paths.llama_dir()
 
 
 def exe_path():
@@ -139,7 +149,8 @@ def available():
     return os.path.exists(exe_path())
 
 
-MODELS_DIR = os.environ.get("LWS_MODELS_DIR") or os.path.join(os.path.expanduser("~"), "models")
+import paths
+MODELS_DIR = paths.models_dir()
 
 
 def local_gguf_models():
@@ -587,7 +598,7 @@ def ensure(model_name, parallel=2, num_ctx=10000, status=lambda s: None, extra_a
             status(f"{model_name} is {size_mib / 1024:.0f} GB and only {free_mib / 1024:.1f} GB "
                    f"of GPU memory is free: llama.cpp will split it between GPU and CPU "
                    f"(one request at a time, slower to load).")
-        log_path = os.path.join(llama_dir(), "swarm_server.log" if slot == "main" else f"swarm_server_{slot}.log")
+        log_path = os.path.join(_state_dir(), "swarm_server.log" if slot == "main" else f"swarm_server_{slot}.log")
         log = open(log_path, "w")
         ctx = int(num_ctx) * (1 if (unified and parallel > 1) else parallel)
         # fits entirely: all layers on the GPU. Too big: let llama.cpp's --fit place the layers
@@ -595,7 +606,7 @@ def ensure(model_name, parallel=2, num_ctx=10000, status=lambda s: None, extra_a
         # never shrinking the context below what the prompts need.
         place = (["-ngl", "0"] if not gpu else
                  ["--fit", "on", "--fit-target", "1024", "--fit-ctx", str(ctx)] if big else ["-ngl", "99"])
-        port = _free_port({"main": PORT, "exec": PORT + 1, "speech": PORT + 3, "gopher": PORT + 5}.get(slot, PORT + 4))
+        port = _free_port({"main": PORT, "exec": PORT + 1, "speech": PORT + 3, "gopher": PORT + 5, "test": PORT + 7}.get(slot, PORT + 4))
         st["port"] = port
         cmd = [exe_path(), "-m", blob, "-c", str(ctx)] + place + [
                "-fa", "on", "--port", str(port), "--host", "127.0.0.1",

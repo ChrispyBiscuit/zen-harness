@@ -31,7 +31,8 @@ import swarm
 from mcp_client import MCPManager
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-LOG = os.path.join(APP_DIR, "agent_log.jsonl")
+import paths
+LOG = paths.data("agent_log.jsonl")
 _OPENAI_NO_REASONING_TOOLS = re.compile(r"^(gpt-6|gpt-5\.6)")
 PRICE = {"gpt-4.1": (2.0, 8.0), "gpt-4.1-nano": (0.10, 0.40), "gpt-5": (1.25, 10.0), "gpt-5-mini": (0.25, 2.0),
          "gpt-5-nano": (0.05, 0.40), "gpt-6.1-sol": (2.0, 10.0), "gpt-6-sol": (2.0, 10.0), "gpt-6-astra": (10.0, 50.0),
@@ -1530,8 +1531,8 @@ class AgentEngine:
             except Exception:
                 pass
         model = c.get("model") or ""
-        if be == "llama" and str(c.get("model_file") or "").strip() and os.path.isfile(c["model_file"]):
-            model = c["model_file"]          # a profile can serve a different file of the same model (e.g. IQ4_XS)
+        if be == "llama" and str(c.get("model_file") or "").strip() and os.path.isfile(paths.resolve_model(c["model_file"])):
+            model = paths.resolve_model(c["model_file"])          # a profile can serve a different file of the same model (e.g. IQ4_XS)
         hy = c.get("hybrid") or {}
         use_exec = bool(hy.get("enabled") and hy.get("model")) and be in ("llama", "openai") and llama_local.available()
         reserve = 0
@@ -1619,7 +1620,7 @@ class AgentEngine:
             if c.get("vision"):
                 # the profile's projector, else one beside the .gguf, else the Ollama model of the same name (a
                 # profile serving a .gguf file found none before, and vision was silently off)
-                proj = str(c.get("mmproj") or "").strip()
+                proj = paths.resolve_model(c.get("mmproj"))
                 if not (proj and os.path.isfile(proj)):
                     proj = llama_local.ollama_projector(model) or llama_local.ollama_projector(str(c.get("model") or ""))
                 self._can_see = bool(proj)
@@ -2324,11 +2325,11 @@ class AgentEngine:
         c = self.cfg
         if "draft-mtp" not in str(c.get("spec_ngram") or "").split(","):
             return ""
-        p = str(c.get("spec_draft_model") or "").strip()
+        p = paths.resolve_model(c.get("spec_draft_model"))
         if p and os.path.isfile(p):
             return p
         model = str(c.get("model") or "").lower()
-        folder = os.path.join(os.path.expanduser("~"), "models")
+        folder = paths.models_dir()
         try:
             for f in os.listdir(folder):
                 fl = f.lower()
@@ -4520,7 +4521,7 @@ class AgentEngine:
 
     def _saved_results(self):
         """Paths of long tool results this chat saved automatically (see Registry._keep_result)."""
-        base = os.environ.get("LWS_DATA_DIR") or APP_DIR
+        base = paths.data_dir()
         folder = os.path.join(base, "agent_attachments", re.sub(r"[^A-Za-z0-9_-]", "_", self.ctx.conv_id or "misc")[:64],
                               "results")
         try:

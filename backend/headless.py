@@ -21,7 +21,8 @@ LOG_MAX = 5 * 1024 * 1024
 
 
 def log_path():
-    return os.path.join(os.environ.get("LWS_DATA_DIR") or HERE, LOG_NAME)
+    import paths
+    return os.path.join(paths.logs_dir(), LOG_NAME)
 
 
 def open_log():

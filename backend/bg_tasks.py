@@ -18,7 +18,8 @@ import threading
 import time
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-LOG_DIR = os.path.join(APP_DIR, "agent_bg")
+import paths
+LOG_DIR = paths.data("agent_bg")
 PIDS_FILE = os.path.join(LOG_DIR, "pids.json")
 MAX_RUNNING = 6
 _ids = itertools.count(1)

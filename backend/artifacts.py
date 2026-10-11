@@ -11,7 +11,8 @@ import threading
 import time
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.join(os.environ.get("LWS_DATA_DIR") or APP_DIR, "agent_artifacts")
+import paths
+ROOT = paths.data("agent_artifacts")
 TYPES = {"markdown": "md", "html": "html", "svg": "svg", "mermaid": "mmd", "chart": "vl.json", "code": "txt",
          "csv": "csv", "json": "json", "text": "txt"}
 LANG_EXT = {"python": "py", "javascript": "js", "typescript": "ts", "powershell": "ps1", "bash": "sh", "sql": "sql",

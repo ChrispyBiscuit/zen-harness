@@ -14,7 +14,8 @@ import time
 import uuid
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-PATH = os.path.join(os.environ.get("LWS_DATA_DIR") or APP_DIR, "schedules.json")
+import paths
+PATH = paths.data("schedules.json")
 DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 _lock = threading.RLock()
 

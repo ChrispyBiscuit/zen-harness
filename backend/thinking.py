@@ -8,7 +8,8 @@ import json
 import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PATH = os.path.join(HERE, "thinking_library.json")
+import paths
+PATH = paths.resource("thinking_library.json")
 _cache = {"mtime": None, "entries": []}
 
 GUIDE = ("Use this frame privately to guide your thinking, plan and judgment calls; adapt it if a better path appears. "

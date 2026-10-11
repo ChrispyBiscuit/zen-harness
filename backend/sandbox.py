@@ -17,8 +17,9 @@ import threading
 import time
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.environ.get("LWS_DATA_DIR") or APP_DIR
-SANDBOX_DIR = os.path.join(APP_DIR, "sandbox")
+import paths
+DATA_DIR = paths.data_dir()
+SANDBOX_DIR = paths.data("sandbox")
 RUNNER = os.path.join(SANDBOX_DIR, "runner.mjs")
 CACHE_DIR = os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), "LocalAgent", "pyodide_cache")
 WORK_ROOT = os.path.join(DATA_DIR, "agent_sandbox")

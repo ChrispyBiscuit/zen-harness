@@ -35,7 +35,8 @@ _RECENT_MAX = 50
 # ---------------------------------------------------------------- helpers
 
 def _data_dir():
-    return os.environ.get("LWS_DATA_DIR") or os.path.dirname(os.path.abspath(__file__))
+    import paths
+    return paths.data_dir()
 
 
 def _key(path):

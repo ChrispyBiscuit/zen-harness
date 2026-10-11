@@ -183,7 +183,8 @@ def install(app):
 # ============================================================================ stdio bridge (separate process)
 def service_config():
     """(port, token) from settings.json, the same way the backend reads them."""
-    path = os.path.join(os.environ.get("LWS_DATA_DIR") or HERE, "settings.json")
+    import paths
+    path = paths.data("settings.json")
     try:
         with open(path, encoding="utf-8") as f:
             h = json.load(f).get("headless") or {}

@@ -11,7 +11,8 @@ import wave
 
 import numpy as np
 
-MODEL_DIR = os.path.join(os.path.expanduser("~"), "models", "whisper")
+import paths
+MODEL_DIR = os.path.join(paths.models_dir(), "whisper")
 IDLE_UNLOAD = 5 * 60
 _models = {}
 _lock = threading.Lock()

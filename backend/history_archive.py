@@ -17,7 +17,8 @@ _WORD = re.compile(r"[A-Za-z_]{2,}|\d+")              # words of 2+ letters, and
 
 
 def _dir(conv):
-    base = os.environ.get("LWS_DATA_DIR") or os.path.dirname(os.path.abspath(__file__))
+    import paths
+    base = paths.data_dir()
     return os.path.join(base, "agent_attachments", re.sub(r"[^A-Za-z0-9_-]", "_", str(conv or "misc"))[:64], "archive")
 
 

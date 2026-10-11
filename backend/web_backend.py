@@ -35,11 +35,12 @@ import doc_extract
 from agent_config import DEFAULT_AGENT
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-DIST = os.environ.get("LWS_DIST") or os.path.join(APP_DIR, "web_dist")     # LWS_DIST: test a UI build elsewhere
-DATA_DIR = os.environ.get("LWS_DATA_DIR") or APP_DIR       # tests point this at a copy
+import paths
+DIST = os.environ.get("LWS_DIST") or paths.resource("web_dist")     # LWS_DIST: test a UI build elsewhere
+DATA_DIR = paths.data_dir()       # LWS_DATA_DIR / %LOCALAPPDATA%\ZenHarness when installed (see paths.py)
 SETTINGS_PATH = os.path.join(DATA_DIR, "settings.json")
 CONV_PATH = os.path.join(DATA_DIR, "conversations.json")
-ATTACH = os.path.join(APP_DIR, "agent_attachments")
+ATTACH = paths.data("agent_attachments")
 PORT = int(os.environ.get("LWS_PORT", "8765"))
 INLINE_DOC_CHARS = 14000          # attached documents up to this size go straight into the message
 
@@ -943,7 +944,7 @@ def list_models():
     try:
         ov = (STORE.settings.get("agent") or {}).get("model_overrides") or {}
         profiles = [k for k, v in ov.items() if isinstance(v, dict) and v.get("model_file")
-                    and os.path.isfile(v["model_file"]) and k not in names]
+                    and os.path.isfile(paths.resolve_model(v["model_file"])) and k not in names]
     except Exception:
         profiles = []
     return (personas + sorted(n for n in names if n not in personas) + sorted(profiles)
@@ -1782,6 +1783,10 @@ def make_app():
     app.add_routes(routes)
     import harness_api                         # /v1 REST API, /mcp, the API run queue (plans/headless-harness-prd.md)
     harness_api.install(app)
+    import help_api                            # Help pages, About, diagnostics
+    import models_api                          # Settings → Models: inspect, profile, test-load, download
+    help_api.install(app)
+    models_api.install(app)
     app.router.add_get("/", index)
     if os.path.isdir(DIST):
         app.router.add_static("/", DIST, show_index=False)

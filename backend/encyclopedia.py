@@ -13,7 +13,8 @@ import threading
 
 _lock = threading.Lock()
 _arch = {"path": None, "archive": None}
-DEFAULT_DIR = os.path.join(os.path.expanduser("~"), "kiwix")
+import paths
+DEFAULT_DIR = paths.knowledge_dir()
 FORCE_OFF = False                 # set by the engine when settings switch it off
 
 

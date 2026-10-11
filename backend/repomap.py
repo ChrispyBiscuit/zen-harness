@@ -60,7 +60,8 @@ _WORD = re.compile(r"[A-Za-z_$][\w$]*")
 
 # ── paths, ignore rules, cache ────────────────────────────────────────────────────────────────────────────────────
 def _data_dir():
-    base = os.environ.get("LWS_DATA_DIR") or os.path.dirname(os.path.abspath(__file__))
+    import paths
+    base = paths.data_dir()
     return os.path.join(base, "repomap")
 
 

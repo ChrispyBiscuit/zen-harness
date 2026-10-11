@@ -12,7 +12,8 @@ import subprocess
 import tempfile
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-ATTACH_DIR = os.path.join(APP_DIR, "agent_attachments")
+import paths
+ATTACH_DIR = paths.data("agent_attachments")
 CONVERT_DIR = os.path.join(tempfile.gettempdir(), "lws_doc_convert")
 
 PDF = {".pdf"}

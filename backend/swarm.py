@@ -730,9 +730,8 @@ def last_positions(messages):
 
 
 def save_api_key(key):
-    """Store the key next to the app (openai_key.txt); api_key() reads it back."""
-    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "openai_key.txt"),
-              "w", encoding="utf-8") as f:
+    """Store the key in the data folder (openai_key.txt); api_key() reads it back."""
+    with open(__import__("paths").data("openai_key.txt"), "w", encoding="utf-8") as f:
         f.write(key.strip() + "\n")
 
 
@@ -776,12 +775,11 @@ def vs_members(blue, red_model=""):
 
 
 def api_key():
-    """OpenAI key: $OPENAI_API_KEY, else the first line of openai_key.txt next to this file."""
+    """OpenAI key: $OPENAI_API_KEY, else the first line of openai_key.txt in the data folder."""
     k = os.environ.get("OPENAI_API_KEY", "").strip()
     if not k:
         try:
-            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                   "openai_key.txt"), encoding="utf-8") as f:
+            with open(__import__("paths").data("openai_key.txt"), encoding="utf-8") as f:
                 k = f.readline().strip()
         except OSError:
             k = ""

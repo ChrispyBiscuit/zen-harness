@@ -13,7 +13,8 @@ import wave
 
 import numpy as np
 
-MODEL_DIR = os.path.join(os.path.expanduser("~"), "models", "kokoro")
+import paths
+MODEL_DIR = os.path.join(paths.models_dir(), "kokoro")
 MODEL = os.path.join(MODEL_DIR, "kokoro-v1.0.onnx")
 VOICES = os.path.join(MODEL_DIR, "voices-v1.0.bin")
 IDLE_UNLOAD = 5 * 60

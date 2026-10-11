@@ -33,13 +33,14 @@ READ, NET, WRITE, EXEC, INPUT, MCP = "read", "net", "write", "exec", "input", "m
 # auto-allowed bookkeeping kinds: the tracker / memory (app files), controlling the agent's own
 # background processes and threads. CLOUD (sending context to the OpenAI advisor) asks.
 NOTE, CONTROL, CLOUD = "note", "control", "cloud"
-TRACKERS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agent_trackers")
-MEMORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agent_memory.md")
+import paths
+TRACKERS = paths.data("agent_trackers")
+MEMORY_FILE = paths.data("agent_memory.md")
 SCREEN_TOOLS = {"screen_size", "list_windows", "screenshot", "mouse_move", "mouse_click", "mouse_drag",
                 "scroll", "type_text", "press_keys", "focus_window"}
 MAX_RESULT = 8000
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-TRASH = os.path.join(APP_DIR, "agent_trash")
+TRASH = paths.data("agent_trash")
 BACKUPS = os.path.join(TRASH, "backups")       # pre-change copies, used by "Revert" in the chat
 _bk_seq = itertools.count(1)
 
@@ -75,7 +76,7 @@ def protected_reason(command):
     try:
         import glob
         import llama_local
-        for pf in glob.glob(os.path.join(llama_local.llama_dir(), "swarm_server*.pid")):
+        for pf in glob.glob(os.path.join(llama_local._state_dir(), "swarm_server*.pid")):
             try:
                 protected.add(int(open(pf).read().strip()))
             except (OSError, ValueError):
@@ -1154,7 +1155,7 @@ def t_web_fetch(a, c):
         import deep_search
         if a.get("url") and isinstance(a.get("url"), str):
             urls = [a["url"]] + list(urls)
-        base = os.environ.get("LWS_DATA_DIR") or APP_DIR
+        base = paths.data_dir()
         save = os.path.join(base, "agent_attachments", _safe_name(getattr(c, "conv_id", None) or "misc"), "pages")
         info = {}
         try:
@@ -2161,7 +2162,7 @@ def t_available_tools(a, c):
     return gate(a)
 
 
-GUIDES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "guides")
+GUIDES_DIR = paths.resource("guides")
 GUIDE_ALIASES = {"pptx": "powerpoint", "ppt": "powerpoint", "slides": "powerpoint", "deck": "powerpoint",
                  "presentation": "powerpoint", "docx": "word", "doc": "word", "document": "word", "xlsx": "excel",
                  "xls": "excel", "spreadsheet": "excel", "csv": "pdf", "research": "web_research", "web": "web_research",
@@ -2381,7 +2382,7 @@ def _hist(c):
 
 def _filehist_path(c):
     conv = getattr(c, "conv_id", None) or "misc"
-    base = os.environ.get("LWS_DATA_DIR") or APP_DIR
+    base = paths.data_dir()
     return os.path.join(base, "agent_attachments", _safe_name(conv), "filehist.json")
 
 
@@ -2546,7 +2547,7 @@ def _app_pids():
     try:
         import glob
         import llama_local
-        for pf in glob.glob(os.path.join(llama_local.llama_dir(), "swarm_server*.pid")):
+        for pf in glob.glob(os.path.join(llama_local._state_dir(), "swarm_server*.pid")):
             try:
                 out.add(int(open(pf).read().strip()))
             except (OSError, ValueError):
@@ -4159,7 +4160,7 @@ class Registry:
         if name not in self.SAVE_RESULTS or len(text) < 3000 or text.startswith(("Error", "[blocked]")):
             return clip(text)
         conv = getattr(self.ctx, "conv_id", None) or "misc"
-        base = os.environ.get("LWS_DATA_DIR") or APP_DIR
+        base = paths.data_dir()
         folder = os.path.join(base, "agent_attachments", _safe_name(conv), "results")
         try:
             os.makedirs(folder, exist_ok=True)

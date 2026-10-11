@@ -31,7 +31,8 @@ def table_path(ctx):
     """agent_attachments/<chat>/evidence.csv (the chat's own folder is always usable by query_data)."""
     import agent_tools as at
     conv = getattr(ctx, "conv_id", None) or "misc"
-    base = os.environ.get("LWS_DATA_DIR") or at.APP_DIR
+    import paths
+    base = paths.data_dir()
     folder = os.path.join(base, "agent_attachments", at._safe_name(conv))
     os.makedirs(folder, exist_ok=True)
     if not ctx.inside(os.path.join(folder, "x")) and folder not in ctx.roots:

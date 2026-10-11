@@ -26,8 +26,9 @@ import re
 import time
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-PLAYBOOKS_DIR = os.path.join(APP_DIR, "playbooks")
-STATE_PATH = os.path.join(os.environ.get("LWS_DATA_DIR") or APP_DIR, "playbooks_state.json")
+import paths
+PLAYBOOKS_DIR = paths.resource("playbooks")
+STATE_PATH = paths.data("playbooks_state.json")
 KIND, NOTE_KIND = "playbook", "playbook_note"
 MAX_INJECT_CHARS = 2600            # ≈ 600 tokens: one playbook, or one and a trimmed second
 NOTES_SHOWN = 5

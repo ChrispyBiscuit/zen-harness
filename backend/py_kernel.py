@@ -10,7 +10,8 @@ import threading
 import time
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.environ.get("LWS_DATA_DIR") or APP_DIR
+import paths
+DATA_DIR = paths.data_dir()
 MAX_OUT = 6000
 IDLE_SHUTDOWN = 30 * 60          # stop kernels unused for this long
 _ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")

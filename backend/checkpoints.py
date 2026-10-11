@@ -32,7 +32,8 @@ class CheckpointError(RuntimeError):
 
 
 def _data_dir(data_dir=None):
-    return data_dir or os.environ.get("LWS_DATA_DIR") or os.path.dirname(os.path.abspath(__file__))
+    import paths
+    return data_dir or paths.data_dir()
 
 
 def shadow_id(root):
