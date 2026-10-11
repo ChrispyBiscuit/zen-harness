@@ -1637,10 +1637,14 @@ class AgentEngine:
             # interpretation) so they never evict the conversation's cached prompt; both slots share ONE context
             # pool, so the second slot costs no extra KV memory
             self._n_slots = max(1, int(c.get("parallel") or 1))
-            self.base = llama_local.ensure(model, self._n_slots, int(c.get("num_ctx") or 16384),
-                                           lambda s: self.emit("status", text=s),
-                                           extra_args=args + list(c.get("llama_args") or []),
-                                           unified=bool(c.get("kv_unified", True)) and self._n_slots > 1)
+            _ensure_args = (model, self._n_slots, int(c.get("num_ctx") or 16384))
+            _ensure_kw = dict(extra_args=args + list(c.get("llama_args") or []),
+                              unified=bool(c.get("kv_unified", True)) and self._n_slots > 1)
+            # kept so a later turn can start the server again if it died (crash, OOM, killed): the chat otherwise
+            # got "connection refused" on every message until the app restarted
+            self._llama_ensure = lambda: llama_local.ensure(*_ensure_args, lambda s: self.emit("status", text=s),
+                                                            **_ensure_kw)
+            self.base = self._llama_ensure()
         elif be == "openai":
             self.base = (_provider(c) or {}).get("base") or "https://api.openai.com"
         else:
@@ -3600,6 +3604,12 @@ class AgentEngine:
     def run(self, user_text, images=None):
         """One user turn. Returns the final answer text."""
         self._turn_request = str(user_text or "")
+        if getattr(self, "_llama_ensure", None) and not self.ctx.is_subagent and not llama_local.running("main"):
+            self.emit("status", text="The model server had stopped — starting it again…")
+            try:
+                self.base = self._llama_ensure()
+            except Exception as e:
+                _log({"llama_restart_error": repr(e)[:300], "conv": self.ctx.conv_id})
         if self.ctx.gopher is not None:
             self.emit("workers", workers=[])          # last turn's worker tiles go away
         if images and self._sees():

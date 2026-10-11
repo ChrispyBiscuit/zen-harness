@@ -61,8 +61,9 @@ Name: "{userstartup}\Zen Headless Harness"; Filename: "{app}\ZenHarness.exe"; Pa
 Filename: "{app}\ZenHarness.exe"; Description: "Start Zen Harness now"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-Filename: "{sys}\taskkill.exe"; Parameters: "/F /T /IM ZenHarness.exe"; Flags: runhidden; RunOnceId: "StopApp"
-Filename: "{sys}\taskkill.exe"; Parameters: "/F /T /IM llama-server.exe"; Flags: runhidden; RunOnceId: "StopModels"
+; stop ONLY processes running from this installation (ZenHarness.exe, zenharness-cli.exe, its llama-server.exe).
+; Never kill by image name: a name-based taskkill once stopped another copy's model server on the same PC.
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -Command ""Get-Process | Where-Object {{ $_.Path -and $_.Path.StartsWith('{app}\', [StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force"""; Flags: runhidden; RunOnceId: "StopOwnProcesses"
 
 [UninstallDelete]
 Type: files; Name: "{userstartup}\Zen Headless Harness.lnk"
