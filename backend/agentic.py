@@ -3656,6 +3656,7 @@ class AgentEngine:
         self._fetch_sizes = {}
         self._checkin_ignored = 0
         self._tracker_bounces, self._guides_read = 0, set()
+        self._hard_search_hinted = False                               # one hard_search pointer per turn
         self._fc_rounds, self._fc_from = 0, len(self.history) - 1     # fact check: rounds this turn, turn start
         self._check_level, self._fc_claims = "full", None              # how much checking (the router decides)
         self._empty_nags, self._math_rounds = 0, 0                     # empty replies / maths send-backs this turn
@@ -4784,6 +4785,16 @@ class AgentEngine:
                 notes.append(stuck_note)
         if streak_note:
             notes.append(streak_note)
+        if (name in ("web_search", "web_fetch") and not getattr(self, "_hard_search_hinted", False)
+                and "hard_search" not in getattr(self, "_guides_read", set()) and self._role != "exec"
+                and "read_guide" in (self.reg.by_name if self.reg else {})
+                and sum(1 for n, _a in self._calls_this_turn() if n in ("web_search", "web_fetch")) >= 4):
+            # the playbook's own definition of a hard target: the first three good queries failed
+            self._hard_search_hinted = True
+            notes.append("This looks like a hard target (4 searches so far). Instead of rewording again, "
+                         "read_guide('hard_search') — the playbook for finding what normal search doesn't — and "
+                         "change the route: an anchor or identifier, the answer page's words, the container that "
+                         "holds it, another language or time window, or an archive.")
         limit = int(self.cfg.get("max_failures") or 6)
         if self._fail_streak >= limit and self._stuck_reset(f"{self._fail_streak} failures in a row"):
             notes.append("⚠ " + (getattr(self, "_last_reset_note", "") or "STRATEGY RESET: change approach."))

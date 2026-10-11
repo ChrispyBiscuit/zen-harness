@@ -15,6 +15,10 @@
 - If results are mostly the wrong kind (templates, ads, SEO listicles when you want primary examples), change the query's words to describe what the real thing would contain, or exclude the wrong kind (`-template -sample -example`).
 - Search results are only titles and snippets. Snippets get cut and can be stale or wrong — open the best 2–3 pages with `web_fetch` before relying on them.
 
+- **Hard target?** If the first three good queries fail, stop rewording and `read_guide('hard_search')` — the
+  hard-target playbook: define the target, ask where the answer lives, anchors and identifiers, answer-page wording,
+  searching for the container, vocabulary ladders, time and language shifting, exclusion peeling, archives.
+
 ## 3. Read sources
 - `web_fetch` the most authoritative result first. If it returns `[blocked]`, a login wall or almost no text, don't retry it — use the in-app browser (`browser_open` then `browser_read`) or another source.
 - Use the browser for: sites that need JavaScript, search boxes/filters on a site (job boards, shops, databases), multi-page navigation, and anything the user is signed into. After each action `browser_read` the page and use the numbered elements.

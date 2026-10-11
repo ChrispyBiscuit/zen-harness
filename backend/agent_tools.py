@@ -2168,7 +2168,9 @@ GUIDE_ALIASES = {"pptx": "powerpoint", "ppt": "powerpoint", "slides": "powerpoin
                  "xls": "excel", "spreadsheet": "excel", "csv": "pdf", "research": "web_research", "web": "web_research",
                  "search": "web_research", "browser": "web_research", "writing": "clear_writing",
                  "style": "clear_writing", "ste": "clear_writing", "communication": "clear_writing",
-                 "simplified_english": "clear_writing", "acw": "clear_writing"}
+                 "simplified_english": "clear_writing", "acw": "clear_writing", "hard": "hard_search",
+                 "hard_target": "hard_search", "playbook": "hard_search", "search_playbook": "hard_search",
+                 "deep_search": "hard_search", "hard_search_playbook": "hard_search"}
 
 
 def t_read_guide(a, c):
