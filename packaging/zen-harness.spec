@@ -29,8 +29,8 @@ datas = [
 binaries = []
 hiddenimports = list(modules)
 # packages that load data files or plugins at runtime
-for pkg in ("trafilatura", "justext", "courlan", "htmldate", "dateparser", "ddgs", "fastembed", "faster_whisper",
-            "ctranslate2", "onnxruntime", "tokenizers", "libzim", "pptx", "docx", "openpyxl", "pint", "jedi", "parso",
+for pkg in ("trafilatura", "justext", "courlan", "htmldate", "dateparser", "ddgs", "fastembed",
+            "onnxruntime", "tokenizers", "pptx", "docx", "openpyxl", "pint", "jedi", "parso",
             "duckdb", "playwright", "tiktoken_ext",
             # the Python tool's kernel runs from this program (ZenHarness.exe -m ipykernel_launcher)
             "ipykernel", "jupyter_client", "jupyter_core", "zmq", "tornado", "matplotlib", "comm", "debugpy"):
@@ -46,6 +46,10 @@ hiddenimports += collect_submodules("aiohttp") + ["win32com.client", "pythoncom"
 excludes = [
     # GPL-3.0 espeak-ng (via espeakng-loader) and the TTS that needs it: voice output is an optional download
     "kokoro_onnx", "espeakng_loader", "phonemizer",
+    # voice input: faster-whisper imports PyAV, whose wheels bundle FFmpeg with GPL x264/x265 — optional download too
+    "faster_whisper", "av", "ctranslate2",
+    # offline Wikipedia reader (python-libzim is GPL-3.0): optional add-on with the 14 GB data download
+    "libzim",
     # formula OCR (torch, 4+ GB) and training libraries are not part of the app
     "torch", "torchvision", "pix2tex", "transformers", "timm",
     "tkinter", "IPython.qt", "PyQt5", "PyQt6",

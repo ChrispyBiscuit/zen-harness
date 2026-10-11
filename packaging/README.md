@@ -32,6 +32,9 @@ script).
 ## What is deliberately not in the installer
 - **Models** — downloaded on first run (Welcome screen) or added in Settings → Models.
 - **Voice output (Kokoro TTS)** — its phonemizer bundles espeak-ng (GPL-3.0); to be offered as an optional download.
+- **Voice input (faster-whisper)** — its audio decoder PyAV bundles FFmpeg with GPL codecs (x264/x265); optional
+  download later.
+- **Offline Wikipedia reader (python-libzim, GPL-3.0)** — comes with the optional Wikipedia download later.
 - **Formula OCR** (pix2tex + PyTorch, 4+ GB).
 - **Offline Wikipedia** (14 GB, optional download), **local SearXNG** (web search uses the keyless DuckDuckGo-style
   engine race instead).

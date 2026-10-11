@@ -77,6 +77,16 @@ OVERRIDES = {
     "espeakng-loader": ("MIT (loader); bundles espeak-ng, GPL-3.0 — not included in the installer, voice output is an "
                         "optional download", "https://github.com/thewh1teagle/espeakng-loader"),
 }
+# packages that are installed in the dev environment but NOT shipped in the installer (licence reasons, size)
+NOT_SHIPPED = {
+    "av": "PyAV bundles FFmpeg built with GPL codecs (x264/x265): not included in the installer",
+    "faster-whisper": "voice input: not included in the installer (needs PyAV)",
+    "ctranslate2": "voice input engine: not included in the installer",
+    "kokoro-onnx": "voice output: not included in the installer",
+    "espeakng-loader": "bundles espeak-ng (GPL-3.0): not included in the installer",
+    "phonemizer": "voice output: not included in the installer",
+    "libzim": "offline Wikipedia reader (GPL-3.0): not included in the installer",
+}
 
 
 def safe(name):
@@ -131,6 +141,8 @@ print(json.dumps(out))
         if not e["name"] or e["name"].lower() in ("pip", "setuptools", "wheel", "pyinstaller", "pyinstaller-hooks-contrib",
                                                    "pytest", "pluggy", "iniconfig", "altgraph", "pefile", "pywin32-ctypes"):
             continue
+        if e["name"] in NOT_SHIPPED or e["name"].lower() in NOT_SHIPPED:
+            continue                                   # listed only if it is actually distributed
         if e["name"] in OVERRIDES and e["license"] in ("unknown", ""):
             e["license"], e["url"] = OVERRIDES[e["name"]][0], e["url"] or OVERRIDES[e["name"]][1]
         body = "\n\n".join(f"===== {name} =====\n{text}" for name, text in e["texts"])
