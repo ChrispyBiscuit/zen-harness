@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useMemo } from "react"
-import { Cpu, LayoutGrid, PanelLeftOpen, Settings2, WifiOff } from "lucide-react"
+import { BookOpen, CircleHelp, Cpu, Info, LayoutGrid, PanelLeftOpen, Plug, Scale, Settings2, WifiOff } from "lucide-react"
 import { filesIn } from "@/components/ArtifactsPanel"
 import { latestChecklist } from "@/components/Checklist"
 import { Toaster } from "sonner"
@@ -9,6 +9,9 @@ import { Sidebar } from "@/components/Sidebar"
 import { Workspace } from "@/components/Workspace"
 import { isVisible, onDockChange, resetLayout, showPanel, toggleTray } from "@/lib/dock"
 import { SettingsDialog } from "@/components/SettingsDialog"
+import { HelpDialog } from "@/components/HelpDialog"
+import { WelcomeDialog } from "@/components/WelcomeDialog"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Clip } from "@/components/Clip"
 import { ResizeEdges, WindowControls, WindowFrame, useWindowDrag } from "@/components/WindowFrame"
 import { useApp } from "@/lib/store"
@@ -157,6 +160,16 @@ function TopBar() {
       <div className="min-w-0 flex-1 truncate text-ui font-medium">{current ? (thread?.title || conv?.title || "") : "New chat"}</div>
       {!connected && <span className="flex items-center gap-1 text-caption text-destructive"><WifiOff className="size-3.5" /> reconnecting</span>}
       <Button variant="ghost" size="icon-sm" onClick={() => { if (confirm("Reset the panel layout to the default?")) resetLayout() }} title="Reset panel layout" aria-label="Reset panel layout"><LayoutGrid /></Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger title="Help" aria-label="Help" className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground"><CircleHelp className="size-4" /></DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuItem onClick={() => set({ helpOpen: true, helpPage: "getting-started" } as any)}><BookOpen /> Help</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => set({ helpOpen: true, helpPage: "connect-apps" } as any)}><Plug /> Connect other apps</DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => set({ helpOpen: true, helpPage: "about" } as any)}><Info /> About Zen Harness</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => set({ helpOpen: true, helpPage: "licenses" } as any)}><Scale /> Licences</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <Button variant="ghost" size="icon-sm" onClick={() => set({ settingsOpen: true })} title="Settings" aria-label="Settings"><Settings2 /></Button>
       <WindowControls className="ml-1" />
     </header>
@@ -278,6 +291,8 @@ export default function App() {
         <StatusBar />
       </div>
       <SettingsDialog />
+      <HelpDialog />
+      <WelcomeDialog />
       <Clip />
       <Toaster theme="dark" position="bottom-right" richColors closeButton />
     </TooltipProvider>

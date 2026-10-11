@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react"
-import { Copy, Plus, RefreshCw, Trash2 } from "lucide-react"
+import { Copy, Plug, Plus, RefreshCw, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Field, More, Section, Toggle, inputCls } from "@/components/SettingsDialog"
 
-/* Settings → Headless: the Zen Headless Harness (tray service, REST API, MCP server). Backend: harness_api.py,
-   harness_mcp.py, headless.py; design: web-agent/plans/headless-harness-prd.md. */
+/* Settings → Connect apps: let other programs use Zen Harness (REST API, MCP server, background tray service).
+   Backend: harness_api.py, harness_mcp.py, headless.py; user guide: docs/connect-apps.md. */
 
 export const HEADLESS_DEFAULTS = {
   autostart: false, api_enabled: true, mcp_enabled: true, port: 8765, lan: false, token: "",
@@ -60,6 +60,19 @@ export function ServicePanel({ h, setH }: { h: Headless; setH: (p: Partial<Headl
     setH({ token: r.token })
     toast.success("New API token created")
   }
+  const [test, setTest] = useState<{ ok: boolean; text: string } | null>(null)
+  const testConnection = async () => {
+    setTest(null)
+    try {
+      const health = await fetch(`${base}/v1/health`).then((r) => r.json())
+      const r = await fetch(`${base}/v1/runs?limit=1`, { headers: { Authorization: `Bearer ${h.token}` } })
+      if (r.status === 401) return setTest({ ok: false, text: "Reachable, but the token was refused — save Settings first if you just changed it." })
+      if (r.status === 403) return setTest({ ok: false, text: "Reachable, but the REST API is switched off." })
+      setTest({ ok: r.ok, text: r.ok ? `Working — port ${health.port}${health.busy ? ", busy right now" : ""}.` : `Unexpected answer: ${r.status}` })
+    } catch {
+      setTest({ ok: false, text: "Not reachable on this port." })
+    }
+  }
   const num = (k: keyof Headless, label: string, min: number, max: number) => (
     <label className="flex items-center gap-1.5 text-caption text-muted-foreground">{label}
       <input type="number" min={min} max={max} value={h[k] as number} onChange={(e) => setH({ [k]: Number(e.target.value) } as any)} className={inputCls.replace("w-full", "w-20")} />
@@ -68,7 +81,7 @@ export function ServicePanel({ h, setH }: { h: Headless; setH: (p: Partial<Headl
 
   return (
     <>
-      <Section title="Zen Headless Harness">
+      <Section title="Background service">
         <div className="rounded-lg border border-line-1 bg-surface-1 px-3 py-2 text-ui">
           {!st ? <span className="text-muted-foreground">Checking…</span> : (
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -83,14 +96,14 @@ export function ServicePanel({ h, setH }: { h: Headless; setH: (p: Partial<Headl
             </div>
           )}
         </div>
-        <Toggle checked={!!h.autostart} onChange={(v) => setH({ autostart: v })} label="Start at sign-in"
+        <Toggle checked={!!h.autostart} onChange={(v) => setH({ autostart: v })} label="Run in the background at sign-in"
           hint={"Runs the Zen Headless Harness in the tray when you sign in to Windows, with no window: other programs can use it any time. "
             + "Adds one shortcut to your Startup folder (just your account, no admin; you can also turn it off in Task Manager → Startup apps)."
             + (st ? (st.autostart_registered ? " Currently on." : " Currently off.") : "")} />
-        <div className="text-caption text-muted-foreground">To start it now without signing out: <code className="mono">venv\Scripts\pythonw.exe headless.py</code> in the web-agent folder.</div>
+        <div className="text-caption text-muted-foreground">Without it, other apps can reach Zen Harness while this window is open; MCP over stdio starts it on demand.</div>
       </Section>
 
-      <Section title="Programmatic access">
+      <Section title="Access">
         <Toggle checked={!!h.api_enabled} onChange={(v) => setH({ api_enabled: v })} label="REST API" hint={`${base}/v1 — submit tasks, stream events, get results.`} />
         <Toggle checked={!!h.mcp_enabled} onChange={(v) => setH({ mcp_enabled: v })} label="MCP server" hint={`${base}/mcp (HTTP) or the stdio command below — tools: run_task, get_run, cancel_run, list_runs, list_conversations, get_conversation, get_status.`} />
         <Field label="API token" hint="Programs send it as “Authorization: Bearer <token>”. Keep it private.">
@@ -108,7 +121,7 @@ export function ServicePanel({ h, setH }: { h: Headless; setH: (p: Partial<Headl
           hint="Off: only this PC can connect. On: the API and MCP (never the app itself) answer other devices that have the token; no encryption, so only on a network you trust. Applies after a restart; Windows Firewall will ask." />
       </Section>
 
-      <Section title="Approvals for API runs">
+      <Section title="What tasks from other apps may do">
         <Field label="When a run needs approval" hint="Reads, web research and read-only commands follow Permissions as usual. This decides everything that would show an approval card.">
           <select value={h.approval} onChange={(e) => setH({ approval: e.target.value })} className={inputCls}>
             <option value="deny">Deny it (the agent works around it)</option>
@@ -136,11 +149,23 @@ export function ServicePanel({ h, setH }: { h: Headless; setH: (p: Partial<Headl
         </More>
       </Section>
 
-      <Section title="Connect a program">
-        <Snippet label="REST (curl)" text={`curl -H "Authorization: Bearer ${tok}" -H "Content-Type: application/json" \\\n  -d "{\\"input\\": \\"Summarise today's AI news\\", \\"wait\\": 300}" ${base}/v1/runs`} />
-        <Snippet label="MCP over HTTP (client config)" text={JSON.stringify({ mcpServers: { "zen-headless-harness": { type: "http", url: `${base}/mcp`, headers: { Authorization: `Bearer ${tok}` } } } }, null, 2)} />
-        {stdio && <Snippet label="MCP over stdio (client config; starts the service if needed)" text={JSON.stringify({ mcpServers: { "zen-headless-harness": { command: stdio.command, args: stdio.args } } }, null, 2)} />}
-        <div className="mt-2 text-caption text-muted-foreground">Full reference: web-agent/docs/headless-harness.md</div>
+      <Section title="Connect an app">
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={testConnection}><Plug /> Test connection</Button>
+          {test && <span className={test.ok ? "text-caption text-success" : "text-caption text-destructive"}>{test.text}</span>}
+        </div>
+        {stdio && <Snippet label="Claude Desktop — claude_desktop_config.json (Settings → Developer → Edit Config)"
+          text={JSON.stringify({ mcpServers: { "zen-harness": { command: stdio.command, args: stdio.args } } }, null, 2)} />}
+        <Snippet label="Claude Code" text={`claude mcp add zen-harness --transport http ${base}/mcp --header "Authorization: Bearer ${tok}"`} />
+        <Snippet label="Cursor / VS Code — mcp.json" text={JSON.stringify({ servers: { "zen-harness": { type: "http", url: `${base}/mcp`, headers: { Authorization: `Bearer ${tok}` } } } }, null, 2)} />
+        <Snippet label="Any MCP client over HTTP" text={JSON.stringify({ mcpServers: { "zen-harness": { type: "http", url: `${base}/mcp`, headers: { Authorization: `Bearer ${tok}` } } } }, null, 2)} />
+        <Snippet label="REST API (curl)" text={`curl -H "Authorization: Bearer ${tok}" -H "Content-Type: application/json" \\\n  -d "{\\"input\\": \\"Summarise today's AI news\\", \\"wait\\": 300}" ${base}/v1/runs`} />
+        <Snippet label="Python" text={`import json, urllib.request
+req = urllib.request.Request("${base}/v1/runs", method="POST",
+    data=json.dumps({"input": "What changed in Python 3.14?", "wait": 300}).encode(),
+    headers={"Authorization": "Bearer ${tok}", "Content-Type": "application/json"})
+print(json.load(urllib.request.urlopen(req, timeout=330))["run"]["result"])`} />
+        <div className="mt-2 text-caption text-muted-foreground">Full guide: Help → Connect other apps.</div>
       </Section>
     </>
   )

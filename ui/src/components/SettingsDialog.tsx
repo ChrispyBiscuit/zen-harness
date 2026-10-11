@@ -12,6 +12,7 @@ import type { Settings } from "@/lib/types"
 import { MemoryPanel } from "@/components/MemoryPanel"
 import { VoicePanel } from "@/components/VoicePanel"
 import { HEADLESS_DEFAULTS, ServicePanel, type Headless } from "@/components/ServicePanel"
+import { ModelsPanel } from "@/components/ModelsPanel"
 
 /* Settings, kept small on purpose: what you actually change. Per-chat run controls (thinking, plan budget) live on
    the message box; per-model tuning (drafter, cache, GPU split) lives in the model's profile; retired experiments
@@ -20,7 +21,7 @@ import { HEADLESS_DEFAULTS, ServicePanel, type Headless } from "@/components/Ser
 const CTX_PRESETS = [16384, 32768, 65536, 98304, 131072, 163840, 196608, 262144]
 type Fit = { ctx: number; kv: string; max: Record<string, number>; note: string; total_mib?: number }
 const OLD_TABS: Record<string, string> = { agent: "general", instructions: "agent", deleg: "agent", chat: "chatvoice",
-  voice: "chatvoice", mcp: "extensions", appearance: "general" }
+  voice: "chatvoice", mcp: "extensions", appearance: "general", headless: "service", connect: "service" }
 
 export const inputCls = "w-full rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-ui outline-none focus:border-ring"
 
@@ -89,7 +90,7 @@ function ModelPicker({ value, backend, models, openai, profiles, onChange }: {
         {!value && !custom && <option value="">Choose a model…</option>}
         {!known && !custom && value && <option value={sel}>{label(value)}</option>}
         {tuned.length > 0 && <optgroup label="Tuned profiles (recommended)">{tuned.map((m) => <option key={m} value={m}>{m}</option>)}</optgroup>}
-        {files.length > 0 && <optgroup label="Model files (~/models)">{files.map((m) => <option key={m} value={m}>{label(m)}</option>)}</optgroup>}
+        {files.length > 0 && <optgroup label="Model files (models folder)">{files.map((m) => <option key={m} value={m}>{label(m)}</option>)}</optgroup>}
         {ollama.length > 0 && <optgroup label="Ollama models">{ollama.map((m) => <option key={m} value={m}>{label(m)}</option>)}</optgroup>}
         {openai.length > 0 && <optgroup label="OpenAI (cloud, billed per request)">{openai.map((m) => <option key={m} value={`openai:${m}`}>{m}</option>)}</optgroup>}
         <option value="__custom">Other (type a model name or .gguf path)…</option>
@@ -161,7 +162,10 @@ export function SettingsDialog() {
 
   const save = async () => {
     try {
-      await saveSettings({ agent: draft.agent, temperature: draft.temperature, num_ctx: draft.num_ctx,
+      // model profiles are saved by the Models tab itself (models_api); sending the dialog's copy back would
+      // drop profiles added while it was open
+      const { model_overrides: _profiles, ...agent } = draft.agent as Record<string, any>
+      await saveSettings({ agent: agent as Settings["agent"], temperature: draft.temperature, num_ctx: draft.num_ctx,
         max_steps: draft.max_steps, system_prompt: draft.system_prompt, ui: draft.ui,
         ...(draft.headless ? { headless: draft.headless } : {}) })
       toast.success("Settings saved", { description: "Changes apply from the next message." })
@@ -186,12 +190,13 @@ export function SettingsDialog() {
         <Tabs key={String(open) + tab} defaultValue={tab} className="flex min-h-0 flex-1 flex-col">
           <TabsList className="mx-6 max-w-[calc(100%-3rem)] shrink-0 justify-start overflow-x-auto">
             <TabsTrigger value="general">General</TabsTrigger>
+            <TabsTrigger value="models">Models</TabsTrigger>
             <TabsTrigger value="agent">Agent</TabsTrigger>
             <TabsTrigger value="perms">Permissions</TabsTrigger>
             <TabsTrigger value="memory">Memory</TabsTrigger>
             <TabsTrigger value="chatvoice">Chat & voice</TabsTrigger>
             <TabsTrigger value="extensions">Extensions</TabsTrigger>
-            <TabsTrigger value="service">Headless</TabsTrigger>
+            <TabsTrigger value="service">Connect apps</TabsTrigger>
           </TabsList>
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-3">
 
@@ -244,6 +249,13 @@ export function SettingsDialog() {
                 <Toggle checked={(draft.ui as any).clip !== false} onChange={(v) => setUi({ clip: v } as any)}
                   label="Clip the paperclip" hint="A little assistant in the corner with a line of philosophy now and then, and query ideas." />
               </Section>
+            </TabsContent>
+
+            <TabsContent value="models">
+              <ModelsPanel current={a.backend === "llama" ? a.model : ""} onUse={(name) => {
+                setA({ model: name, backend: "llama" })
+                toast.message(`“${name}” selected`, { description: "Click Save to use it from the next message." })
+              }} />
             </TabsContent>
 
             <TabsContent value="agent">
