@@ -1170,6 +1170,17 @@ def read_file_pages_long_lines_and_states_size():
 
 
 @test
+def slimmed_history_call_has_no_content_to_copy():
+    # models imitate their own earlier calls: an old write must not keep a `content` value (the placeholder was
+    # copied as the content of new writes — bonsai1 wiped store.py, bonsai2 tried twice)
+    tcall = tc("write_file", {"path": "a.py", "content": "x" * 1000})
+    agentic._slim_call_args(tcall, ref="E5")
+    a = json.loads(tcall["function"]["arguments"])
+    assert "content" not in a and a["path"] == "a.py" and "1,000 chars omitted" in a["content_omitted"], a
+    assert at._HISTORY_STUB.search(a["content_omitted"])     # copied by hand, the write guard still refuses it
+
+
+@test
 def prd_check_finds_the_project_prd_above_tests():
     e = engine()
     d = tmpdir("proj")

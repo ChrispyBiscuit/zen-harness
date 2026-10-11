@@ -368,8 +368,12 @@ def _slim_call_args(tc, ref=None):
     for k in _BULKY_ARGS:
         v = a.get(k)
         if isinstance(v, str) and len(v) > 400:
-            a[k] = (f"[{len(v):,} chars omitted — already applied; read the file for its current text"
-                    + (f", or history_search entry='{ref}' for what was sent" if ref else "") + "]")
+            # the note goes under a different key: models imitate their own earlier calls, and a call that still
+            # had content="[N chars omitted…]" was copied as the content of new writes (bonsai1 wiped store.py;
+            # bonsai2 tried it twice). With no `content` left to copy, an imitation fails as "missing content".
+            del a[k]
+            a[k + "_omitted"] = (f"[{len(v):,} chars omitted — already applied; read the file for its current text"
+                                 + (f", or history_search entry='{ref}' for what was sent" if ref else "") + "]")
             changed = True
     if changed:
         fn["arguments"] = json.dumps(a, ensure_ascii=False)
