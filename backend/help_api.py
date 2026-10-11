@@ -149,7 +149,7 @@ def own_license():
                 return f.read()
         except OSError:
             pass
-    return "Zen Harness. All rights reserved."
+    return "Zen Harness — PolyForm Shield License 1.0.0 (https://polyformproject.org/licenses/shield/1.0.0)"
 
 
 def installed_model_licenses():

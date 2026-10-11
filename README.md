@@ -61,3 +61,10 @@ See `packaging/README.md`: `powershell -File packaging\build.ps1` produces `pack
 
 API keys, `settings.json`, chats, memory databases, logs, models, venvs, build outputs — `.gitignore` covers them.
 Run `git status` before every commit.
+
+## License
+
+[PolyForm Shield 1.0.0](LICENSE): free for anyone to use, copy and change — personal or business use — except to
+provide a product that competes with Zen Harness (for example, selling or redistributing a rebranded or modified
+copy). It is source-available, not OSI open source. Bundled third-party components keep their own licenses
+(Help → About → Licences).
