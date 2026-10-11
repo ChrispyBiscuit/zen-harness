@@ -1,0 +1,61 @@
+{
+  "_note": "Models offered on the Welcome screen and in Settings → Models. Sizes in bytes; licences checked on Hugging Face 2026-10-11.",
+  "models": [
+    {
+      "id": "ornith-1.5-9b",
+      "name": "Ornith 1.5 9B",
+      "summary": "Recommended for 8 GB graphics cards: a 9B model fine-tuned for agent work and coding. Fast and capable.",
+      "repo": "ornith-ai/Ornith-1.5-9B-GGUF",
+      "file": "Ornith-1.5-9B-Q4_K_M.gguf",
+      "size": 5780090816,
+      "extras": [{"file": "mmproj-Ornith-1.5-9B-BF16.gguf", "size": 921704672, "what": "vision (image input)"}],
+      "min_vram_mib": 7000,
+      "min_ram_mib": 12000,
+      "license": "MIT",
+      "license_url": "https://huggingface.co/ornith-ai/Ornith-1.5-9B-GGUF",
+      "recommended_for": "gpu8"
+    },
+    {
+      "id": "qwen3.5-4b",
+      "name": "Qwen3.5 4B",
+      "summary": "Small and quick: for graphics cards under 8 GB, or running on the CPU without a GPU.",
+      "repo": "unsloth/Qwen3.5-4B-GGUF",
+      "file": "Qwen3.5-4B-IQ4_XS.gguf",
+      "size": 2477053088,
+      "extras": [],
+      "min_vram_mib": 0,
+      "min_ram_mib": 8000,
+      "license": "Apache-2.0",
+      "license_url": "https://huggingface.co/Qwen/Qwen3.5-4B",
+      "recommended_for": "small"
+    },
+    {
+      "id": "qwen3.6-35b-a3b-iq3",
+      "name": "Qwen3.6 35B-A3B (3-bit)",
+      "summary": "Smarter mixture-of-experts model. Part of it runs from system RAM: needs 32 GB RAM to be comfortable; slower than the 9B.",
+      "repo": "unsloth/Qwen3.6-35B-A3B-GGUF",
+      "file": "Qwen3.6-35B-A3B-UD-IQ3_XXS.gguf",
+      "size": 13211155424,
+      "extras": [],
+      "min_vram_mib": 7000,
+      "min_ram_mib": 30000,
+      "license": "Apache-2.0",
+      "license_url": "https://huggingface.co/Qwen/Qwen3.6-35B-A3B",
+      "recommended_for": "big"
+    },
+    {
+      "id": "qwen3.6-35b-a3b-iq2",
+      "name": "Qwen3.6 35B-A3B (2-bit)",
+      "summary": "The same model compressed harder to fit 16 GB of RAM. Quality and tool use suffer at 2-bit.",
+      "repo": "unsloth/Qwen3.6-35B-A3B-GGUF",
+      "file": "Qwen3.6-35B-A3B-UD-IQ2_M.gguf",
+      "size": 11522702304,
+      "extras": [],
+      "min_vram_mib": 7000,
+      "min_ram_mib": 15000,
+      "license": "Apache-2.0",
+      "license_url": "https://huggingface.co/Qwen/Qwen3.6-35B-A3B",
+      "recommended_for": "big16"
+    }
+  ]
+}

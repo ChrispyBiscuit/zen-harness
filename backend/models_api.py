@@ -185,9 +185,74 @@ def _download(did, url, dest):
             if f.read(4) != b"GGUF":
                 raise ValueError("the downloaded file is not a GGUF model")
         os.replace(part, dest)
+        if st.get("auto_profile"):
+            st["status"] = "setting up"
+            auto_setup(dest, make_default=bool(st.get("make_default")))
         st["status"] = "done"
     except Exception as e:
         st.update(status="failed", error=str(e)[:300])
+
+
+def auto_setup(path, make_default=False):
+    """After a catalog download: save the proposed profile (and make it the default on first run)."""
+    wb = _store()
+    p = propose(path)
+    with wb.STORE.lock:
+        ag = wb.STORE.settings.setdefault("agent", {})
+        ov = dict(ag.get("model_overrides") or {})
+        prof = dict(p["profile"])
+        if os.path.dirname(prof["model_file"]).lower() == paths.models_dir().lower():
+            prof["model_file"] = os.path.basename(prof["model_file"])      # portable: relative to the models dir
+        ov[p["name"]] = prof
+        ag["model_overrides"] = ov
+        if make_default or not ag.get("model"):
+            ag["model"], ag["backend"] = p["name"], "llama"
+    wb.STORE.save_settings()
+    wb.BUS.send({"t": "settings", "settings": wb.STORE.settings})
+    return p["name"]
+
+
+def catalog():
+    try:
+        with open(paths.resource("model_catalog.json"), encoding="utf-8") as f:
+            items = json.load(f).get("models") or []
+    except (OSError, ValueError):
+        return []
+    import llama_local
+    gpu, ram = llama_local.gpu_total_mib() or 0, (llama_local.system_ram_mib() or (0, 0))[0]
+    out = []
+    for m in items:
+        m = dict(m)
+        m["url"] = f"https://huggingface.co/{m['repo']}/resolve/main/{m['file']}"
+        m["installed"] = os.path.isfile(os.path.join(paths.models_dir(), m["file"]))
+        m["fits"] = gpu >= int(m.get("min_vram_mib") or 0) and (not ram or ram >= int(m.get("min_ram_mib") or 0))
+        out.append(m)
+    # the recommendation for this PC: the first that fits, in the catalog's order of preference
+    pref = ["gpu8", "big", "big16", "small"] if gpu >= 7000 else ["small"]
+    for tag in pref:
+        hit = next((m for m in out if m.get("recommended_for") == tag and m["fits"]), None)
+        if hit:
+            hit["recommended"] = True
+            break
+    return out
+
+
+def install_from_catalog(mid, make_default=True):
+    m = next((x for x in catalog() if x["id"] == mid), None)
+    if not m:
+        raise ValueError("unknown catalog model")
+    ids = []
+    for extra in m.get("extras") or []:                  # helper files first (small): vision projector
+        try:
+            ids.append(start_download(f"https://huggingface.co/{m['repo']}/resolve/main/{extra['file']}"))
+        except ValueError:
+            pass                                          # already there
+    if m["installed"]:
+        auto_setup(os.path.join(paths.models_dir(), m["file"]), make_default=make_default)
+        return ids
+    did = start_download(m["url"])
+    DOWNLOADS[did].update(auto_profile=True, make_default=make_default)
+    return ids + [did]
 
 
 def start_download(url):
@@ -236,7 +301,7 @@ async def api_list(req):
             mf = paths.resolve_model(p.get("model_file") or "")
             profs[name] = {"profile": p, "exists": bool(mf and os.path.isfile(mf)), "path": mf}
         return {"models_dir": paths.models_dir(), "files": files, "profiles": profs, "default": ag.get("model") or "",
-                "gpu_mib": llama_local.gpu_total_mib(), "ram_mib": llama_local.system_ram_mib()}
+                "gpu_mib": llama_local.gpu_total_mib(), "ram_mib": (llama_local.system_ram_mib() or (0, 0))[0]}
     return web.json_response(await asyncio.to_thread(build))
 
 
@@ -320,6 +385,21 @@ async def api_download_cancel(req):
     if d:
         d["cancel"] = True
     return web.json_response({"ok": bool(d)})
+
+
+@routes.get("/api/models/catalog")
+async def api_catalog(req):
+    return web.json_response({"models": await asyncio.to_thread(catalog)})
+
+
+@routes.post("/api/models/catalog/install")
+async def api_catalog_install(req):
+    b = await req.json()
+    try:
+        ids = await asyncio.to_thread(install_from_catalog, str(b.get("id") or ""), b.get("make_default", True) is not False)
+        return web.json_response({"ok": True, "downloads": ids})
+    except ValueError as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=400)
 
 
 @routes.get("/api/models/downloads")

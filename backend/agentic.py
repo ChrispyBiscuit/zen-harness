@@ -866,9 +866,11 @@ def _provider_key(cfg):
     if not p:
         return swarm.api_key()
     k = os.environ.get(p["env"])
-    if not k:
+    for folder in (paths.data_dir(), os.path.expanduser("~")):      # the data folder (Welcome / Settings), then ~
+        if k:
+            break
         try:
-            with open(os.path.join(os.path.expanduser("~"), p["file"]), encoding="utf-8") as f:
+            with open(os.path.join(folder, p["file"]), encoding="utf-8") as f:
                 k = f.read().strip()
         except OSError:
             k = ""
