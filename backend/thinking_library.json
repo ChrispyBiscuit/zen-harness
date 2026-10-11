@@ -1,0 +1,542 @@
+{
+ "version": 1,
+ "about": "Domain-neutral principles, reasoning modules and thought frameworks. Per task the model selects 2-4 and adapts them into a reasoning frame (Self-Discover style). Never tune entries to a test task.",
+ "entries": [
+  {
+   "id": "P-known-inferred",
+   "kind": "principle",
+   "name": "Known vs inferred",
+   "when": "any factual claim or diagnosis",
+   "form": "Separate what you observed, what you inferred, and what you assumed — and say which is which."
+  },
+  {
+   "id": "P-disconfirm",
+   "kind": "principle",
+   "name": "Seek disconfirmation",
+   "when": "you have a favoured answer or explanation",
+   "form": "Before settling, look for the evidence that would prove you wrong."
+  },
+  {
+   "id": "P-base-rates",
+   "kind": "principle",
+   "name": "Base rates first",
+   "when": "judging likelihood, diagnosing, predicting",
+   "form": "Start from how often this is true in general, then adjust for the specifics."
+  },
+  {
+   "id": "P-reversibility",
+   "kind": "principle",
+   "name": "Prefer reversible moves",
+   "when": "acting under uncertainty; deleting, sending, buying, overwriting",
+   "form": "Prefer actions that can be undone; slow down and confirm before irreversible ones."
+  },
+  {
+   "id": "P-chesterton",
+   "kind": "principle",
+   "name": "Chesterton's fence",
+   "when": "removing, replacing or 'cleaning up' something that exists",
+   "form": "Find out why something is there before changing or removing it."
+  },
+  {
+   "id": "P-steelman",
+   "kind": "principle",
+   "name": "Steelman",
+   "when": "comparing positions, options or arguments",
+   "form": "State the strongest version of the other option or view before judging it."
+  },
+  {
+   "id": "P-ask-ambiguous",
+   "kind": "principle",
+   "name": "Resolve ambiguity",
+   "when": "the request has more than one reasonable reading with different outcomes",
+   "form": "Ask when readings lead to different actions with real cost; otherwise state the reading you chose."
+  },
+  {
+   "id": "P-purpose",
+   "kind": "principle",
+   "name": "Serve the purpose",
+   "when": "every request",
+   "form": "Find the goal behind the literal request and serve it — without going beyond what was asked."
+  },
+  {
+   "id": "P-proportion",
+   "kind": "principle",
+   "name": "Proportionality",
+   "when": "deciding how much effort, checking or caution to apply",
+   "form": "Match effort, verification and caution to the stakes."
+  },
+  {
+   "id": "P-second-order",
+   "kind": "principle",
+   "name": "Second-order effects",
+   "when": "decisions, policies, changes to systems",
+   "form": "Ask 'and then what?' — consequences of consequences, including for others."
+  },
+  {
+   "id": "P-opportunity-cost",
+   "kind": "principle",
+   "name": "Opportunity cost",
+   "when": "choosing between options or spending time/money",
+   "form": "Compare against the best alternative, not against doing nothing."
+  },
+  {
+   "id": "P-simplest",
+   "kind": "principle",
+   "name": "Simplest sufficient",
+   "when": "explaining, designing, fixing",
+   "form": "Prefer the simplest explanation or solution that fully fits; add complexity only when evidence demands it."
+  },
+  {
+   "id": "P-calibration",
+   "kind": "principle",
+   "name": "Calibration",
+   "when": "stating conclusions",
+   "form": "Match confidence to evidence; give likelihoods or ranges when uncertain; 'I don't know' is a valid answer."
+  },
+  {
+   "id": "P-map-territory",
+   "kind": "principle",
+   "name": "Map is not territory",
+   "when": "relying on summaries, labels, docs, memory or models of a system",
+   "form": "Check against the actual source, file or system, not a description of it."
+  },
+  {
+   "id": "P-incentives",
+   "kind": "principle",
+   "name": "Incentives",
+   "when": "weighing sources, claims, advice, behaviour",
+   "form": "Ask who benefits; sources and people respond to incentives."
+  },
+  {
+   "id": "P-inversion",
+   "kind": "principle",
+   "name": "Inversion",
+   "when": "planning to achieve a goal",
+   "form": "Ask what would guarantee failure, and avoid it."
+  },
+  {
+   "id": "P-local-global",
+   "kind": "principle",
+   "name": "Local vs global",
+   "when": "optimising one part of a system, code, plan or process",
+   "form": "An improvement in one part can harm the whole; check the system-level effect."
+  },
+  {
+   "id": "P-horizon",
+   "kind": "principle",
+   "name": "Time horizon",
+   "when": "trade-offs between now and later",
+   "form": "Weigh short-term against long-term; the best move now may not be best later."
+  },
+  {
+   "id": "P-sunk-cost",
+   "kind": "principle",
+   "name": "Ignore sunk costs",
+   "when": "deciding whether to continue an approach that is struggling",
+   "form": "Past effort doesn't justify continuing; decide on what lies ahead."
+  },
+  {
+   "id": "P-information",
+   "kind": "principle",
+   "name": "Most informative next step",
+   "when": "uncertain about which step to take next",
+   "form": "Prefer the next step whose result would most change your mind."
+  },
+  {
+   "id": "P-constraints",
+   "kind": "principle",
+   "name": "Respect stated constraints",
+   "when": "the user gave preferences, limits or rules",
+   "form": "Honour stated constraints and preferences; don't override them for elegance or speed."
+  },
+  {
+   "id": "P-tradeoffs",
+   "kind": "principle",
+   "name": "Name the trade-off",
+   "when": "options compete on different values",
+   "form": "Make the trade-off explicit rather than hiding it inside a recommendation."
+  },
+  {
+   "id": "P-robust",
+   "kind": "principle",
+   "name": "Robustness",
+   "when": "the future is uncertain",
+   "form": "Prefer choices that work across many plausible futures over one that is optimal in only one."
+  },
+  {
+   "id": "P-specifics",
+   "kind": "principle",
+   "name": "Specifics expose errors",
+   "when": "an argument or plan feels convincing but abstract",
+   "form": "Test it with concrete examples, numbers and cases; abstractions hide mistakes."
+  },
+  {
+   "id": "P-define",
+   "kind": "principle",
+   "name": "Define terms",
+   "when": "a key word is vague, technical or disputed",
+   "form": "Pin down what the key terms mean before reasoning with them."
+  },
+  {
+   "id": "P-reference-class",
+   "kind": "principle",
+   "name": "Reference class",
+   "when": "the situation is unfamiliar or novel",
+   "form": "Borrow from similar cases — what usually happens with things like this — and expect surprises."
+  },
+  {
+   "id": "P-people",
+   "kind": "principle",
+   "name": "Care for people",
+   "when": "actions or advice affect people",
+   "form": "Weigh effects on people; keep honesty and consent; don't trade them for convenience."
+  },
+  {
+   "id": "P-close-loop",
+   "kind": "principle",
+   "name": "Close the loop",
+   "when": "finishing any task",
+   "form": "A task is done only when the result is checked against the original goal."
+  },
+  {
+   "id": "M-restate",
+   "kind": "module",
+   "name": "Restate",
+   "when": "start of any non-trivial task",
+   "form": "Restate the problem in your own words; list givens, unknowns and constraints."
+  },
+  {
+   "id": "M-decompose",
+   "kind": "module",
+   "name": "Decompose",
+   "when": "the task has several parts or is too big to hold at once",
+   "form": "Break it into parts that can be solved separately; solve; recombine and check the joins."
+  },
+  {
+   "id": "M-assumptions",
+   "kind": "module",
+   "name": "Surface assumptions",
+   "when": "the answer depends on things not stated",
+   "form": "List your assumptions; mark the ones that, if wrong, would change the answer; check those."
+  },
+  {
+   "id": "M-alternatives",
+   "kind": "module",
+   "name": "Generate alternatives",
+   "when": "choosing an approach, design or answer",
+   "form": "Produce 2-4 genuinely different options before choosing one."
+  },
+  {
+   "id": "M-backwards",
+   "kind": "module",
+   "name": "Work backwards",
+   "when": "the end state is clear but the path isn't",
+   "form": "Start from the desired result and derive the steps that lead to it."
+  },
+  {
+   "id": "M-analogy",
+   "kind": "module",
+   "name": "Analogy",
+   "when": "a similar problem has a known solution",
+   "form": "Find the similar solved problem; map what transfers and note what doesn't."
+  },
+  {
+   "id": "M-first-principles",
+   "kind": "module",
+   "name": "First principles",
+   "when": "convention or habit may be misleading",
+   "form": "Reduce to what is fundamentally required and rebuild from there."
+  },
+  {
+   "id": "M-critique",
+   "kind": "module",
+   "name": "Critical check",
+   "when": "after drafting reasoning or an answer",
+   "form": "Look for flaws, gaps and contradictions as a demanding expert would."
+  },
+  {
+   "id": "M-edge-cases",
+   "kind": "module",
+   "name": "Edge cases",
+   "when": "rules, code, plans, generalisations",
+   "form": "Test on extreme, empty, unusual or adversarial cases."
+  },
+  {
+   "id": "M-perspectives",
+   "kind": "module",
+   "name": "Perspectives",
+   "when": "decisions affecting several parties; persuasive or sensitive writing",
+   "form": "View it from each stakeholder: the user, others affected, an expert, a skeptic."
+  },
+  {
+   "id": "M-root-cause",
+   "kind": "module",
+   "name": "Root cause",
+   "when": "something failed or keeps failing",
+   "form": "Ask why repeatedly until reaching a cause you can act on."
+  },
+  {
+   "id": "M-constraints-first",
+   "kind": "module",
+   "name": "Constraints first",
+   "when": "many options, some disallowed",
+   "form": "Identify hard constraints and eliminate options that violate them before comparing the rest."
+  },
+  {
+   "id": "M-quantify",
+   "kind": "module",
+   "name": "Quantify",
+   "when": "magnitudes, costs or probabilities matter",
+   "form": "Use numbers you were given or can source, and compute rather than guess; without data, compare in relative terms and name what to measure — never invent figures."
+  },
+  {
+   "id": "M-timeline",
+   "kind": "module",
+   "name": "Timeline",
+   "when": "events, histories, processes, dependencies",
+   "form": "Lay events or steps out in time order and check what depends on what."
+  },
+  {
+   "id": "M-risk",
+   "kind": "module",
+   "name": "Risk scan",
+   "when": "before acting on anything that matters",
+   "form": "What could go wrong? Likelihood times impact; add mitigations for the top risks."
+  },
+  {
+   "id": "M-simplify",
+   "kind": "module",
+   "name": "Simplify first",
+   "when": "the full problem is hard to attack",
+   "form": "Solve a smaller or simpler version first, then generalise."
+  },
+  {
+   "id": "M-categorize",
+   "kind": "module",
+   "name": "Categorize",
+   "when": "meeting an unfamiliar thing, term or problem",
+   "form": "Ask what kind of thing or problem this is, and what is typical for that kind."
+  },
+  {
+   "id": "M-evidence",
+   "kind": "module",
+   "name": "Weigh evidence",
+   "when": "sources disagree or vary in quality",
+   "form": "Rate each piece by source quality, directness and agreement; prefer primary over secondary."
+  },
+  {
+   "id": "M-conditions",
+   "kind": "module",
+   "name": "Check every condition",
+   "when": "questions or tasks with several qualifiers (dates, roles, scopes, exceptions)",
+   "form": "List every condition in the request and confirm the answer satisfies each one."
+  },
+  {
+   "id": "M-hypotheses",
+   "kind": "module",
+   "name": "Competing hypotheses",
+   "when": "explaining an observation or diagnosing",
+   "form": "Hold several explanations; find the observation that distinguishes them."
+  },
+  {
+   "id": "M-bottleneck",
+   "kind": "module",
+   "name": "Find the bottleneck",
+   "when": "improving speed, throughput or outcomes",
+   "form": "Find the step that limits the whole and improve that first."
+  },
+  {
+   "id": "M-reframe",
+   "kind": "module",
+   "name": "Reframe",
+   "when": "stuck, or the obvious framing may bias the answer",
+   "form": "Change the framing (gain vs loss, cost vs benefit, whose problem it is) and see what shifts."
+  },
+  {
+   "id": "M-uncertainty",
+   "kind": "module",
+   "name": "Map uncertainty",
+   "when": "incomplete information",
+   "form": "Mark what is certain, likely and unknown; plan to reduce the unknowns that matter most."
+  },
+  {
+   "id": "M-option-value",
+   "kind": "module",
+   "name": "Keep options open",
+   "when": "early in uncertain work",
+   "form": "Prefer steps that keep options open or buy information cheaply."
+  },
+  {
+   "id": "M-counterfactual",
+   "kind": "module",
+   "name": "Counterfactual",
+   "when": "judging whether an action helps",
+   "form": "What happens if we do nothing, or the opposite?"
+  },
+  {
+   "id": "M-ladder",
+   "kind": "module",
+   "name": "Abstraction ladder",
+   "when": "the problem is stated at the wrong level",
+   "form": "Move up (why? which principle?) and down (how? which concrete step?) to find the right level."
+  },
+  {
+   "id": "M-verify",
+   "kind": "module",
+   "name": "Verify externally",
+   "when": "key claims, numbers or code",
+   "form": "Check against a source, run it, or test it — don't trust your own recall."
+  },
+  {
+   "id": "M-intent",
+   "kind": "module",
+   "name": "Conversational intent",
+   "when": "chat, advice, emotionally loaded or vague messages",
+   "form": "Identify what the person needs (information, a decision, reassurance, an action) and their unspoken question."
+  },
+  {
+   "id": "F-decision-matrix",
+   "kind": "framework",
+   "name": "Decision matrix",
+   "when": "choosing among several options on several criteria",
+   "form": "1) options 2) criteria that matter to this person 3) compare each option on them (qualitatively unless you have real data) 4) sanity-check the winner against intuition and reversibility 5) recommend, naming the trade-off.",
+   "example": "Choosing a city to move to: A/B/C × rent, commute, job market → B wins on rent and jobs; trade-off: longer winters."
+  },
+  {
+   "id": "F-pre-mortem",
+   "kind": "framework",
+   "name": "Pre-mortem",
+   "when": "before starting something that could fail",
+   "form": "1) imagine it has failed 2) list the most likely reasons 3) fix or guard the top ones before starting.",
+   "example": "Database migration 'failed because the backup was never test-restored' → test-restore first."
+  },
+  {
+   "id": "F-hypothesis-loop",
+   "kind": "framework",
+   "name": "Hypothesis loop",
+   "when": "diagnosing, investigating, research with unknown cause",
+   "form": "observe → 2-3 hypotheses → pick the test that separates them → run it → update → repeat until one survives.",
+   "example": "Wi-Fi drops every evening: router, interference or provider? A wired test first separates the provider from the rest."
+  },
+  {
+   "id": "F-mece-tree",
+   "kind": "framework",
+   "name": "Issue tree",
+   "when": "big or messy goals",
+   "form": "Split the goal into non-overlapping, complete branches; recurse to actionable leaves; solve leaves; recombine.",
+   "example": "Cut monthly costs → housing / transport / food / subscriptions → each to concrete actions."
+  },
+  {
+   "id": "F-plan-act-verify",
+   "kind": "framework",
+   "name": "Plan-act-verify",
+   "when": "multi-step work with tools, files or code",
+   "form": "small step → act → verify against what you expected → revise; never chain two unverified risky steps.",
+   "example": "Reorganising a music library: move one album, check the player still finds it, then move the rest."
+  },
+  {
+   "id": "F-root-cause",
+   "kind": "framework",
+   "name": "Root-cause fix",
+   "when": "a recurring problem",
+   "form": "describe the failure → why ×5 → fix at the level that prevents recurrence → check nothing else depended on the old behaviour.",
+   "example": "Report wrong each month → manual copy step → automate the import, keep a check total."
+  },
+  {
+   "id": "F-ooda",
+   "kind": "framework",
+   "name": "OODA loop",
+   "when": "fast-changing situations, interactive tasks, browsing",
+   "form": "observe → orient (what does it mean here?) → decide → act; re-loop quickly when things change.",
+   "example": "A site shows a sign-in wall: observe, orient (content gated), decide (other source), act."
+  },
+  {
+   "id": "F-first-principles-rebuild",
+   "kind": "framework",
+   "name": "First-principles rebuild",
+   "when": "redesigning, or when the usual approach is bloated or failing",
+   "form": "list what is truly required → strip assumptions → build the minimal version → add back only what is justified.",
+   "example": "Backup system: requirement is 'restore any file from last week' → one versioned sync, not three tools."
+  },
+  {
+   "id": "F-compare",
+   "kind": "framework",
+   "name": "Compare and contrast",
+   "when": "two or more things, versions, sources or options",
+   "form": "same dimensions for each → similarities → differences → which difference matters for the purpose.",
+   "example": "Two insurance policies: premium, deductible, exclusions — for a renter who cycles, the exclusion list is the difference that matters."
+  },
+  {
+   "id": "F-argument-map",
+   "kind": "framework",
+   "name": "Argument map",
+   "when": "evaluating a claim, debate, or persuasive text",
+   "form": "claim → reasons → evidence for each → objections → rebuttals → net assessment with confidence.",
+   "example": "'Remote work lowers productivity': study quality, selection effects, what is measured."
+  },
+  {
+   "id": "F-scenarios",
+   "kind": "framework",
+   "name": "Scenario branching",
+   "when": "planning under an uncertain future",
+   "form": "2-4 plausible futures → best action in each → choose the action that holds up across them.",
+   "example": "Job offer: company grows / flat / shrinks → negotiate equity and severance, not only salary."
+  },
+  {
+   "id": "F-debug",
+   "kind": "framework",
+   "name": "Debugging",
+   "when": "code or a system misbehaves",
+   "form": "reproduce → isolate (bisect inputs or changes) → hypothesise → minimal fix → test → check side effects.",
+   "example": "A script fails on some inputs → reproduce with one → it has an unexpected encoding → handle it, rerun everything."
+  },
+  {
+   "id": "F-research-funnel",
+   "kind": "framework",
+   "name": "Research funnel",
+   "when": "questions needing sources",
+   "form": "broad scan → identify authoritative sources → narrow to specifics → cross-check → synthesise with citations.",
+   "example": "Drug interaction: scan, then official label + a clinical reference, cross-check, cite both."
+  },
+  {
+   "id": "F-tradeoff",
+   "kind": "framework",
+   "name": "Trade-off analysis",
+   "when": "no option dominates",
+   "form": "what each option gains and loses → who bears the costs → reversibility → recommendation with the stated trade-off.",
+   "example": "Faster model vs more accurate one: interactive chat favours speed; reports favour accuracy."
+  },
+  {
+   "id": "F-explain-ladder",
+   "kind": "framework",
+   "name": "Explanation ladder",
+   "when": "explaining or teaching",
+   "form": "one-line answer → key reasons → details → caveats, at the asker's level.",
+   "example": "Why the sky is blue: short wavelengths scatter more → Rayleigh scattering → why sunsets are red."
+  },
+  {
+   "id": "F-negotiation",
+   "kind": "framework",
+   "name": "Interests not positions",
+   "when": "conflicts, negotiations, messages to people",
+   "form": "interests behind each position → options for mutual gain → objective criteria → each side's walk-away alternative.",
+   "example": "Landlord wants +10%: interest is reliable income → offer a longer lease for +4%."
+  },
+  {
+   "id": "F-fermi",
+   "kind": "framework",
+   "name": "Fermi estimate",
+   "when": "a number is needed and no source has it",
+   "form": "break into factors → estimate each with a range → combine → sanity-check the order of magnitude.",
+   "example": "Piano tuners in a city: households × pianos per household × tunings a year / tunings per tuner."
+  },
+  {
+   "id": "F-ethics",
+   "kind": "framework",
+   "name": "Ethics check",
+   "when": "actions affecting other people, privacy, money or safety",
+   "form": "who is affected → consent → honesty → harms vs benefits → would this be fine if made public?",
+   "example": "Auto-replying to emails as the user: consent for each kind of message, never impersonate in new threads."
+  }
+ ]
+}

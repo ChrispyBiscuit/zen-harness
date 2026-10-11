@@ -1,0 +1,249 @@
+[
+ {
+  "id": "lt_00",
+  "q": "What is the population of Gmina Tyrawa Wołoska?",
+  "answer": {
+   "number": 1939
+  },
+  "source": "https://en.wikipedia.org/wiki/Gmina_Tyrawa_Wołoska"
+ },
+ {
+  "id": "lt_01",
+  "q": "In what year was Tre' McKitty born?",
+  "answer": {
+   "year": 1999
+  },
+  "source": "https://en.wikipedia.org/wiki/Tre'_McKitty"
+ },
+ {
+  "id": "lt_02",
+  "q": "In what year was Linda Evans (activist) born?",
+  "answer": {
+   "year": 1947
+  },
+  "source": "https://en.wikipedia.org/wiki/Linda_Evans_(activist)"
+ },
+ {
+  "id": "lt_03",
+  "q": "In what year was North American Hockey League (1973–1977) founded?",
+  "answer": {
+   "year": 1973
+  },
+  "source": "https://en.wikipedia.org/wiki/North_American_Hockey_League_(1973–1977)"
+ },
+ {
+  "id": "lt_04",
+  "q": "Who wrote Hay Road?",
+  "answer": {
+   "name": "Areias",
+   "full": "Rodrigo Areias"
+  },
+  "source": "https://en.wikipedia.org/wiki/Hay_Road"
+ },
+ {
+  "id": "lt_05",
+  "q": "Who directed The King of Fighters '98?",
+  "answer": {
+   "name": "Tanabe",
+   "full": "Toyohisa Tanabe"
+  },
+  "source": "https://en.wikipedia.org/wiki/The_King_of_Fighters_'98"
+ },
+ {
+  "id": "lt_06",
+  "q": "In what year was D. H. & A. B. Tower founded?",
+  "answer": {
+   "year": 1878
+  },
+  "source": "https://en.wikipedia.org/wiki/D._H._&_A._B._Tower"
+ },
+ {
+  "id": "lt_07",
+  "q": "In what year was Gus-Khrustalny District founded?",
+  "answer": {
+   "year": 1929
+  },
+  "source": "https://en.wikipedia.org/wiki/Gus-Khrustalny_District"
+ },
+ {
+  "id": "lt_08",
+  "q": "In what year was Vesna Dolonc born?",
+  "answer": {
+   "year": 1989
+  },
+  "source": "https://en.wikipedia.org/wiki/Vesna_Dolonc"
+ },
+ {
+  "id": "lt_09",
+  "q": "Who directed Once in a Lifetime (2000 film)?",
+  "answer": {
+   "name": "Bier",
+   "full": "Susanne Bier"
+  },
+  "source": "https://en.wikipedia.org/wiki/Once_in_a_Lifetime_(2000_film)"
+ },
+ {
+  "id": "lt_10",
+  "q": "In what year did Kieran Patrick Kelly die?",
+  "answer": {
+   "year": 2001
+  },
+  "source": "https://en.wikipedia.org/wiki/Kieran_Patrick_Kelly"
+ },
+ {
+  "id": "lt_11",
+  "q": "In what year was Hamid al-'Imadi born?",
+  "answer": {
+   "year": 1692
+  },
+  "source": "https://en.wikipedia.org/wiki/Hamid_al-'Imadi"
+ },
+ {
+  "id": "lt_12",
+  "q": "In what year was Theodor Hoffmann (admiral) born?",
+  "answer": {
+   "year": 1935
+  },
+  "source": "https://en.wikipedia.org/wiki/Theodor_Hoffmann_(admiral)"
+ },
+ {
+  "id": "lt_13",
+  "q": "In what year did Thomas Noel, 2nd Viscount Wentworth die?",
+  "answer": {
+   "year": 1815
+  },
+  "source": "https://en.wikipedia.org/wiki/Thomas_Noel,_2nd_Viscount_Wentworth"
+ },
+ {
+  "id": "lt_14",
+  "q": "In what year was Aleksandra Cvetićanin born?",
+  "answer": {
+   "year": 1993
+  },
+  "source": "https://en.wikipedia.org/wiki/Aleksandra_Cvetićanin"
+ },
+ {
+  "id": "lt_15",
+  "q": "In what year was National Museum, Bloemfontein founded?",
+  "answer": {
+   "year": 1877
+  },
+  "source": "https://en.wikipedia.org/wiki/National_Museum,_Bloemfontein"
+ },
+ {
+  "id": "lt_16",
+  "q": "In what year was Moniro Ravanipour born?",
+  "answer": {
+   "year": 1952
+  },
+  "source": "https://en.wikipedia.org/wiki/Moniro_Ravanipour"
+ },
+ {
+  "id": "lt_17",
+  "q": "Who wrote Sophia Loren: Her Own Story?",
+  "answer": {
+   "name": "Crawford",
+   "full": "Joanna Crawford"
+  },
+  "source": "https://en.wikipedia.org/wiki/Sophia_Loren:_Her_Own_Story"
+ },
+ {
+  "id": "lt_18",
+  "q": "Who directed Stand by Me Doraemon?",
+  "answer": {
+   "name": "Yamazaki",
+   "full": "Ryūichi Yagi Takashi Yamazaki"
+  },
+  "source": "https://en.wikipedia.org/wiki/Stand_by_Me_Doraemon"
+ },
+ {
+  "id": "lt_19",
+  "q": "What is the population of Grange Township, Pipestone County, Minnesota?",
+  "answer": {
+   "number": 244
+  },
+  "source": "https://en.wikipedia.org/wiki/Grange_Township,_Pipestone_County,_Minnesota"
+ },
+ {
+  "id": "lt_20",
+  "q": "In what year was Thomas Hampton (cricketer) born?",
+  "answer": {
+   "year": 1990
+  },
+  "source": "https://en.wikipedia.org/wiki/Thomas_Hampton_(cricketer)"
+ },
+ {
+  "id": "lt_21",
+  "q": "Who directed Li'l Sebastian?",
+  "answer": {
+   "name": "Holland",
+   "full": "Dean Holland"
+  },
+  "source": "https://en.wikipedia.org/wiki/Li'l_Sebastian"
+ },
+ {
+  "id": "lt_22",
+  "q": "In what year was Tamil Nadu Rice Research Institute founded?",
+  "answer": {
+   "year": 1985
+  },
+  "source": "https://en.wikipedia.org/wiki/Tamil_Nadu_Rice_Research_Institute"
+ },
+ {
+  "id": "lt_23",
+  "q": "What is the population of Municipality of Straža?",
+  "answer": {
+   "number": 3661
+  },
+  "source": "https://en.wikipedia.org/wiki/Municipality_of_Straža"
+ },
+ {
+  "id": "lt_24",
+  "q": "What is the population of Udurlije?",
+  "answer": {
+   "number": 296
+  },
+  "source": "https://en.wikipedia.org/wiki/Udurlije"
+ },
+ {
+  "id": "lt_25",
+  "q": "What is the population of Pieniężno?",
+  "answer": {
+   "number": 2801
+  },
+  "source": "https://en.wikipedia.org/wiki/Pieniężno"
+ },
+ {
+  "id": "lt_26",
+  "q": "In what year was Danish Order of Freemasons founded?",
+  "answer": {
+   "year": 1858
+  },
+  "source": "https://en.wikipedia.org/wiki/Danish_Order_of_Freemasons"
+ },
+ {
+  "id": "lt_27",
+  "q": "In what year did Jim Caine die?",
+  "answer": {
+   "year": 2018
+  },
+  "source": "https://en.wikipedia.org/wiki/Jim_Caine"
+ },
+ {
+  "id": "lt_28",
+  "q": "Who wrote The Spirit of Mickey?",
+  "answer": {
+   "name": "Peterson",
+   "full": "Bonnie Peterson"
+  },
+  "source": "https://en.wikipedia.org/wiki/The_Spirit_of_Mickey"
+ },
+ {
+  "id": "lt_29",
+  "q": "In what year was Deer Flat National Wildlife Refuge founded?",
+  "answer": {
+   "year": 1909
+  },
+  "source": "https://en.wikipedia.org/wiki/Deer_Flat_National_Wildlife_Refuge"
+ }
+]

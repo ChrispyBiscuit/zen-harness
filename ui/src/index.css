@@ -1,0 +1,408 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --font-heading: var(--font-sans);
+    --font-sans: 'Geist Variable', 'Segoe UI', sans-serif;
+    --font-mono: 'Geist Mono Variable', 'Cascadia Mono', Consolas, monospace;
+    /* --- Zen Harness design tokens (polish v2, Phase 1) --- */
+    /* elevation: bg-surface-0..3, border-line-1..3, shadow-elev-2/3 */
+    --color-surface-0: var(--surface-0);
+    --color-surface-1: var(--surface-1);
+    --color-surface-2: var(--surface-2);
+    --color-surface-3: var(--surface-3);
+    --color-line-1: var(--line-1);
+    --color-line-2: var(--line-2);
+    --color-line-3: var(--line-3);
+    --shadow-elev-2: var(--elev-2);
+    --shadow-elev-3: var(--elev-3);
+    --color-ink: var(--ink);
+    /* type scale: text-meta 11 · caption 12 · ui 13 · body 14 · chat 15 · title 18 · display 22 (density-aware) */
+    --text-meta: var(--fs-meta);
+    --text-meta--line-height: 1.45;
+    --text-caption: var(--fs-caption);
+    --text-caption--line-height: 1.5;
+    --text-ui: var(--fs-ui);
+    --text-ui--line-height: 1.5;
+    --text-body: var(--fs-body);
+    --text-body--line-height: 1.55;
+    --text-chat: var(--fs-chat);
+    --text-chat--line-height: 1.7;
+    --text-title: 18px;
+    --text-title--line-height: 1.35;
+    --text-display: 22px;
+    --text-display--line-height: 1.25;
+    /* radius: chips 6 · cards 10 · panels 12 · modals 16 */
+    --radius-chip: 6px;
+    --radius-card: 10px;
+    --radius-panel: 12px;
+    --radius-modal: 16px;
+    /* motion */
+    --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+    --color-success: var(--success);
+    --color-warning: var(--warning);
+    --color-info: var(--info);
+    --color-surface: var(--surface);
+    --color-code: var(--code);
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+    --success: oklch(0.6 0.15 155);
+    --warning: oklch(0.7 0.15 70);
+    --info: oklch(0.58 0.14 245);
+    --surface: oklch(0.985 0 0);
+    --code: oklch(0.97 0 0);
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.145 0 0);
+    --primary: oklch(0.205 0 0);
+    --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0);
+    --secondary-foreground: oklch(0.205 0 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
+    --destructive: oklch(0.577 0.245 27.325);
+    --border: oklch(0.922 0 0);
+    --input: oklch(0.922 0 0);
+    --ring: oklch(0.708 0 0);
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+    --radius: 0.625rem;
+    --sidebar: oklch(0.985 0 0);
+    --sidebar-foreground: oklch(0.145 0 0);
+    --sidebar-primary: oklch(0.205 0 0);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.97 0 0);
+    --sidebar-accent-foreground: oklch(0.205 0 0);
+    --sidebar-border: oklch(0.922 0 0);
+    --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+    /* elevation: 0 app · 1 panels and cards · 2 raised (popovers, hover, active card) · 3 modal */
+    --surface-0: oklch(0.165 0.004 265);
+    --surface-1: oklch(0.195 0.005 265);
+    --surface-2: oklch(0.228 0.006 265);
+    --surface-3: oklch(0.25 0.007 265);
+    --line-1: oklch(1 0 0 / 7%);
+    --line-2: oklch(1 0 0 / 10%);
+    --line-3: oklch(1 0 0 / 13%);
+    --elev-2: 0 1px 0 0 oklch(1 0 0 / 4%) inset, 0 8px 24px -12px rgb(0 0 0 / 0.6);
+    --elev-3: 0 1px 0 0 oklch(1 0 0 / 5%) inset, 0 24px 64px -16px rgb(0 0 0 / 0.72), 0 2px 8px rgb(0 0 0 / 0.3);
+    --background: var(--surface-0);
+    --foreground: oklch(0.94 0.003 265);
+    --surface: var(--surface-1);
+    --card: var(--surface-1);
+    --card-foreground: oklch(0.94 0.003 265);
+    --popover: var(--surface-2);
+    --popover-foreground: oklch(0.94 0.003 265);
+    --primary: oklch(0.93 0.004 265);
+    --primary-foreground: oklch(0.2 0.005 265);
+    --secondary: oklch(0.25 0.006 265);
+    --secondary-foreground: oklch(0.94 0.003 265);
+    --muted: oklch(0.235 0.006 265);
+    --muted-foreground: oklch(0.66 0.01 265);
+    --accent: oklch(0.255 0.007 265);
+    --accent-foreground: oklch(0.96 0.003 265);
+    --destructive: oklch(0.68 0.19 22);
+    --success: oklch(0.74 0.15 155);
+    --warning: oklch(0.8 0.14 75);
+    --info: oklch(0.72 0.12 245);
+    --code: oklch(0.135 0.004 265);
+    --border: var(--line-1);
+    --input: oklch(1 0 0 / 11%);
+    --ring: oklch(0.6 0.01 265);
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+    --sidebar: oklch(0.145 0.004 265);
+    --sidebar-foreground: oklch(0.9 0.004 265);
+    --sidebar-primary: oklch(0.93 0.004 265);
+    --sidebar-primary-foreground: oklch(0.2 0.005 265);
+    --sidebar-accent: oklch(0.21 0.006 265);
+    --sidebar-accent-foreground: oklch(0.96 0.003 265);
+    --sidebar-border: oklch(1 0 0 / 7%);
+    --sidebar-ring: oklch(0.6 0.01 265);
+    --brand-tile: oklch(0.2 0.012 265);
+    --ring: var(--brand-a);
+}
+
+/* Zen Harness brand: ink only. The identity is the near-white brush ink; there is no brand hue. Colour means
+   state (info · success · warning · destructive), never identity. --brand-a/-b stay as the hooks for focus, the
+   mark's tint and active states, so an accent could be dropped in here later. */
+:root {
+    --ink: oklch(0.93 0.008 85);
+    --brand-a: oklch(0.93 0.008 85);
+    --brand-b: oklch(0.78 0.008 85);
+    --brand-tile: oklch(0.2 0.012 265);
+    --focus-ring: color-mix(in oklab, var(--brand-a) 70%, transparent);
+
+    /* type, comfortable density (the default) */
+    --fs-meta: 11px;
+    --fs-caption: 12px;
+    --fs-ui: 13px;
+    --fs-body: 14px;
+    --fs-chat: 15px;
+    /* rhythm (4-pt): gap between transcript items, card header padding, list row height */
+    --gap-item: 16px;
+    --card-px: 12px;
+    --card-py: 6px;
+    --row-h: 32px;
+    --row-py: 6px;
+
+    /* motion: subtle, Linear-style; no bounce */
+    --dur-fast: 120ms;
+    --dur: 200ms;
+    --dur-slow: 320ms;
+}
+/* compact density: one font step down and a tighter rhythm, in the transcript and the sidebar */
+:root[data-density="compact"] [data-density-scope] {
+    --fs-caption: 11px;
+    --fs-ui: 12px;
+    --fs-body: 13px;
+    --fs-chat: 14px;
+    --gap-item: 8px;
+    --card-px: 8px;
+    --card-py: 4px;
+    --row-h: 28px;
+    --row-py: 4px;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    @apply bg-background text-foreground;
+    }
+  html {
+    @apply font-sans;
+    }
+}
+@layer base {
+  html, body, #root { height: 100%; }
+  body { -webkit-font-smoothing: antialiased; font-feature-settings: "ss01", "cv11"; }
+  ::selection { background: oklch(0.75 0.01 85 / 28%); }
+  /* one focus ring for everything interactive (keyboard focus only) */
+  :where(a, button, input, select, textarea, summary, [role="button"], [role="tab"], [role="option"],
+    [role="menuitem"], [tabindex]:not([tabindex="-1"])):focus-visible {
+    outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  :where(input, textarea, select):focus-visible { outline-offset: 0; }
+  * { scrollbar-width: thin; scrollbar-color: oklch(1 0 0 / 14%) transparent; }
+}
+@utility mono { font-family: var(--font-mono); font-feature-settings: "liga" 0, "calt" 0; }
+/* brand utilities */
+@utility text-brand { background: linear-gradient(100deg, var(--brand-a), var(--brand-b)); -webkit-background-clip: text;
+  background-clip: text; color: transparent; }
+@utility bg-brand { background-image: linear-gradient(100deg, var(--brand-a), var(--brand-b)); }
+@utility ring-brand { box-shadow: 0 0 0 1px color-mix(in oklab, var(--brand-a) 55%, transparent),
+  0 0 18px -6px color-mix(in oklab, var(--brand-b) 60%, transparent); }
+/* state tones: data-tone="info|success|warning|destructive|muted" (lib/tone.ts), then colour with these */
+[data-tone="info"] { --tone: var(--info); }
+[data-tone="success"] { --tone: var(--success); }
+[data-tone="warning"] { --tone: var(--warning); }
+[data-tone="destructive"] { --tone: var(--destructive); }
+[data-tone="muted"] { --tone: var(--muted-foreground); }
+@utility tone-text { color: var(--tone, var(--muted-foreground)); }
+@utility tone-soft { background-color: color-mix(in oklab, var(--tone, var(--muted-foreground)) 13%, transparent); }
+@utility tone-wash { background-color: color-mix(in oklab, var(--tone, var(--muted-foreground)) 6%, transparent); }
+@utility tone-fill { background-color: var(--tone, var(--muted-foreground)); }
+@utility tone-edge { border-color: color-mix(in oklab, var(--tone, var(--muted-foreground)) 42%, transparent); }
+/* motion utilities: transform/opacity only (cheap in the embedded Qt WebEngine window) */
+@keyframes enter-rise { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
+@keyframes enter-fade { from { opacity: 0 } to { opacity: 1 } }
+@keyframes collapse-out { from { opacity: 1; transform: none } to { opacity: 0; transform: translateY(-4px) } }
+@utility enter-rise { animation: enter-rise var(--dur) var(--ease-out) backwards; }
+@utility enter-fade { animation: enter-fade var(--dur) var(--ease-out) backwards; }
+@utility collapse { animation: collapse-out var(--dur-fast) var(--ease-out) both; }
+@utility transition-ui { transition-property: color, background-color, border-color, opacity, transform, box-shadow;
+  transition-duration: var(--dur-fast); transition-timing-function: var(--ease-out); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important; scroll-behavior: auto !important; }
+}
+/* technical label: small caps-like mono for meters, section headers, badges */
+@utility label-tech { font-family: var(--font-mono); font-size: var(--fs-meta); letter-spacing: 0.12em; text-transform: uppercase;
+  font-feature-settings: "liga" 0, "calt" 0; }
+/* a faint engineering grid behind the empty state */
+.bg-grid { background-image:
+  linear-gradient(to right, oklch(1 0 0 / 3.5%) 1px, transparent 1px),
+  linear-gradient(to bottom, oklch(1 0 0 / 3.5%) 1px, transparent 1px);
+  background-size: 28px 28px; mask-image: radial-gradient(ellipse 60% 55% at 50% 40%, black 30%, transparent 75%); }
+/* every scroll area: a thin, quiet scrollbar that brightens on hover */
+*::-webkit-scrollbar { width: 9px; height: 9px; }
+*::-webkit-scrollbar-thumb { background: oklch(1 0 0 / 12%); border-radius: 9px; border: 2px solid transparent; background-clip: padding-box; }
+*::-webkit-scrollbar-thumb:hover { background: oklch(1 0 0 / 22%); border: 2px solid transparent; background-clip: padding-box; }
+*::-webkit-scrollbar-track { background: transparent; }
+.shiki, .shiki span { background-color: transparent !important; }
+.prose-chat { line-height: 1.7; font-size: var(--fs-chat); }
+.prose-chat > * + * { margin-top: 0.75em; }
+.prose-chat h1 { font-size: 1.35em; font-weight: 600; margin-top: 1.2em; }
+.prose-chat h2 { font-size: 1.18em; font-weight: 600; margin-top: 1.1em; }
+.prose-chat h3 { font-size: 1.04em; font-weight: 600; margin-top: 1em; }
+.prose-chat ul { list-style: disc; padding-left: 1.4em; }
+.prose-chat ol { list-style: decimal; padding-left: 1.4em; }
+.prose-chat li + li { margin-top: 0.25em; }
+/* formulas: lines holding inline maths get room so fractions don't collide; display maths scrolls, never squeezes */
+.prose-chat :is(p, li):has(.katex) { line-height: 2; }
+.prose-chat .katex { font-size: 1.08em; }
+.prose-chat .katex-display { margin: 0.6em 0; overflow-x: auto; overflow-y: hidden; padding: 0.15em 0; }
+.prose-chat sup.cite + sup.cite { margin-left: 2px; }
+.prose-chat li > p { margin: 0; }
+.prose-chat blockquote { border-left: 2px solid var(--border); padding-left: 1em; color: var(--muted-foreground); }
+.prose-chat table { border-collapse: collapse; font-size: 0.92em; display: block; overflow-x: auto; }
+.prose-chat th, .prose-chat td { border: 1px solid var(--border); padding: 0.4em 0.75em; text-align: left; }
+.prose-chat th { background: var(--muted); font-weight: 600; }
+.prose-chat hr { border-color: var(--border); margin: 1.5em 0; }
+.prose-chat strong { font-weight: 600; color: var(--foreground); }
+@keyframes shimmer { 0% { background-position: -200% 0 } 100% { background-position: 200% 0 } }
+.shimmer-text { background: linear-gradient(90deg, var(--muted-foreground) 25%, var(--foreground) 50%, var(--muted-foreground) 75%);
+  background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: shimmer 2.2s linear infinite; }
+
+/* Native controls (select popups, scrollbars, date pickers) follow the dark theme */
+html.dark { color-scheme: dark; }
+select { background-color: transparent; }
+select option, select optgroup { background-color: var(--popover); color: var(--popover-foreground); }
+select optgroup { color: var(--muted-foreground); font-weight: 600; }
+
+/* typewriter cursor at the end of a reply that is still being written */
+@keyframes caret-blink { 0%, 49% { opacity: 1 } 50%, 100% { opacity: 0 } }
+.typing .prose-chat > :last-child:not(ul):not(ol):not(pre):not(table)::after,
+.typing .prose-chat > :is(ul, ol):last-child > li:last-child::after,
+.typing .prose-chat:empty::after {
+  content: ""; display: inline-block; width: 0.55em; height: 1.1em; margin-left: 2px; vertical-align: -0.18em;
+  border-radius: 2px; background: var(--color-info, #60a5fa); box-shadow: 0 0 8px var(--color-info, #60a5fa);
+  animation: caret-blink 1s steps(1) infinite;
+}
+.typing .prose-chat > :is(pre, table):last-child + *::after { content: none; }
+
+/* decode effect: glyphs ahead of the typewriter cursor */
+.scramble { color: var(--color-info, #60a5fa); opacity: 0.85; font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 0.92em; text-shadow: 0 0 6px color-mix(in oklab, var(--color-info, #60a5fa) 70%, transparent); }
+
+/* ===================================================================== open / close motion (polish v2)
+   Transform and opacity only (cheap in the embedded Qt window); timings and easings from the motion tokens;
+   all of it collapses to ~instant under prefers-reduced-motion (rule above). Unlayered, so it wins over the
+   stock tw-animate classes on the shadcn primitives. Base UI waits for these to finish before unmounting. */
+
+/* dialogs: rise and settle on a spring; leave quicker, sinking slightly */
+@keyframes zen-dialog-in { from { opacity: 0; transform: translateY(12px) scale(0.965) } to { opacity: 1; transform: none } }
+@keyframes zen-dialog-out { from { opacity: 1; transform: none } to { opacity: 0; transform: translateY(6px) scale(0.98) } }
+@keyframes zen-fade-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes zen-fade-out { from { opacity: 1 } to { opacity: 0 } }
+[data-slot="dialog-content"][data-open], [data-slot="sheet-content"][data-open] {
+  animation: zen-dialog-in var(--dur-slow) var(--ease-spring) backwards; }
+[data-slot="dialog-content"][data-closed], [data-slot="sheet-content"][data-closed] {
+  animation: zen-dialog-out 140ms var(--ease-out) both; }
+[data-slot="dialog-overlay"][data-open], [data-slot="sheet-overlay"][data-open] { animation: zen-fade-in var(--dur) var(--ease-out) backwards; }
+[data-slot="dialog-overlay"][data-closed], [data-slot="sheet-overlay"][data-closed] { animation: zen-fade-out 160ms var(--ease-out) both; }
+
+/* popovers, menus, selects, hover cards: grow out of the trigger (transform-origin from Base UI), nudged from
+   the side they open on; close as a quick fade-shrink back towards it */
+@keyframes zen-pop-in { from { opacity: 0; transform: translate(var(--pop-dx, 0), var(--pop-dy, -4px)) scale(0.94) }
+  to { opacity: 1; transform: none } }
+@keyframes zen-pop-out { from { opacity: 1; transform: none } to { opacity: 0; transform: scale(0.97) } }
+:is([data-slot="popover-content"], [data-slot="dropdown-menu-content"], [data-slot="dropdown-menu-sub-content"],
+  [data-slot="select-content"], [data-slot="hover-card-content"]) {
+  &[data-side="top"] { --pop-dx: 0; --pop-dy: 4px; }
+  &[data-side="bottom"] { --pop-dx: 0; --pop-dy: -4px; }
+  &[data-side="left"], &[data-side="inline-start"] { --pop-dx: 4px; --pop-dy: 0; }
+  &[data-side="right"], &[data-side="inline-end"] { --pop-dx: -4px; --pop-dy: 0; }
+  &[data-open] { animation: zen-pop-in 190ms var(--ease-spring) backwards; }
+  &[data-closed] { animation: zen-pop-out 110ms var(--ease-out) both; }
+}
+@keyframes zen-tip-in { from { opacity: 0; transform: scale(0.96) } to { opacity: 1; transform: none } }
+[data-slot="tooltip-content"][data-open] { animation: zen-tip-in var(--dur-fast) var(--ease-out) backwards; }
+[data-slot="tooltip-content"][data-closed] { animation: zen-fade-out 90ms var(--ease-out) both; }
+
+/* dock: a group (side panel column) or floating window that appears rises into place; the content of a tab
+   that is shown fades up. Closing is animated in lib/dock.ts (it plays zen-panel-out, then closes). */
+@keyframes zen-group-in { from { opacity: 0; transform: translateY(6px) scale(0.985) } to { opacity: 1; transform: none } }
+@keyframes zen-float-in { from { opacity: 0; transform: translateY(14px) scale(0.95) } to { opacity: 1; transform: none } }
+@keyframes zen-content-in { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
+.dockview-theme-app .dv-groupview { animation: zen-group-in var(--dur-slow) var(--ease-spring) backwards; }
+.dockview-theme-app .dv-resize-container { animation: zen-float-in var(--dur-slow) var(--ease-spring) backwards; }
+.dockview-theme-app .dv-resize-container .dv-groupview { animation: none; }
+.zen-panel-in { animation: zen-content-in var(--dur) var(--ease-out) backwards; }
+
+/* the sidebar slides; the main column glides with it (App.tsx drives the classes) */
+@keyframes zen-side-in { from { opacity: 0.4; transform: translateX(-100%) } to { opacity: 1; transform: none } }
+@keyframes zen-side-out { from { opacity: 1; transform: none } to { opacity: 0.2; transform: translateX(-100%) } }
+@keyframes zen-main-from-left { from { transform: translateX(calc(-1 * var(--side-w, 264px))) } to { transform: none } }
+@keyframes zen-main-from-right { from { transform: translateX(var(--side-w, 264px)) } to { transform: none } }
+.zen-side-in { animation: zen-side-in var(--dur-slow) var(--ease-spring) backwards; }
+.zen-side-out { animation: zen-side-out var(--dur) var(--ease-out) both; }
+.zen-main-from-left { animation: zen-main-from-left var(--dur-slow) var(--ease-spring) backwards; }
+.zen-main-from-right { animation: zen-main-from-right var(--dur) var(--ease-out) backwards; }
+
+/* Clip, the paperclip (components/Clip.tsx): a gentle bob, a blink, eyebrows that bounce while it talks, a springy
+   entrance and a bubble that pops from it. Transform/opacity only; reduced motion stops the loops (rule above). */
+@keyframes clip-bob { 0%, 100% { transform: translateY(0) rotate(-2deg) } 50% { transform: translateY(-3px) rotate(2deg) } }
+@keyframes clip-blink { 0%, 92%, 100% { transform: scaleY(1) } 95% { transform: scaleY(0.1) } }
+@keyframes clip-brows { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-2px) } }
+@keyframes clip-enter { from { opacity: 0; transform: translateY(18px) scale(0.7) rotate(-12deg) } 70% { transform: translateY(-3px) scale(1.04) rotate(3deg) }
+  to { opacity: 1; transform: none } }
+@keyframes clip-bubble { from { opacity: 0; transform: translateY(8px) scale(0.92) } to { opacity: 1; transform: none } }
+.clip-bob { animation: clip-bob 3.6s ease-in-out infinite; transform-origin: 50% 90%; }
+.clip-eyes { animation: clip-blink 4.8s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.clip-talking .clip-brows { animation: clip-brows 0.9s ease-in-out infinite; }
+.clip-enter { animation: clip-enter 520ms var(--ease-spring) backwards; }
+.clip-bubble { animation: clip-bubble var(--dur-slow) var(--ease-spring) backwards; transform-origin: 90% 100%; }
+
+/* narration: an assistant's running commentary inside a folded run (Transcript RunBlock): quiet, smaller text */
+.narration .prose-chat { font-size: var(--fs-ui); line-height: 1.55; color: var(--muted-foreground); }
+.narration .prose-chat strong { color: color-mix(in oklab, var(--foreground) 80%, transparent); }

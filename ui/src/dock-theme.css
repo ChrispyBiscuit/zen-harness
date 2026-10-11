@@ -1,0 +1,101 @@
+/* Generated from dockview's dark theme + app overrides. */
+.dockview-theme-app {
+  --dv-paneview-active-outline-color: dodgerblue;
+  --dv-tabs-and-actions-container-font-size: 13px;
+  --dv-tabs-and-actions-container-height: 35px;
+  --dv-drag-over-background-color: rgba(83, 89, 93, 0.5);
+  --dv-drag-over-border-color: transparent;
+  --dv-edge-dock-indicator-color: rgba(56, 139, 253, 0.9);
+  --dv-tabs-container-scrollbar-color: #888;
+  --dv-icon-hover-background-color: rgba(90, 93, 94, 0.31);
+  --dv-floating-box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.25);
+  --dv-floating-border: 1px solid rgba(255, 255, 255, 0.1);
+  --dv-overlay-z-index: 999;
+  --dv-tab-font-size: inherit;
+  --dv-border-radius: 0px;
+  --dv-tab-margin: 0;
+  --dv-sash-color: transparent;
+  --dv-active-sash-color: transparent;
+  --dv-active-sash-transition-duration: 0.1s;
+  --dv-active-sash-transition-delay: 0.5s;
+  --dv-spacing-padding: 0px;
+  --dv-tab-border-radius: 0px;
+  --dv-sash-border-radius: 0px;
+  --dv-dropdown-border-radius: 0px;
+  --dv-tab-close-icon-size: inherit;
+  --dv-floating-group-border: none;
+  --dv-drag-over-border: none;
+  --dv-floating-group-dragging-opacity: 0.5;
+  --dv-floating-titlebar-height: 22px;
+  --dv-floating-titlebar-background-color: var(
+      --dv-tabs-and-actions-container-background-color
+  );
+  --dv-floating-titlebar-border-bottom: var(--dv-floating-border);
+  --dv-tab-group-color-grey: #5f6368;
+  --dv-tab-group-color-blue: #1a73e8;
+  --dv-tab-group-color-red: #d93025;
+  --dv-tab-group-color-yellow: #f9ab00;
+  --dv-tab-group-color-green: #188038;
+  --dv-tab-group-color-pink: #d01884;
+  --dv-tab-group-color-purple: #a142f4;
+  --dv-tab-group-color-cyan: #007b83;
+  --dv-tab-group-color-orange: #e8710a;
+  --dv-tab-group-chip-padding: 4px 8px;
+  --dv-tab-group-chip-border-radius: 6px;
+  --dv-tab-group-chip-font-size: 11px;
+  --dv-tab-group-line-height: 2px;
+  --dv-tab-group-line-opacity: 0.6;
+  /* matched to the app's palette (index.css tokens) */
+  --dv-group-view-background-color: var(--background);
+  --dv-tabs-and-actions-container-background-color: var(--surface);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--background);
+  --dv-activegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--background);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-activegroup-visiblepanel-tab-color: var(--foreground);
+  --dv-activegroup-hiddenpanel-tab-color: var(--muted-foreground);
+  --dv-inactivegroup-visiblepanel-tab-color: color-mix(in oklch, var(--foreground) 75%, transparent);
+  --dv-inactivegroup-hiddenpanel-tab-color: color-mix(in oklch, var(--muted-foreground) 80%, transparent);
+  --dv-tab-divider-color: transparent;
+  --dv-separator-border: var(--border);
+  --dv-paneview-header-border-color: var(--border);
+  --dv-tabs-and-actions-container-font-size: 13px;
+  --dv-tabs-and-actions-container-height: 34px;
+  --dv-drag-over-background-color: color-mix(in oklch, var(--info) 18%, transparent);
+  --dv-drag-over-border-color: color-mix(in oklch, var(--info) 60%, transparent);
+  --dv-drag-over-border: 1px solid color-mix(in oklch, var(--info) 60%, transparent);
+  --dv-edge-dock-indicator-color: var(--info);
+  --dv-icon-hover-background-color: var(--muted);
+  --dv-floating-box-shadow: 0 16px 48px rgb(0 0 0 / 0.55), 0 2px 10px rgb(0 0 0 / 0.35);
+  --dv-floating-border: 1px solid var(--border);
+  --dv-floating-titlebar-background-color: var(--surface);
+  --dv-context-menu-background-color: var(--popover);
+  --dv-context-menu-color: var(--popover-foreground);
+  --dv-active-sash-color: color-mix(in oklch, var(--info) 70%, transparent);
+  --dv-sash-color: transparent;
+  --dv-border-radius: 12px;
+  --dv-tab-border-radius: 6px;
+  --dv-tab-margin: 0 2px;
+  --dv-scrollbar-background-color: oklch(1 0 0 / 14%);
+  --dv-tabs-container-scrollbar-color: oklch(1 0 0 / 14%);
+}
+
+.dockview-theme-app .dv-groupview { border-radius: var(--radius-panel); overflow: hidden; border: 1px solid var(--line-1); }
+.dockview-theme-app .dv-tab { font-family: var(--font-sans); padding: 0 10px; }
+.dockview-theme-app .dv-tab.dv-active-tab { font-weight: 500; }
+.dockview-theme-app .dv-tabs-and-actions-container { border-bottom: 1px solid var(--border); }
+.dockview-theme-app .dv-resize-container { border-radius: var(--radius-panel); }
+
+/* tray (edge group) tabs run vertically: pad along their length, keep the close button apart from the label,
+   and show it only on the active tab or on hover, so labels and X buttons never run into each other */
+.dockview-theme-app .dv-tabs-container-vertical .dv-tab { padding: 10px 0; margin: 2px 0; }
+.dockview-theme-app .dv-tabs-container-vertical .dv-default-tab { gap: 6px; }
+.dockview-theme-app .dv-tabs-container-vertical .dv-tab.dv-inactive-tab .dv-default-tab-action { visibility: hidden; }
+.dockview-theme-app .dv-tabs-container-vertical .dv-tab.dv-inactive-tab:hover .dv-default-tab-action,
+.dockview-theme-app .dv-tabs-container-vertical .dv-tab:focus-within .dv-default-tab-action { visibility: visible; }
+
+/* the right tray: its strip holds TrayBar's icons (top) and fold button (foot) instead of text tabs */
+.dockview-theme-app .dv-groupview-header-vertical > .dv-scrollable { display: none; }
+.dockview-theme-app .dv-groupview-header-vertical > .dv-pre-actions-container { width: 100%; }
+.dockview-theme-app .dv-groupview-header-vertical > .dv-right-actions-container { width: 100%; }

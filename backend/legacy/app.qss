@@ -1,0 +1,140 @@
+/* ============================================================
+   Local Web Search — app.qss  (tokens injected by theme.py)
+   Calm instrument-panel dark theme. All contrast → the transcript.
+   ============================================================ */
+
+/* ---------- base ---------- */
+QWidget { background: $bg_canvas; color: $text_body;
+          font-family: $font_ui; font-size: 14px; }
+QLabel  { color: $text_mid; font-size: 13px; }
+QToolTip { background: $bg_raised; color: $text_hi; border: 1px solid $border;
+           border-radius: $r_ctl; padding: 5px 8px; font-size: 12px; }
+
+/* ---------- sidebar ---------- */
+#sidebar { background: $bg_surface; border-right: 1px solid $border; }
+#newchat {
+    background: $accent_12; border: 1px solid $accent_30; border-radius: 8px;
+    color: $accent; font-size: 13px; font-weight: 600;
+    min-height: 34px; padding: 0 12px; text-align: left;
+}
+#newchat:hover  { background: $accent_18; }
+#newchat:pressed{ background: $accent_30; }
+
+#convlist { background: transparent; border: none; outline: none; margin-top: 6px; }
+/* row visuals (2-line rows, snippet, relative time, hover/selection rail) are
+   painted by ConversationDelegate — QSS only kills the default item chrome */
+#convlist::item { padding: 0; border: none; margin: 0; }
+#convlist::item:selected { background: transparent; }
+#convlist::item:hover:!selected { background: transparent; }
+
+/* runtime telemetry footer */
+#RuntimeFooter { background: $bg_surface; border-top: 1px solid $border; }
+#OllamaState { color: $text_mid; font-family: $font_mono; font-size: 11px; }
+#LoadNumbers { color: $text_dim; font-family: $font_mono; font-size: 10.5px; }
+#LoadBar { background: $bg_raised; border: none; border-radius: 2px;
+           max-height: 3px; min-height: 3px; }
+#LoadBar::chunk { background: $accent; border-radius: 2px; }
+
+/* ---------- header ---------- */
+#top   { background: $bg_canvas; border-bottom: 1px solid $border; }
+#title { color: $text_hi; font-size: 14px; font-weight: 600; }
+
+QComboBox {
+    background: $bg_elev; border: 1px solid $border; border-radius: $r_ctl_lg;
+    color: $text_body; font-family: $font_mono; font-size: 12px;
+    min-height: 30px; padding: 0 10px;
+}
+QComboBox:hover { border: 1px solid $border_hi; }
+QComboBox:on    { border: 1px solid $accent; }
+QComboBox::drop-down { border: none; width: 22px; }
+QComboBox::down-arrow { image: url($icon_dir/chevron-down.svg); width: 10px; height: 10px; }
+QComboBox QAbstractItemView {
+    background: $bg_raised; border: 1px solid $border; border-radius: $r_card;
+    padding: 4px; outline: none;
+    selection-background-color: $accent_18; selection-color: $text_hi;
+}
+
+#gear {
+    background: $bg_elev; border: 1px solid $border; border-radius: $r_ctl_lg;
+    color: $text_mid; font-size: 15px; min-height: 30px; padding: 0 9px;
+}
+#gear:hover   { border: 1px solid $border_hi; background: $bg_raised; color: $text_hi; }
+#gear:pressed { background: $border; }
+
+/* reasoning toggle checkbox */
+QCheckBox { color: $text_mid; font-size: 13px; spacing: 7px; }
+QCheckBox::indicator { width: 15px; height: 15px; border-radius: 4px;
+                       border: 1px solid $border_hi; background: $bg_elev; }
+QCheckBox::indicator:checked { background: $accent; border: 1px solid $accent; }
+
+/* ---------- transcript ---------- */
+#chat {
+    background: $bg_canvas; border: none; outline: none; padding: 8px 6px;
+    font-size: 15px;
+    selection-background-color: $accent_30; selection-color: $text_hi;
+}
+
+/* thin load/stream bar */
+#progress { background: $bg_raised; border: none; border-radius: 2px;
+            max-height: 3px; min-height: 3px; }
+#progress::chunk { background: $accent; border-radius: 2px; }
+
+/* quiet status/telemetry line */
+#status { color: $text_mid; font-family: $font_mono; font-size: 11.5px; }
+
+/* ---------- composer ---------- */
+#bottom { background: $bg_surface; border-top: 1px solid $border; }
+#input {
+    background: $bg_elev; border: 1px solid $border_hi; border-radius: $r_field;
+    color: $text_hi; font-size: 15px; padding: 8px 12px;
+    selection-background-color: $accent; selection-color: $bg_canvas;
+}
+#input:focus { border: 1px solid $accent; }
+#send {
+    background: $accent; border: none; border-radius: $r_ctl_lg;
+    color: $bg_canvas; font-size: 13px; font-weight: 600;
+    min-height: 40px; padding: 0 20px;
+}
+#send:hover     { background: $accent_hi; }
+#send:disabled  { background: $border; color: $text_dim; }
+#send[mode="stop"]       { background: $border_hi; color: $text_hi; }
+#send[mode="stop"]:hover { background: $border; }
+
+/* ---------- generic buttons: ghost by default (only Send is saturated) ---- */
+QPushButton {
+    background: transparent; border: 1px solid $border; border-radius: $r_ctl;
+    color: $text_mid; min-height: 30px; padding: 0 14px; font-size: 13px;
+    font-weight: 600;
+}
+QPushButton:hover    { border: 1px solid $border_hi; color: $text_hi; }
+QPushButton:disabled { color: $text_dim; border: 1px solid $border; }
+
+/* ---------- inputs / dialogs ---------- */
+QDialog { background: $bg_surface; }
+QLineEdit, QPlainTextEdit, QSpinBox, QDoubleSpinBox {
+    background: $bg_elev; border: 1px solid $border; border-radius: $r_ctl;
+    color: $text_hi; min-height: 30px; padding: 4px 9px; font-size: 13px;
+    selection-background-color: $accent; selection-color: $bg_canvas;
+}
+QLineEdit:focus, QPlainTextEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {
+    border: 1px solid $accent;
+}
+QSlider::groove:horizontal { background: $border; height: 3px; border-radius: 2px; }
+QSlider::sub-page:horizontal { background: $accent; height: 3px; border-radius: 2px; }
+QSlider::handle:horizontal { background: $text_hi; width: 12px; height: 12px;
+                             margin: -5px 0; border-radius: 6px; }
+
+QMenu { background: $bg_raised; color: $text_body; border: 1px solid $border;
+        border-radius: $r_card; padding: 4px; }
+QMenu::item { padding: 6px 12px; border-radius: $r_ctl; }
+QMenu::item:selected { background: $accent_18; color: $text_hi; }
+
+/* ---------- scrollbars ---------- */
+QScrollBar:vertical { background: transparent; width: 10px; margin: 4px 2px; }
+QScrollBar::handle:vertical { background: $border_hi; border-radius: 4px; min-height: 40px; }
+QScrollBar::handle:vertical:hover { background: $text_dim; }
+QScrollBar::add-line, QScrollBar::sub-line { height: 0; width: 0; }
+QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
+QScrollBar:horizontal { background: transparent; height: 10px; margin: 2px 4px; }
+QScrollBar::handle:horizontal { background: $border_hi; border-radius: 4px; min-width: 40px; }
+QScrollBar::handle:horizontal:hover { background: $text_dim; }

@@ -1,0 +1,20 @@
+{
+  "ui": {
+    "mode": "agent"
+  },
+  "agent": {
+    "backend": "llama",
+    "model": "",
+    "num_ctx": 32768,
+    "kv_cache": "auto",
+    "model_overrides": {},
+    "mcp_servers": []
+  },
+  "headless": {
+    "autostart": false,
+    "api_enabled": true,
+    "mcp_enabled": true,
+    "port": 8765,
+    "lan": false
+  }
+}
