@@ -115,5 +115,5 @@ queue. A desktop chat started while an API run is going still runs at once (as b
 
 `headless.py` (tray + service) · `harness_api.py` (REST, queue, policy, auth) · `harness_mcp.py` (MCP + stdio bridge)
 · `autostart.py` (Startup shortcut) · settings in `settings.json` → `headless` · log `headless_service.log`
-(rotated at 5 MB on start) · tests `tests/test_headless_api.py`, `tests/test_headless_tray.py` (stub engine, spare
+(rotated at 5 MB on start) · tests `tests/scripts/headless_api.py`, `tests/scripts/headless_tray.py` (stub engine, spare
 port, throwaway data dir — safe while the app runs).

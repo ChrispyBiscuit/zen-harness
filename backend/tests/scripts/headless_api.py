@@ -2,7 +2,7 @@
 policy, settings round-trip and the Startup shortcut.
 
 Boots the real backend in-process on a spare port with a throwaway data dir and a stub engine (no model, no GPU),
-so it is safe to run while the app is in use. Standalone: `venv\\Scripts\\python.exe tests/test_headless_api.py`.
+so it is safe to run while the app is in use. Standalone: `venv\\Scripts\\python.exe tests/scripts/headless_api.py`.
 """
 import json
 import os
@@ -15,7 +15,7 @@ import time
 import urllib.error
 import urllib.request
 
-HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HERE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # backend/
 sys.path.insert(0, HERE)
 TMP = tempfile.mkdtemp(prefix="zen_headless_")
 PORT = int(os.environ.get("ZH_TEST_PORT") or 8776)

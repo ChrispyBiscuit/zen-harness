@@ -1,0 +1,54 @@
+# Runtime dependencies of the live app (pinned to the versions it is developed and tested with).
+# Not included on purpose: torch / pix2tex (formula OCR, optional, 4+ GB), transformers & training libraries.
+
+# server, window, agent browser
+aiohttp==3.14.3
+PySide6==6.11.2
+psutil==7.2.2
+pywin32==312
+
+# model backends (Ollama is optional; imported at server start until refactor stage 2)
+ollama==0.6.2
+anthropic==1.13.0
+
+# web search and pages
+requests==2.34.2
+ddgs==9.15.0
+trafilatura==2.2.0
+lxml==6.1.1
+playwright==1.63.0
+
+# memory (embeddings), maths, data, code tools
+numpy==2.5.2
+fastembed==0.9.0
+onnxruntime==1.30.0
+sympy==1.13.1
+Pint==0.26.1
+pandas==3.0.5
+duckdb==1.5.6
+jedi==0.20.0
+Pygments==2.21.0
+networkx==3.6.1
+pillow==12.3.0
+scipy==1.18.1
+
+# documents
+python-docx==1.2.0
+python-pptx==1.0.2
+openpyxl==3.1.5
+xlrd==2.0.2
+pypdf==6.19.0
+
+# python tool kernel
+jupyter_client==8.10.0
+ipykernel==7.4.0
+matplotlib==3.11.2
+
+# offline encyclopedia (optional data download)
+libzim==3.13.1
+
+# speech (models downloaded when first enabled)
+faster-whisper==1.2.1
+ctranslate2==4.8.2
+kokoro-onnx==0.6.1
+espeakng-loader==0.2.4

@@ -1,6 +1,6 @@
 """Tray menu of the headless service (headless.Service): status line, Pause/Resume, Copy token, Open logs,
 Open UI and Quit, driven through the real QActions with a stub engine on a spare port and a throwaway data dir.
-Shows a tray icon for a few seconds. Standalone: `venv\\Scripts\\python.exe tests/test_headless_tray.py`.
+Shows a tray icon for a few seconds. Standalone: `venv\\Scripts\\python.exe tests/scripts/headless_tray.py`.
 """
 import json
 import os
@@ -12,7 +12,7 @@ import time
 import urllib.request
 from unittest import mock
 
-HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HERE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # backend/
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "tests"))
 TMP = tempfile.mkdtemp(prefix="zen_tray_")
