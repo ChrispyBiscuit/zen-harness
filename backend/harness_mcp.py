@@ -203,10 +203,9 @@ def _healthy(port):
 
 def start_service(port, wait=90):
     """Start the tray service (headless.py) detached, and wait until it answers."""
-    exe = sys.executable
-    w = os.path.join(os.path.dirname(exe), "pythonw.exe")
+    import paths
     flags = 0x00000008 | 0x00000200 | 0x08000000            # detached, own process group, no window
-    subprocess.Popen([w if os.path.exists(w) else exe, os.path.join(HERE, "headless.py")], cwd=HERE,
+    subprocess.Popen(paths.role_command("headless"), cwd=paths.work_dir(),
                      creationflags=flags, close_fds=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                      stderr=subprocess.DEVNULL)
     end = time.time() + wait

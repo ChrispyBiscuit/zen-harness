@@ -202,12 +202,13 @@ def _undefined_name_checker():
     if shutil.which("ruff"):
         return [shutil.which("ruff"), "check", "--isolated", "--no-cache", "--select", "E9,F63,F7,F82",
                 "--output-format", "concise"]
-    for py in [p for p in (shutil.which("python"), sys.executable) if p]:
+    import paths
+    for py in [paths.python_cmd()]:
         for mod, args in (("ruff", ["check", "--isolated", "--no-cache", "--select", "E9,F63,F7,F82",
                                     "--output-format", "concise"]), ("pyflakes", [])):
-            rc, out = _run_quiet([py, "-m", mod, "--version"], timeout=10)
+            rc, out = _run_quiet([*py, "-m", mod, "--version"], timeout=10)
             if rc == 0:
-                return [py, "-m", mod] + args
+                return [*py, "-m", mod] + args
     return None
 
 
@@ -447,7 +448,8 @@ def run_tests(a, c, resolve, ToolError):
     folder = target if os.path.isdir(target) else os.path.dirname(target)
     fw = str(a.get("framework") or "auto").lower()
     timeout = max(5, min(int(a.get("timeout") or 180), 900))
-    py = shutil.which("python") or sys.executable
+    import paths
+    py = paths.python_cmd()
     pkg = os.path.join(folder, "package.json")
     if fw == "auto":
         if target.lower().endswith((".js", ".mjs", ".cjs", ".ts")):
@@ -457,7 +459,7 @@ def run_tests(a, c, resolve, ToolError):
         else:
             fw = "pytest"
     if fw == "pytest":
-        argv = [py, "-m", "pytest", target, "-q", "--tb=short", "--color=no", "-p", "no:cacheprovider",
+        argv = [*py, "-m", "pytest", target, "-q", "--tb=short", "--color=no", "-p", "no:cacheprovider",
                 "--maxfail", str(int(a.get("max_failures") or 10))]
         if a.get("filter"):
             argv += ["-k", str(a["filter"])]
@@ -602,12 +604,13 @@ def debug_run(a, c, resolve, ToolError):
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(_DEBUG_WRAPPER.replace("__PARAMS__", params))
     timeout = max(5, min(int(a.get("timeout") or 120), 600))
-    py = shutil.which("python") or sys.executable
+    import paths
+    py = paths.python_cmd()
     c.display = {"type": "terminal", "shell": "debug", "cwd": folder,
                  "command": f"debug_run {os.path.basename(script)}" + (f"  probe {a['probe']}" if probe_file else ""),
                  "output": "", "exit": None}
     try:
-        rc, text, secs, why = _stream([py, "-X", "faulthandler", wrapper], folder, timeout, c)
+        rc, text, secs, why = _stream([*py, "-X", "faulthandler", wrapper], folder, timeout, c)
     finally:
         try:
             os.remove(wrapper)

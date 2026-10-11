@@ -32,9 +32,11 @@ def is_registered():
 
 def register():
     """Create (or refresh) the shortcut: pythonw.exe headless.py, started in this folder."""
-    icon = os.path.join(HERE, "assets", "zen_harness.ico")
-    vals = {"LNK": shortcut_path(), "TGT": pythonw(), "ARGS": f'"{os.path.join(HERE, "headless.py")}"',
-            "WD": HERE, "ICO": icon if os.path.exists(icon) else ""}
+    import paths
+    icon = paths.resource("assets", "zen_harness.ico")
+    cmd = paths.role_command("headless")
+    vals = {"LNK": shortcut_path(), "TGT": cmd[0], "ARGS": " ".join(f'"{a}"' for a in cmd[1:]),
+            "WD": paths.work_dir(), "ICO": icon if os.path.exists(icon) else ""}
     # values go through the environment, never into the script text (no quoting/injection issues)
     script = ("$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:ZH_LNK);"
               "$s.TargetPath=$env:ZH_TGT;$s.Arguments=$env:ZH_ARGS;$s.WorkingDirectory=$env:ZH_WD;"
@@ -58,5 +60,6 @@ def unregister():
 
 def stdio_command():
     """How an MCP client starts the stdio bridge."""
-    return {"command": sys.executable.replace("pythonw.exe", "python.exe"),
-            "args": [os.path.join(HERE, "harness_mcp.py"), "--stdio"]}
+    import paths
+    cmd = paths.role_command("mcp-stdio")
+    return {"command": cmd[0], "args": cmd[1:]}

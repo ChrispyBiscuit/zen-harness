@@ -189,6 +189,11 @@ def binary_entries(llama, venv):
     out.append({"id": "bin:llama.cpp", "name": "llama.cpp / ggml (llama-server and its libraries)", "version": "",
                 "kind": "binary", "license": "MIT", "url": "https://github.com/ggml-org/llama.cpp",
                 "text": write_text("binary/llama.cpp.txt", lic or MIT_GGML)})
+    omp = os.path.join(llama or "", "LICENSE-LLVM-OpenMP")
+    if llama and os.path.isfile(omp):
+        out.append({"id": "bin:libomp", "name": "LLVM OpenMP runtime (libomp.dll, used by llama.cpp)", "version": "",
+                    "kind": "binary", "license": "Apache-2.0 WITH LLVM-exception", "url": "https://openmp.llvm.org/",
+                    "text": write_text("binary/libomp.txt", open(omp, encoding="utf-8", errors="replace").read())})
     out.append({"id": "bin:cuda", "name": "NVIDIA CUDA runtime (cudart, cuBLAS)", "version": "12", "kind": "binary",
                 "license": "NVIDIA CUDA Toolkit EULA (redistributable files)",
                 "url": "https://docs.nvidia.com/cuda/eula/index.html", "text": write_text("binary/cuda.txt", CUDA_NOTE)})

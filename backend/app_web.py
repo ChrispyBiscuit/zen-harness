@@ -71,7 +71,8 @@ def start_backend():
     import subprocess
     import time
     flags = 0x00000008 | 0x00000200 | 0x08000000          # detached, own process group, no window
-    cmd = [sys.executable, os.path.abspath(__file__), "--server"]
+    import paths
+    cmd = paths.role_command("server")
     try:
         subprocess.Popen(cmd, cwd=HERE, creationflags=flags | 0x01000000)   # + break away from our job, if any
     except OSError:

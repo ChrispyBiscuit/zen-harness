@@ -148,8 +148,8 @@ class Service:
 
     # ---- menu actions
     def open_ui(self):
-        exe = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
-        subprocess.Popen([exe if os.path.exists(exe) else sys.executable, os.path.join(HERE, "app_web.py")], cwd=HERE,
+        import paths
+        subprocess.Popen(paths.role_command("window"), cwd=paths.work_dir(),
                          env={**os.environ, "LWS_PORT": str(self.port)}, creationflags=0x00000008 | 0x00000200)
 
     def toggle_pause(self):

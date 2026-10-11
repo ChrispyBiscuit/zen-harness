@@ -2708,7 +2708,7 @@ def t_trace_call(a, c):
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(TRACE_SCRIPT)
     try:
-        r = subprocess.run([_python_exe(), script, path, expr, str(int(a.get("max_lines") or 300))],
+        r = subprocess.run([*_python_exe(), script, path, expr, str(int(a.get("max_lines") or 300))],
                            capture_output=True, text=True, timeout=int(a.get("timeout") or 60), encoding="utf-8",
                            errors="replace", creationflags=0x08000000,
                            env=dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8"))
@@ -2724,8 +2724,8 @@ def t_trace_call(a, c):
 
 
 def _python_exe():
-    import shutil as _sh
-    return _sh.which("python") or sys.executable
+    import paths
+    return paths.python_cmd()          # a command prefix (list): system Python or the bundled one
 
 
 # ----------------------------------------------------------------------------- background processes

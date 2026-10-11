@@ -66,9 +66,65 @@ def logs_dir():
     return d
 
 
-def program_command(*args):
-    """Command line that runs this app in another role (server, headless, MCP stdio bridge): the frozen exe takes
-    a mode flag; a checkout runs the matching script with this Python."""
+ROLES = {                       # role -> (script in a checkout, its arguments, flag for the frozen exe, console?)
+    "window": ("app_web.py", [], [], False),
+    "server": ("app_web.py", ["--server"], ["--server"], False),
+    "headless": ("headless.py", [], ["--headless"], False),
+    "mcp-stdio": ("harness_mcp.py", ["--stdio"], ["--mcp-stdio"], True),
+}
+GUI_EXE, CLI_EXE = "ZenHarness.exe", "zenharness-cli.exe"
+
+
+def role_command(role):
+    """Command line that starts this app in another role. Installed: ZenHarness.exe (no console) or
+    zenharness-cli.exe (console, for the MCP stdio bridge) with a mode flag; a checkout: the script with this
+    Python (pythonw for windowless roles)."""
+    script, args, flag, console = ROLES[role]
     if FROZEN:
-        return [sys.executable, *args]
-    return [sys.executable, *args]
+        return [os.path.join(EXE_DIR, CLI_EXE if console else GUI_EXE), *flag]
+    exe = sys.executable
+    pyw = os.path.join(os.path.dirname(exe), "pythonw.exe")
+    py = os.path.join(os.path.dirname(exe), "python.exe")
+    exe = (py if os.path.exists(py) else exe) if console else (pyw if os.path.exists(pyw) else exe)
+    return [exe, os.path.join(APP_DIR, script), *args]
+
+
+def system_python():
+    """A real Python on PATH (not the Microsoft Store alias stub), or ''."""
+    import shutil
+    p = shutil.which("python") or ""
+    return "" if (not p or "windowsapps" in p.lower()) else p
+
+
+def python_cmd():
+    """How to run a Python script: the user's Python if installed, else the app's bundled interpreter
+    (installed builds), else this interpreter (checkout)."""
+    p = system_python()
+    if p:
+        return [p]
+    if FROZEN:
+        return [os.path.join(EXE_DIR, CLI_EXE), "--python"]
+    return [sys.executable]
+
+
+def shim_dir():
+    """A folder with python.cmd that runs the bundled interpreter — put on PATH for commands the agent runs when
+    the PC has no Python, so `python script.py` works on a fresh machine (pip does not)."""
+    if not FROZEN or system_python():
+        return ""
+    d = data("shims")
+    os.makedirs(d, exist_ok=True)
+    cmd = os.path.join(d, "python.cmd")
+    body = f'@"{os.path.join(EXE_DIR, CLI_EXE)}" --python %*\r\n'
+    try:
+        if not os.path.exists(cmd) or open(cmd, encoding="utf-8").read() != body:
+            with open(cmd, "w", encoding="utf-8", newline="") as f:
+                f.write(body)
+    except OSError:
+        return ""
+    return d
+
+
+def work_dir():
+    """Working folder for processes the app starts (never the read-only install folder for writes)."""
+    return EXE_DIR if FROZEN else APP_DIR

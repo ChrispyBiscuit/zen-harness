@@ -58,6 +58,9 @@ def env(base=None):
     e["PYTHONIOENCODING"] = "utf-8"
     e["ZEN_DUMP_DIR"] = DUMP_DIR
     e["PYTHONPATH"] = HOOK_DIR + (os.pathsep + e["PYTHONPATH"] if e.get("PYTHONPATH") else "")
+    shim = paths.shim_dir()             # installed app on a PC without Python: `python x.py` uses the bundled one
+    if shim:
+        e["PATH"] = shim + os.pathsep + e.get("PATH", "")
     return e
 
 
