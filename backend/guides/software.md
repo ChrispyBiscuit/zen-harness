@@ -23,10 +23,15 @@ per feature (each with its tests), last milestone: run every acceptance test and
   script per part; Python: a package or a few modules. Put the planned file layout in the PRD/design.
 - Separate **logic** from **drawing / input / IO**. An update step changes state and a separate draw/render step only
   displays it; a web app's handlers call plain functions. Then tests can drive the logic without a window.
+- **Unsure how a library behaves? Probe it.** A few lines in python_sandbox (or debug_run to see real values)
+  answer "does BaseHTTPRequestHandler log to stderr?" in seconds; reasoning it out from memory takes minutes and is
+  often wrong.
 - **Parts that talk to each other share a written contract.** In the design, list every endpoint or command:
   method, path, inputs, outputs, error codes — plus ports, environment variables and file locations. Client,
   server and tests all follow that table; most "it doesn't work" bugs between layers (POST vs GET, the wrong
-  port, a query string the router doesn't expect, a dropped base URL) are departures from it.
+  port, a query string the router doesn't expect, a dropped base URL) are departures from it. Put it under a
+  "Contract" heading in DESIGN.md (or in CONTRACT.md), including the command-line usage: the app pins it into every
+  step, so it stays in view however long the work gets — update it when an interface changes.
 - **Build a thin end-to-end slice first:** one real request through every layer (client → server → storage and
   back), tested, before any other feature. Then add features one at a time and re-run the tests after each.
 - **Comment the why.** Each file opens with a docstring or header comment saying what it is responsible for;
@@ -39,7 +44,11 @@ per feature (each with its tests), last milestone: run every acceptance test and
 ## 3. Test behaviour, not "it ran"
 A program that starts without a traceback can still be completely wrong. Write `tests/test_behaviour.py` (plain
 asserts are fine) with one test per acceptance criterion (functions named `test_*`), run it with **run_tests** (pytest: it never
-hides a traceback), and fix until it passes. If you write your own
+hides a traceback), and fix until it passes. **Write the tests a group at a time** — one feature or acceptance
+criterion per write (`append=true` for the next group), running them after each: a 500-line test file written in
+one go comes back with duplicate functions and syntax errors, and its failures are hard to tell apart. Tests call the
+program exactly as the contract says (the same command-line arguments, endpoints and file names) — check the
+contract, don't recall it. If you write your own
 runner, print the full traceback for every error (`traceback.print_exc()`), not just the message: an error without
 its file and line sends you looking in the wrong file.
 

@@ -1266,6 +1266,36 @@ def auto_size_uses_a_bigger_gpu_and_leaves_the_tuned_one_alone():
 
 
 @test
+def contract_is_pinned_from_every_contract_section_and_while_reading():
+    e = engine()
+    d = tmpdir("proj")
+    os.makedirs(os.path.join(d, "docs"))
+    with open(os.path.join(d, "docs", "DESIGN.md"), "w", encoding="utf-8") as f:
+        f.write("# Design\nprose\n## API contract\n| GET | /api/ping |\n## Command-line usage\n```\n"
+                "python client.py --host H add --person P\n```\n## Notes\n- not a contract\n")
+    code = os.path.join(d, "server.py"), os.path.join(d, "client.py")
+    for p in code:
+        with open(p, "w", encoding="utf-8") as f:
+            f.write("def main():\n    pass\n")
+    c = e._contract_lines(d)
+    assert "/api/ping" in c and "client.py --host H add" in c and "not a contract" not in c, c
+    for p in code:                                         # only read, nothing edited yet: the state still shows
+        at.note_seen(e.ctx, p)
+    ws = e._work_state()
+    assert "WORK STATE" in ws and "client.py --host H add" in ws, ws[:400]
+
+
+@test
+def a_long_single_code_write_gets_a_note():
+    d = tmpdir("big")
+    reg = at.Registry(at.Ctx([d]), None, None)
+    out, _ = reg.call("write_file", {"path": os.path.join(d, "big.py"), "content": "x = 1\n" * 300})
+    assert "write the next big file in parts" in out, out
+    out, _ = reg.call("write_file", {"path": os.path.join(d, "small.py"), "content": "x = 1\n" * 30})
+    assert "in parts" not in out, out
+
+
+@test
 def prd_check_finds_the_project_prd_above_tests():
     e = engine()
     d = tmpdir("proj")

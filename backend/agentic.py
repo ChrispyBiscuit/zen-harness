@@ -162,7 +162,9 @@ error message, or how others solve this problem (official docs, known issues, a 
 something fundamentally different, or explain what is blocking you.
 - Before editing a file, read_file the part you will change. Use edit_file for targeted changes \
 (copy 'old' exactly, without the line-number prefix) and write_file for new files or full rewrites. \
-Comment the code you write: a docstring for each module, class and non-trivial function, and a short comment \
+When you are unsure how a library, an API or your own code behaves, check it instead of reasoning it out: run a \
+few-line probe (python_sandbox, or debug_run to see real values) — seconds, where recalling it from memory takes \
+minutes and may be wrong. Comment the code you write: a docstring for each module, class and non-trivial function, and a short comment \
 wherever the reason is not obvious from the code (a workaround, a platform quirk, an invariant, why this approach) \
 — not comments that restate what a line does. When editing, keep the file's existing style. After changing code, run it or its tests (run_tests, or powershell) when that is practical. Every write is \
 code-checked automatically (syntax, undefined names): fix what the check reports before running. When something \
@@ -2946,13 +2948,57 @@ class AgentEngine:
         out = " ".join(out.split())
         return out if len(out) <= cap else out[:cap - 1] + "…"
 
+    _CONTRACT_RX = re.compile(r"^#+[^\n]*(contract|interface|api|endpoint|command|cli|usage|protocol|schema|"
+                              r"data format|file layout|storage)[^\n]*\n(.*?)(?=^#+ |\Z)", re.I | re.M | re.S)
+
+    def _contract_lines(self, root, limit=40):
+        """The project's written contract, pinned in the work state: CONTRACT.md whole, else every contract-like
+        section of DESIGN.md (endpoints AND command-line usage, files, data formats) — tables, bullets and code lines."""
+        dirs = []
+        d = root
+        for _ in range(3):                            # the code may sit below the project folder (src/, tests/)
+            dirs.append(d)
+            d = os.path.dirname(d)
+        for base in dirs:
+            for rel in ("CONTRACT.md", os.path.join("docs", "CONTRACT.md"), "DESIGN.md", os.path.join("docs", "DESIGN.md")):
+                cand = os.path.join(base, rel)
+                if not os.path.isfile(cand):
+                    continue
+                try:
+                    txt = open(cand, encoding="utf-8", errors="replace").read()
+                except OSError:
+                    continue
+                if os.path.basename(cand).upper() == "CONTRACT.MD":
+                    body = [ln for ln in txt.splitlines() if ln.strip()]
+                else:
+                    body = []
+                    for m in self._CONTRACT_RX.finditer(txt):
+                        fence = False
+                        for ln in m.group(2).splitlines():
+                            st = ln.strip()
+                            if st.startswith("```"):
+                                fence = not fence
+                                continue
+                            if fence or st.startswith(("|", "-", "*", "`")):
+                                body.append(ln.rstrip())
+                if body:
+                    more = f"\n… ({len(body) - limit} more lines in {rel})" if len(body) > limit else ""
+                    return f"Contract ({os.path.relpath(cand, root)}):\n" + "\n".join(body[:limit]) + more
+        return ""
+
     def _work_state(self):
         """The current state of a build, read from the real files, tests and processes on every step — so a small
         model reads it instead of reconstructing it from a long history. '' when nothing is being built."""
-        if self._role == "exec" or not (self._built_software() or self._edited_code() or getattr(self, "_project", False)):
+        if self._role == "exec":
+            return ""
+        # code files read this turn count too: a "fix this project" task starts by reading, and the pinned contract
+        # matters most then (tests that called the project's own client with the wrong arguments)
+        read_code = [p for p in (getattr(self.ctx, "_known_files", None) or {})
+                     if self._CODE_EXT_RX.search(p) and os.path.isfile(p)]
+        if not (self._built_software() or self._edited_code() or getattr(self, "_project", False) or len(read_code) >= 2):
             return ""
         h = at._hist(self.ctx)
-        files = sorted({os.path.abspath(p) for p in list((self.ctx.changed or {})) + list(h.get("orig") or {})
+        files = sorted({os.path.abspath(p) for p in list((self.ctx.changed or {})) + list(h.get("orig") or {}) + read_code
                         if os.path.isfile(p) and self._CODE_EXT_RX.search(p)})[:10]
         if not files:
             return ""
@@ -2973,19 +3019,9 @@ class AgentEngine:
             out.append("Files:\n" + "\n".join(rows))
         except Exception:
             pass
-        for cand in (os.path.join(root, "DESIGN.md"), os.path.join(root, "docs", "DESIGN.md")):
-            if os.path.isfile(cand):
-                try:
-                    txt = open(cand, encoding="utf-8", errors="replace").read()
-                    m = re.search(r"^#+[^\n]*(contract|interface|api|endpoint|command)[^\n]*\n(.*?)(?=^#+ |\Z)", txt,
-                                  re.I | re.M | re.S)
-                    if m:
-                        body = [ln for ln in m.group(2).splitlines() if ln.strip().startswith(("|", "-", "*", "`"))][:22]
-                        if body:
-                            out.append(f"Contract ({os.path.relpath(cand, root)}):\n" + "\n".join(body))
-                except OSError:
-                    pass
-                break
+        contract = self._contract_lines(root)
+        if contract:
+            out.append(contract)
         lt = h.get("last_tests")
         if lt:
             line = f"Tests: last run {lt['t']} — {lt['passed']} passed, {lt['failed']} failed ({lt['cmd']})"

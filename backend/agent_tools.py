@@ -444,8 +444,14 @@ def t_write_file(a, c):
         prd_note = ("\nNote: this PRD has no acceptance criteria. Add a short 'Acceptance criteria' list of testable "
                     "statements (each feature, invalid input, who can see or change what) — the plan's last milestone "
                     "and the tests check each one.")
+    big_note = ""
+    if not a.get("append") and len(new.splitlines()) > 250 and re.search(r"\.(py|js|ts|tsx|jsx|go|rs|java|cs|cpp|c)$", p, re.I):
+        # long single writes are where defects slip in (a 469-line test file came with a duplicate method and a
+        # syntax error); the next file of this size is better written and checked in parts
+        big_note = ("\nNote: that was a long file in one write. Run it or its tests now, and write the next big file in "
+                    "parts (one feature or test group, then append=true), checking each part.")
     return (f"{verb} {p} ({len(new.splitlines())} lines, +{add} -{rem})" + _note_change(c, p, old, new, existed)
-            + prd_note)
+            + prd_note + big_note)
 
 
 def _loose_match(data, old):
