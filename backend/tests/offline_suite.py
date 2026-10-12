@@ -301,12 +301,12 @@ def step_budget_levels_and_caps():
     assert e._step_budget(True, 2) == agentic.EFFORT_THINK["low"]
     e._fail_streak = 1
     assert e._effective_effort() == "medium"          # one level up from the first failure
-    assert e._step_budget(True, 2) == agentic.EFFORT_THINK["high"]     # debugging: at least the high budget
+    assert e._step_budget(True, 2) == agentic.DEBUG_THINK     # debugging: more room, but bounded (bonsai8: 2.8 min/edit at 3072)
     e._fail_streak = 0
     e._watch_progress("run_tests", {}, True, "== 4 failed, 6 passed in 1.2s ==")
     assert e._debugging and e._fail_streak == 0      # failing tests are not a failed call, but they are debugging
     e._watch_progress("read_file", {}, True, "1| import os")
-    assert e._debugging and e._wants_thinking(True, 5) and e._step_budget(True, 5) == agentic.EFFORT_THINK["high"]
+    assert e._debugging and e._wants_thinking(True, 5) and e._step_budget(True, 5) == agentic.DEBUG_THINK
     e._watch_progress("run_tests", {}, True, "== 10 passed in 1.0s ==")
     assert not e._debugging and e._step_budget(True, 2) == agentic.EFFORT_THINK["low"]
     e.cfg["effort"] = "low"
@@ -1593,6 +1593,128 @@ def masking_waits_until_a_batch_frees_enough():
         call(i, f"C:/p/g{i}.py", "w" * 300)
     view = e._masked_view(msgs)
     assert any(m.get("content") != o.get("content") for m, o in zip(view, msgs)), "a worthwhile batch applies"
+
+
+@test
+def green_suite_is_the_evidence_in_the_work_state():
+    d = tmpdir("ver")
+    e = engine(d)
+    f = os.path.join(d, "app.py")
+    open(f, "w").write("def main():\n    return 1\n")
+    e.ctx.changed[f] = "created"
+    e._project = True
+    h = at._hist(e.ctx)
+    h["last_tests"] = {"passed": 21, "failed": 0, "t": "23:48:47", "cmd": "tests", "failing": []}
+    h["green"], h["green_t"], h["green_edits"] = {}, "23:48:47", 0
+    ws = e._work_state()
+    assert "VERIFIED" in ws and "No new verification" in ws, ws
+    h["green_edits"] = 2                                  # code changed since: run them again, no claim
+    assert "VERIFIED" not in e._work_state()
+
+
+@test
+def build_profile_trims_the_fixed_prompt_start():
+    e = engine(tool_profiles=True)
+    assert e._BUILD_REQ_RX.search("I want you to build an expense tracker app for my roommates")
+    assert not e._BUILD_REQ_RX.search("what's the weather in Austin")
+    full = e.system_prompt()
+    core = e._core_names()
+    e._build_profile = True
+    built = e.system_prompt()
+    assert "Critical facts:" in full and "Critical facts:" not in built and "Claims about your own work" in built
+    assert len(built) < len(full)
+    assert not (e._core_names() & e.BUILD_SKIP) and (core & e.BUILD_SKIP), "build skips research-only tools"
+    assert {"read_file", "write_file", "run_tests", "powershell"} <= e._core_names()
+
+
+@test
+def masking_condenses_old_file_copies_and_old_narration():
+    e = engine()
+    msgs = [{"role": "system", "content": "s" * 120000}]
+    big = "x = 1\n" * 2000                                         # a 12K-char file written twice
+    talk = "I will now carefully explain everything I am about to do in great detail. " * 8
+
+    def step(i, name, args, result="ok", say=""):
+        msgs.append({"role": "assistant", "content": say, "tool_calls": [tc(name, args, f"c{i}")]})
+        msgs.append({"role": "tool", "tool_call_id": f"c{i}", "content": result})
+
+    step(0, "write_file", {"path": "C:/p/app.py", "content": big}, say=talk)
+    step(1, "write_file", {"path": "C:/p/app.py", "content": big + "y = 2\n"}, say=talk)
+    for i in range(2, 30):
+        step(i, "list_dir", {"path": f"C:/p/d{i}"}, "z" * 60, say=talk)
+    view = e._masked_view(msgs)
+    first_call = view[1]["tool_calls"][0]["function"]["arguments"]
+    second_call = view[3]["tool_calls"][0]["function"]["arguments"]
+    assert "content_omitted" in first_call and "content" in json.loads(second_call), "older copy condensed, newer kept"
+    assert "older narration condensed" in view[1]["content"], view[1]["content"][:120]
+    assert view[-2]["content"] == talk, "the latest narration stays whole"
+    assert e._apply_mask(msgs) == view, "the summary request sends the same view"
+
+
+@test
+def fact_checks_see_what_compaction_archived():
+    import history_archive as ha
+    e = engine()
+    ha.add(e.ctx.conv_id, "tool result", "run_tests", "tests: PASSED — 21 passed (2.6s)")
+    e.history = [{"role": "user", "content": "build it"}]
+    ev = e._evidence_history()
+    assert any("21 passed" in str(m.get("content")) for m in ev if m.get("role") == "tool")
+
+
+@test
+def project_mode_needs_only_prd_and_design():
+    d = tmpdir("pm")
+    e = engine(d)
+    e._project = True
+    os.makedirs(os.path.join(d, "docs"))
+    code = os.path.join(d, "app.py")
+    e._project_docs = lambda p: os.path.join(d, "docs")
+    gate = getattr(e, "_project_gate", None) or getattr(e, "_project_code_gate", None)
+    for f in ("PRD.md", "DESIGN.md"):
+        open(os.path.join(d, "docs", f), "w").write("# x\n")
+    e.ctx.changed[code] = "created"
+    assert e._project_unfinished() == [], "no INDEX/TASKS demanded at the end"
+    if gate:
+        assert gate("write_file", {"path": code, "content": "x=1"}) == ""
+
+
+@test
+def check_script_beside_a_green_suite_gets_a_note():
+    d = tmpdir("smk")
+    c = at.Ctx([d])
+    at._hist(c)["last_tests"] = {"passed": 21, "failed": 0, "t": "x", "failing": []}
+    out = at.t_write_file({"path": os.path.join(d, "smoke_test.py"), "content": "print(1)\n"}, c)
+    assert "Make a new check a test in that suite" in out, out
+    out = at.t_write_file({"path": os.path.join(d, "test_more.py"), "content": "def test_a():\n    pass\n"}, c)
+    assert "Make a new check" not in out, "a proper test file is the suite"
+
+
+@test
+def green_suite_ticks_a_tests_checklist_item():
+    d = tmpdir("tick")
+    c = at.Ctx([d])
+    c.conv_id = "audit-tick"
+    at.t_update_tracker({"new": True, "goal": "g", "milestones": [{"title": "Verify", "subtasks": ["run_tests passes",
+                                                                                                  "README"]}]}, c)
+    note = at._tick_on_green(c, 21, 0)
+    assert "marked done" in note and at.tracker_current(c.tracker)[1].startswith("README"), note
+    assert at._tick_on_green(c, 20, 1) == ""
+
+
+@test
+def read_file_one_symbol():
+    d = tmpdir("sym")
+    p = os.path.join(d, "m.py")
+    open(p, "w").write("import os\n\n\nclass Ledger:\n    def load(self):\n        return 1\n\n    @property\n"
+                       "    def size(self):\n        return 2\n\n\ndef main():\n    pass\n")
+    c = at.Ctx([d])
+    out = at.t_read_file({"path": p, "symbol": "Ledger.size"}, c)
+    assert "def size" in out and "@property" in out and "def load" not in out and "def main" not in out, out
+    try:
+        at.t_read_file({"path": p, "symbol": "nope"}, c)
+        raise AssertionError("an unknown symbol must name what exists")
+    except at.ToolError as ex:
+        assert "Ledger.load" in str(ex)
 
 
 def main():

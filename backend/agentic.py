@@ -101,7 +101,7 @@ request gets a short checklist (one milestone is fine).
 give it a design (the decisions the result depends on: the hard parts and how you will handle each; for a fix, \
 the possible causes and the evidence that tells them apart) and give each milestone done_when: the observable \
 evidence that it works (a test passes, output or a screenshot shows X). "Read the files" or "check for errors" \
-is a step, not evidence. A milestone is done only when you have seen its evidence. When a result contradicts \
+is a step, not evidence. A milestone is done only when you have seen its evidence; pick evidence your own tests can show — never a done_when that needs a feature nobody asked for, and one layer of checks (the test suite), not extra scripts on top. When a result contradicts \
 the design (a cause ruled out, an approach that cannot work), revise the design and milestones before continuing.
 - Building software (an app, game, tool, website, program or multi-file script): milestone 1 is a PRD — write \
 PRD.md in the project folder (goal, who uses it, core features in priority order, acceptance criteria written as \
@@ -1442,6 +1442,7 @@ EFFORT_PLAN = {"none": 0, "brief": 1024, "full": 3072, "project": 4096}
 # thinking tokens per step: less thinking, more actions — a local model spent 10-minute steps reasoning from
 # memory where one tool call would have answered (8192 at high, 2048 at medium before)
 EFFORT_THINK = {"none": 0, "low": 256, "medium": 1024, "high": 3072}
+DEBUG_THINK = 2048                # thinking budget while debugging (the agent's own high effort keeps 3072)
 LEAN_THINK = 384                 # the first pass: enough to decide, quick for simple questions
 THINK_BUDGET_MESSAGE = "\n\nI have thought about this enough. Time to act on it now.\n"
 
@@ -2431,11 +2432,22 @@ class AgentEngine:
         self.turn["parallel_calls"] = self.turn.get("parallel_calls", 0) + len(jobs)
         _log({"parallel": [n for _, n, _ in jobs], "secs": round(time.time() - t0, 1), "conv": self.ctx.conv_id})
 
+    def _evidence_history(self):
+        """The history for fact checks, with every tool result compaction archived put back in front: a report on a
+        build cited test runs a compaction had condensed, the check found no support, and the model re-ran them."""
+        try:
+            import history_archive as ha
+            old = [{"role": "tool", "name": e.get("label") or "", "content": e.get("text") or ""}
+                   for e in ha.entries(self.ctx.conv_id) if e.get("kind") == "tool result"]
+        except Exception:
+            old = []
+        return old + list(self.history)
+
     def _evidence_check(self, rows):
         """record: check each row against everything read in this chat (quote in that source, value in the quote)."""
         import evidence
         import factcheck
-        docs, _user, _calc = factcheck.build_evidence(self.history)
+        docs, _user, _calc = factcheck.build_evidence(self._evidence_history())
         return evidence.check(rows, docs)
 
     def _mtp_draft_path(self):
@@ -2744,6 +2756,8 @@ class AgentEngine:
                           cwd=at.shell_cwd(self.ctx) if self.ctx.roots else "?", extra=extra)
         if self.reg and self._profiled():
             s = self._layer_prompt(s, set(self._active_names()))
+        if getattr(self, "_build_profile", False):
+            s = self._build_layer(s)
         if self.ctx.is_subagent:
             s += SUBAGENT_NOTE
         if self.cfg.get("plan_mode"):
@@ -2962,10 +2976,12 @@ class AgentEngine:
     # so the prompt prefix stays byte-identical between batches and the server's prompt cache keeps hitting.
     # KEEP 8 at 20K tokens was too eager for a 9B: results it was still using vanished after 8 quick calls and it
     # re-did them (ornith8). Masking now starts later and keeps more.
-    MASK_EVERY, MASK_KEEP, MASK_FROM, MASK_MIN_FREED = 12, 14, 32000, 4000
+    MASK_EVERY, MASK_KEEP, MASK_FROM, MASK_MIN_FREED, NARR_KEEP = 12, 14, 32000, 4000, 6
 
     def _masked_view(self, msgs):
-        st = self.__dict__.setdefault("_mask", {"at": 0, "stubs": {}})
+        st = self.__dict__.setdefault("_mask", {"at": 0, "stubs": {}, "args": {}, "narr": {}})
+        st.setdefault("args", {})
+        st.setdefault("narr", {})
         if not self.cfg.get("mask_stale", True):
             return msgs
         n_tool = sum(1 for m in msgs if m.get("role") == "tool")
@@ -2973,18 +2989,103 @@ class AgentEngine:
         if n_tool - st["at"] >= self.MASK_EVERY and total > self.MASK_FROM:
             # a batch rewrites the middle of the prompt, which the server must then re-read (all of it, on a hybrid
             # model like Ternary Bonsai 2): only worth it when it frees a real amount — one batch stubbed a single
-            # result for a 125 s re-read. Otherwise wait and let more pile up.
+            # result for a 125 s re-read. Otherwise wait and let more pile up. One batch condenses everything stale
+            # at once: superseded tool results, older copies of files written again since, and old narration.
             new = {k: v for k, v in self._stale_tool_stubs(msgs).items() if k not in st["stubs"]}
+            args, narr = self._stale_extras(msgs)
+            args = {k: v for k, v in args.items() if k not in st["args"]}
+            narr = {k: v for k, v in narr.items() if k not in st["narr"]}
             freed = sum(len(str(m.get("content") or "")) - len(new[m.get("tool_call_id")]) for m in msgs
-                        if m.get("role") == "tool" and m.get("tool_call_id") in new) / 3.6 * self.ratio
+                        if m.get("role") == "tool" and m.get("tool_call_id") in new)
+            for m in msgs:
+                if m.get("role") != "assistant":
+                    continue
+                for tc in m.get("tool_calls") or []:
+                    if tc.get("id") in args:
+                        freed += len((tc.get("function") or {}).get("arguments") or "") - len(args[tc["id"]])
+                k = self._narr_key(m)
+                if k in narr:
+                    freed += len(str(m.get("content") or "")) - len(narr[k])
+            freed = freed / 3.6 * self.ratio
             if freed >= max(self.MASK_MIN_FREED, total * 0.12):
                 st["stubs"].update(new)
+                st["args"].update(args)
+                st["narr"].update(narr)
                 st["at"] = n_tool
-                _log({"masked_stale": len(st["stubs"]), "freed": int(freed), "conv": self.ctx.conv_id})
-        if not st["stubs"]:
+                _log({"masked_stale": len(st["stubs"]), "args": len(st["args"]), "narr": len(st["narr"]),
+                      "freed": int(freed), "conv": self.ctx.conv_id})
+        return self._apply_mask(msgs)
+
+    def _apply_mask(self, msgs):
+        """The model's view with the current condensed items applied (no new batch) — also what a summary request
+        must send, so it starts exactly like the prompt the server has cached."""
+        st = self.__dict__.get("_mask") or {}
+        stubs, args, narr = st.get("stubs") or {}, st.get("args") or {}, st.get("narr") or {}
+        if not (stubs or args or narr) or not self.cfg.get("mask_stale", True):
             return msgs
-        return [dict(m, content=st["stubs"][m.get("tool_call_id")]) if m.get("role") == "tool"
-                and m.get("tool_call_id") in st["stubs"] else m for m in msgs]
+        out = []
+        for m in msgs:
+            if m.get("role") == "tool" and m.get("tool_call_id") in stubs:
+                m = dict(m, content=stubs[m.get("tool_call_id")])
+            elif m.get("role") == "assistant":
+                k = self._narr_key(m)
+                tcs = m.get("tool_calls") or []
+                if k in narr or any(tc.get("id") in args for tc in tcs):
+                    m = dict(m)
+                    if k in narr:
+                        m["content"] = narr[k]
+                    if tcs:
+                        m["tool_calls"] = [dict(tc, function=dict(tc.get("function") or {}, arguments=args[tc["id"]]))
+                                           if tc.get("id") in args else tc for tc in tcs]
+            out.append(m)
+        return out
+
+    @staticmethod
+    def _narr_key(m):
+        """Per message, not per text: small models repeat the same sentence, and a recent copy must stay."""
+        c = m.get("content")
+        if not isinstance(c, str) or len(c) <= 300:
+            return None
+        tcs = m.get("tool_calls") or []
+        return ("n", tcs[0].get("id") if tcs else None, hash(c))
+
+    def _stale_extras(self, msgs):
+        """-> ({tool_call_id: slimmed arguments}, {narration key: one sentence}): write/edit calls whose file was
+        written, edited or read again later (its text is on disk, a newer copy is in context) and narration older
+        than the last NARR_KEEP assistant messages (what mattered is in the timeline and the work state)."""
+        args, narr = {}, {}
+        asst = [m for m in msgs if m.get("role") == "assistant"]
+        recent = {id(m) for m in asst[-self.NARR_KEEP:]}
+        later = set()                                      # files touched by a LATER call (walking newest first)
+        for m in reversed(asst):
+            old = id(m) not in recent
+            touched = []
+            for tc in m.get("tool_calls") or []:
+                fn = tc.get("function") or {}
+                try:
+                    a = json.loads(fn.get("arguments") or "{}")
+                except ValueError:
+                    a = {}
+                if not isinstance(a, dict):
+                    continue
+                path = str(a.get("path") or "")
+                norm = os.path.abspath(path).lower() if path else ""
+                if old and norm in later and fn.get("name") in ("write_file", "edit_file", "artifact_create",
+                                                                "artifact_edit"):
+                    import copy
+                    tc2 = copy.deepcopy(tc)
+                    _slim_call_args(tc2)
+                    slim = (tc2.get("function") or {}).get("arguments")
+                    if slim and slim != fn.get("arguments"):
+                        args[tc.get("id")] = slim
+                if norm and fn.get("name") in ("write_file", "edit_file", "read_file"):
+                    touched.append(norm)
+            later.update(touched)
+            k = self._narr_key(m)
+            if old and k:
+                first = re.split(r"(?<=[.!?])\s", str(m["content"]).strip(), maxsplit=1)[0][:220]
+                narr[k] = first + " [… older narration condensed]"
+        return args, narr
 
     def _stale_tool_stubs(self, msgs):
         """tool_call_id -> stub for results a later call has superseded (older file reads, test runs, logs…)."""
@@ -3149,7 +3250,7 @@ class AgentEngine:
             focus = [os.path.relpath(p, root) for p in files]
             code_map = repomap.build_map(root, focus_files=focus, budget_tokens=550)
             if code_map:                                 # appended last, in whatever room the rest leaves
-                code_map_block = "Code map (line: signature — the most connected definitions first):\n" + code_map
+                code_map_block = "Code map (line: signature — the most connected first; read_file(path, symbol='name') shows one):\n" + code_map
             else:
                 raise ValueError("no map")
         except Exception:
@@ -3180,6 +3281,12 @@ class AgentEngine:
                 line += (f"; best so far {'(' + h['green_partial'] + ')' if h.get('green_partial') else 'all passing'} at "
                          f"{h.get('green_t')}, {h.get('green_edits', 0)} code edit(s) since (changes_since_green)")
             out.append(line)
+            if lt.get("passed") and not lt.get("failed") and h.get("green") is not None and not h.get("green_edits"):
+                # bonsai8 spent 70 min re-proving a green build: a smoke script, hand probes, a new feature to test a
+                # month filter, and re-runs after a compaction hid the earlier results
+                out.append(f"VERIFIED: the suite passed at {lt['t']} and no code changed since — that run is the "
+                           f"evidence the code works; cite it. Left: only what the tests can't cover, then the README "
+                           f"and the final answer. No new verification scripts, probes or re-runs.")
         try:
             import bg_tasks
             run = []
@@ -3251,13 +3358,13 @@ class AgentEngine:
     # an existing project named in the request is worked on where it is: the note used to say "make the project
     # folder inside this chat's folder", and a model fixing an existing project planned to copy it all over and
     # redo its docs
-    PROJECT_NOTE = ("PROJECT MODE is on for this work: research and plan properly before building. read_guide('project') "
-                    "now and follow it. If the request points at an existing project folder, work THERE: use its "
-                    "existing docs/ and code, and add only what is missing — never copy it elsewhere or start the "
-                    "docs over. Otherwise make the project folder inside this chat's folder. Keep the docs/ tree "
-                    "current: INDEX.md (the map), research/NN-*.md (one note per question, with sources), PRD.md, "
-                    "DESIGN.md, TASKS.md, DECISIONS.md. Code files are refused until docs/ has a PRD, a design and at "
-                    "least one research note. Mirror TASKS.md's milestones in the checklist.")
+    PROJECT_NOTE = ("PROJECT MODE is on for this work: plan before building. read_guide('project') now and follow it. "
+                    "If the request points at an existing project folder, work THERE: use its existing docs/ and code, "
+                    "and add only what is missing — never copy it elsewhere or start the docs over. Otherwise make the "
+                    "project folder inside this chat's folder. Required in docs/: PRD.md (with acceptance criteria) and "
+                    "DESIGN.md — code files are refused until both exist. A research note (docs/research/) when a "
+                    "choice depends on facts you must look up. INDEX.md, TASKS.md and DECISIONS.md only for big work "
+                    "that spans sessions: the checklist is the status, don't spend steps keeping status files current.")
 
     def _start_project(self):
         """Project mode for this chat: the docs/ tree before the build (guide, gates, more steps, deeper thinking)."""
@@ -3305,14 +3412,14 @@ class AgentEngine:
         have = {f.lower() for f in os.listdir(docs)} if docs else set()
         res = os.path.join(docs, "research") if docs else ""
         notes = [f for f in os.listdir(res) if f.lower().endswith(".md")] if res and os.path.isdir(res) else []
-        missing = [label for label, ok in (("docs/PRD.md", "prd.md" in have), ("docs/DESIGN.md", "design.md" in have),
-                                           ("a research note in docs/research/", bool(notes))) if not ok]
+        missing = [label for label, ok in (("docs/PRD.md", "prd.md" in have), ("docs/DESIGN.md", "design.md" in have))
+                   if not ok]
         if not missing:
             return ""
         _log({"project_gate": missing, "path": p[-120:], "conv": self.ctx.conv_id})
         return (f"{name} did not run: project mode — research and design come before code. Missing next to this "
-                f"project: {', '.join(missing)}. Follow read_guide('project'): research notes with sources, PRD.md, "
-                f"DESIGN.md and TASKS.md in <project>/docs/, then build.")
+                f"project: {', '.join(missing)}. Follow read_guide('project'): PRD.md and DESIGN.md in "
+                f"<project>/docs/ (and a research note if a choice needs facts), then build.")
 
     def _project_unfinished(self):
         """Project mode at the final answer: the map and the plan must exist and be current -> what is missing."""
@@ -3326,7 +3433,7 @@ class AgentEngine:
         if not docs:
             return ["the project's docs/ tree (read_guide('project'))"] if self._built_software() else []
         have = {f.lower() for f in os.listdir(docs)}
-        return [f"docs/{f}" for f in ("INDEX.md", "TASKS.md") if f.lower() not in have]
+        return [] if "prd.md" in have else ["docs/PRD.md"]       # status files are optional (the checklist is the status)
 
     def _guide_hint(self, text):
         if self.ctx.is_subagent or not text or not (self.reg and "read_guide" in self.reg.by_name):
@@ -3589,7 +3696,7 @@ class AgentEngine:
         figures that come from no source, no user input and no calculation — worked out in the model's head. Only
         when the request or answer is about calculating, so facts recalled from memory are left alone."""
         import factcheck
-        hist = self.history if history is None else history
+        hist = self._evidence_history() if history is None else history
         last_user = next((m for m in reversed(hist) if m.get("role") == "user"
                           and not str(m.get("content", "")).startswith(REMINDER_TAG)), {})
         ut = last_user.get("content") if isinstance(last_user.get("content"), str) else ""
@@ -3755,7 +3862,7 @@ class AgentEngine:
                 self._delta = "ans_delta"
             claims = factcheck.parse_claims(msg.get("content"))
             self._fc_claims = claims
-        results = factcheck.check(claims, self.history, draft)
+        results = factcheck.check(claims, self._evidence_history(), draft)
         if self.cfg.get("auto_verify", True):
             self._auto_verify(results)                 # unsupported claims: looked up (Wikipedia + web) in parallel
         bad = [r for r in results if not r["ok"]]
@@ -4082,6 +4189,8 @@ class AgentEngine:
                 self._last_effort = dict(self._effort)
                 if self._effort["plan"] == "project" or re.match(r"\s*project\s*:", user_text or "", re.I):
                     self._start_project()
+                if getattr(self, "_project", False) or self._BUILD_REQ_RX.search(user_text or ""):
+                    self._build_profile = True       # set before the first step: the prompt start stays fixed
                 self.emit("status", text=f"Plan: {self._effort['plan']} · thinking: {self._effort['think']}")
             elif self._escalated and self._depth == "basic" and not self.should_stop():
                 # the lean pass only knew get_tools: the plan decision (which sees the whole harness) has the last
@@ -5447,7 +5556,8 @@ class AgentEngine:
         if self.summary:
             ask = ask.replace("Pause the task.", "Pause the task. (An earlier summary is at the start of the "
                                                  "conversation: fold it in.)")
-        msgs = [{"role": "system", "content": self.system_prompt()}] + history + [{"role": "user", "content": ask}]
+        msgs = (self._apply_mask([{"role": "system", "content": self.system_prompt()}] + history)
+                + [{"role": "user", "content": ask}])        # the masked view: what the server has cached
         self._delta = "summary_delta"            # not streamed into the chat as an answer
         try:
             msg, _n, _p = self._call_openai(msgs, tools=False, max_tokens=1600, no_think=True)
@@ -5519,6 +5629,28 @@ class AgentEngine:
     # set plus the groups this chat needs; the rest are listed by available_tools and load when enabled or first
     # called (one full prompt re-read then — rare, and the list stays stable again after it).
     CORE_GROUPS = ("files", "shell", "code", "web", "math", "memory")
+    # a software build never uses these (~3K tokens of the ~13K fixed prompt start); listed in available_tools and
+    # turned on if called (used = enabled), as any other tool
+    BUILD_SKIP = {"record", "query_data", "python_sandbox", "python_host", "calculate", "read_formula", "encyclopedia",
+                  "memory_search", "memory_save", "memory_update", "memory_delete", "playbook_note", "read_document",
+                  "search_documents"}
+    _BUILD_REQ_RX = re.compile(r"\b(build|make|create|write|develop|code|program|implement)\b[^.?!\n]{0,80}\b(app|"
+                               r"application|program|game|website|web ?site|tool|script|server|cli|api|bot|tracker|"
+                               r"service|backend|frontend)s?\b", re.I)
+    # system-prompt rules for research answers that only cost a build tokens (and the citation rule made a build's
+    # final report re-run finished checks to have something to cite)
+    _BUILD_LAYERS = (
+        (r"- Data: when a task collects.*?(?=\n- )", ""),
+        (r"- Same name, different entity:.*?(?=\n- )", ""),
+        (r"- Critical facts:.*?(?=\n- )", "- Claims about your own work (tests pass, what a check or command printed) "
+                                           "cite this chat's own latest run of it: that run is the evidence. Don't "
+                                           "re-run anything just to cite it."),
+    )
+
+    def _build_layer(self, s):
+        for rx, short in self._BUILD_LAYERS:
+            s = re.sub(rx, lambda _m: short, s, count=1, flags=re.S)
+        return s
     _GROUP_HINTS = (
         ("browser", r"\b(browser|website|web ?page|web ?site|log ?in|sign ?in|online form|fill (in|out)|click|"
                     r"scrape|screenshot of)\b"),
@@ -5567,7 +5699,10 @@ class AgentEngine:
             grouped |= set(ns)
             if g in self.CORE_GROUPS or g.startswith("mcp:"):        # the user's own MCP tools always stay
                 core |= set(ns)
-        return core | {n for n in self.reg.by_name if n not in grouped}
+        out = core | {n for n in self.reg.by_name if n not in grouped}
+        if getattr(self, "_build_profile", False):
+            out -= self.BUILD_SKIP
+        return out
 
     def _profile_tools(self, text):
         """At the start of a request: turn on the groups its words clearly need (kept for the chat)."""
@@ -5730,7 +5865,11 @@ class AgentEngine:
         eff = self._effective_effort()
         b = EFFORT_THINK[eff] * (2 if self._wrapping_up() and eff in ("medium", "high") else 1)
         if getattr(self, "_debugging", False) or self._fail_streak >= 1:
-            b = max(b, EFFORT_THINK["high"])    # debugging: half-finished reasoning about a bug costs more steps
+            # debugging: half-finished reasoning about a bug costs more steps — but bounded: at 3072 an edit averaged
+            # 2.8 min of thinking (bonsai8). The agent's own 'high', or the user's Effort 'max', keeps its budget.
+            own = EFFORT_THINK.get(getattr(self, "_think_effort", "medium") or "medium", 1024)
+            b = (max(b, EFFORT_THINK["high"]) if str(self.cfg.get("effort") or "").lower() == "max"
+                 else max(own, DEBUG_THINK))
         cap = think_max(self.cfg)
         return b if cap < 0 else min(b, cap)
 

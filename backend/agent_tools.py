@@ -274,6 +274,31 @@ READ_BUDGET = MAX_RESULT - 1800
 OUTLINE_BUDGET = 1200        # of the 1,800 left: the outline, the size header and the continue note
 
 
+def _symbol_range(p, lines, symbol):
+    """The lines of one definition (decorators included) -> (first, last), or an error text naming what exists."""
+    import repomap
+    want = str(symbol).strip()
+    defs = repomap.outline(p)
+    q = lambda d: ((d.get("parent") or "") + "." + d["name"]) if d.get("parent") else d["name"]
+    hit = next((d for d in defs if q(d) == want), None) or next((d for d in defs if d["name"] == want.split(".")[-1]),
+                                                                None)
+    if not hit:
+        names = ", ".join(q(d) for d in defs[:40]) or "none found"
+        return f"no definition named {want!r} in {os.path.basename(p)}. Definitions: {names}"
+    first = last = int(hit["line"])
+    ind = len(lines[first - 1]) - len(lines[first - 1].lstrip())
+    while first > 1 and lines[first - 2].lstrip().startswith("@"):
+        first -= 1
+    for i in range(int(hit["line"]), len(lines)):
+        ln = lines[i]
+        if ln.strip() and len(ln) - len(ln.lstrip()) <= ind and not ln.lstrip().startswith(("#", ")", "]", "}")):
+            break
+        last = i + 1
+    while last > first and not lines[last - 1].strip():
+        last -= 1
+    return first, last
+
+
 def t_read_file(a, c):
     p = c.resolve(a.get("path"), True)
     if os.path.isdir(p):
@@ -286,6 +311,11 @@ def t_read_file(a, c):
         if b"\0" in f.read(4096):
             raise ToolError("this looks like a binary file, not text")
     lines = _read_text(p).splitlines()
+    if a.get("symbol"):
+        rng = _symbol_range(p, lines, a["symbol"])
+        if isinstance(rng, str):
+            raise ToolError(rng)
+        a["offset"], a["limit"], a["_symbol"] = rng[0], rng[1] - rng[0] + 1, True
     start = max(1, int(a.get("offset") or 1))
     limit = max(1, min(int(a.get("limit") or 400), 2000))
     # Small models ask for 10-60 line slices and then never see two related functions at once (a 9B chased a
@@ -294,13 +324,13 @@ def t_read_file(a, c):
     asked = (start, limit) if (a.get("offset") or a.get("limit")) else None
     cut = [ln if len(ln) <= 2000 else ln[:2000] + "…" for ln in lines]
     fits = len(_numbered(cut, 1)) <= READ_BUDGET
-    if len(lines) <= READ_WHOLE and fits:
+    if len(lines) <= READ_WHOLE and fits and not a.get("_symbol"):
         start, limit = 1, max(len(lines), 1)
         if asked and asked[0] > 1:
             a["_whole_note"] = (f"(The whole file is shown — {len(lines)} lines is small enough. The lines you asked "
                                 f"for, {asked[0]}-{min(len(lines), asked[0] + asked[1] - 1)}, are in it; no need to "
                                 f"read it again.)\n")
-    else:
+    elif not a.get("_symbol"):                          # one definition asked by name: just its lines
         limit = max(limit, READ_MIN)
     # page by characters too: a 330-line file of long lines used to be "shown whole" and then clipped at
     # MAX_RESULT — the model was told it had the whole file, asked for the rest, and got line 1 again, forever
@@ -482,6 +512,15 @@ def t_write_file(a, c):
         big_note += (f"\nNote: you re-wrote all {len(new.splitlines())} lines of {os.path.basename(p)} to change about "
                      f"{max(add, rem)}. For a change inside a big file use edit_file (old → new): only the changed part "
                      f"is written, which is much faster.")
+    lt = (_hist(c) or {}).get("last_tests") or {}
+    base = os.path.basename(p).lower()
+    if (not existed and re.search(r"\.(py|js|ts|mjs|ps1|sh)$", base)
+            and re.search(r"smoke|e2e|end_to_end|verif|check|probe|test", base)
+            and not (base.startswith("test_") or re.search(r"^\s*(def|async def) test_|^\s*(test|it)\(", new, re.M))
+            and lt.get("passed") and not lt.get("failed")):
+        # bonsai8 wrote a 192-line smoke_test.py beside a green 21-test suite, then debugged the script for an hour
+        big_note += ("\nNote: your test suite already passes. Make a new check a test in that suite (run_tests runs "
+                     "it) instead of a separate script: one place to run, one result to trust.")
     return (f"{verb} {p} ({len(new.splitlines())} lines, +{add} -{rem})" + _note_change(c, p, old, new, existed)
             + prd_note + big_note)
 
@@ -1662,6 +1701,24 @@ def parse_progress(text):
              else "blocked" if s == "blocked" else "pending" if s == "pending" else "in_progress")
         out.append({"id": iid, "status": s})
     return out
+
+
+_TESTS_ITEM_RX = re.compile(r"\b(run_tests|tests? (pass|green)|all tests|test suite|suite passes)\b", re.I)
+
+
+def _tick_on_green(c, passed, failed):
+    """A full test run passed and the current checklist item is that the tests pass: mark it done — one less turn
+    of bookkeeping (bonsai8 spent 5 separate turns, ~8 min, on checklist updates)."""
+    if failed or not passed or not getattr(c, "tracker", None):
+        return ""
+    cur = tracker_current(c.tracker)
+    if not cur or not _TESTS_ITEM_RX.search(str(cur[1])):
+        return ""
+    try:
+        t_update_tracker({"updates": [{"id": cur[0], "status": "done"}]}, c)
+    except Exception:
+        return ""
+    return f"\n(Checklist: {cur[0]} \"{str(cur[1])[:70]}\" marked done — this run is its evidence.)"
 
 
 def t_update_tracker(a, c):
@@ -3775,8 +3832,9 @@ BUILTIN = [
     ("list_dir", READ, "List the files in a folder (inside the allowed folders).",
      _obj({"path": S}), t_list_dir),
     ("read_file", READ, "Read a text file. Returns lines prefixed with line numbers (the prefix is "
-     "not part of the file). offset = first line (1-based), limit = number of lines (default 400).",
-     _obj({"path": S, "offset": I, "limit": I}, ["path"]), t_read_file),
+     "not part of the file). offset = first line (1-based), limit = number of lines (default 400). symbol = one "
+     "function or class by name (e.g. 'Ledger.save'): just its lines, wherever it is.",
+     _obj({"path": S, "offset": I, "limit": I, "symbol": S}, ["path"]), t_read_file),
     ("read_document", READ, "Read a document's text: PDF, Word (.docx/.doc/.rtf), Excel "
      "(.xlsx/.xls, tab-separated rows), PowerPoint (.pptx/.ppt, with speaker notes), CSV, or text. "
      "start/end select pages, slides or rows; sheet picks an Excel sheet. Use this for files the "
@@ -4391,6 +4449,9 @@ class Registry:
                            "failing": ci.failing_names(text)}
                     _hist(self.ctx)["last_tests"] = cur
                     text = str(text) + ci.regression(prev, cur)
+                    tick = _tick_on_green(self.ctx, p_, f_)
+                    if tick:
+                        text = str(text) + tick
         except Exception:
             pass
         text = self._debug_aids(name, args, str(text))
@@ -4459,8 +4520,13 @@ class Registry:
                 self.ctx.roots.append(parent)              # the chat's own folder is always usable
         except OSError:
             return clip(text)
-        note = (f"[Full result ({len(text):,} characters) saved at {path} — to use this data in code, pass that path "
-                f"in python_sandbox files=[...] instead of copying text.]\n")
+        if len(text) <= MAX_RESULT:
+            # the model read a fully shown 6,000-character page again from the saved copy, in two pages
+            note = (f"[Shown in full below ({len(text):,} characters) — nothing was cut, no need to read it again. A copy "
+                    f"is saved at {path} for use in code (python_sandbox files=[...]).]\n")
+        else:
+            note = (f"[Full result ({len(text):,} characters) saved at {path}; shown: the start, the end and the "
+                    f"key lines. read_file that path for the middle, or pass it in python_sandbox files=[...].]\n")
         return note + clip_extract(text)
 
     def _save_full(self, name, text):

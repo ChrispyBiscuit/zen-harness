@@ -8,22 +8,23 @@ are the project's memory: you (and a later chat) read them instead of re-derivin
 Make one project folder inside this chat's own folder (or where the user said), and keep everything in `docs/`. **An existing project the user points to is worked on where it is**: read its docs and code, add only the documents that are missing, never copy it elsewhere or start its docs over:
 
 ```
-<project>/docs/INDEX.md          the map: one line per document below, what it holds, its status
-<project>/docs/research/01-<topic>.md   one note per research question
-<project>/docs/PRD.md            what is being made and how success is checked
-<project>/docs/DESIGN.md         how it will be made
-<project>/docs/TASKS.md          the build plan, kept current
-<project>/docs/DECISIONS.md      dated decisions and why
+<project>/docs/PRD.md            what is being made and how success is checked        (always)
+<project>/docs/DESIGN.md         how it will be made                                    (always)
+<project>/docs/research/01-<topic>.md   one note per question whose answer you must look up (when a choice needs facts)
+<project>/docs/INDEX.md          the map of the documents                    (big work that spans sessions only)
+<project>/docs/TASKS.md          the build plan                              (big work that spans sessions only)
+<project>/docs/DECISIONS.md      dated decisions and why                     (big work that spans sessions only)
 ```
-Code and other deliverables go next to `docs/` (e.g. `src/`, `tests/`). Create INDEX.md first and update it whenever
-a document is added or changes status.
+Code and other deliverables go next to `docs/` (e.g. `src/`, `tests/`). The paperwork scales with the work: a
+small app needs a PRD and a design; the status files are for work a later chat will pick up. Within a chat the
+checklist is the status — don't spend steps keeping status files current.
 
 ## Phase 1 — Clarify
 If the request leaves choices open that change the result, ask_user first (2-5 questions with defaults). Record the
 answers in PRD.md.
 
-## Phase 2 — Research (before any design)
-1. Write the research questions into INDEX.md: what must be known to do this well — the domain, how others solve it,
+## Phase 2 — Research (before any design, when a choice depends on facts you must look up)
+1. List the research questions: what must be known to do this well — the domain, how others solve it,
    the libraries/APIs/formats to use and their exact current usage, constraints, risks. Usually 3-6 questions.
 2. For each question: web_search (several phrasings), web_fetch the best sources (official docs first), and write
    `docs/research/NN-<topic>.md`:
@@ -44,19 +45,19 @@ small enough to write or fix in one call (about 200 lines or less), never one mo
 reason (link the research note), how it will be tested (one test per acceptance criterion; headless runs for
 anything with a window), risks and how to reduce them.
 
-## Phase 5 — Task plan (docs/TASKS.md)
+## Phase 5 — Task plan (the checklist; docs/TASKS.md only for multi-session work)
 Milestones in build order, each with subtasks and **done when** (the evidence that it works), mapped to the PRD's
-acceptance criteria. The first milestone is the smallest version that runs end to end. Mirror the milestones in the
-checklist (update_tracker).
+acceptance criteria. The evidence is what your test suite shows — never a done-when that needs a feature nobody
+asked for. The first milestone is the smallest version that runs end to end.
 
 ## Phase 6 — Build loop
-For each milestone: build, test (run_tests / headless run / browser check), fix, then update TASKS.md (status) and
-DECISIONS.md (anything decided or changed, with the date and why). If the design proves wrong, update DESIGN.md
-first, then the code.
+For each milestone: build, test (run_tests / headless run / browser check), fix, and mark it done in the checklist.
+If the design proves wrong, update DESIGN.md first, then the code.
 
 ## Phase 7 — Verify and report
-Run every acceptance test, look at screenshots for anything visual, update INDEX.md and TASKS.md to their final
-state, write README.md (what it is, how to run it), and report: what was built, what passes, what is not done.
+Once the suite passes (one test per acceptance criterion), that run is the evidence: look at screenshots for anything
+visual, write README.md (what it is, how to run it), and report what was built, what passes, what is not done. No
+extra verification scripts on top of a green suite.
 
 ## Rules of thumb
 - Research and design are not optional in project mode: code files are refused until docs/ has a PRD, a design and
