@@ -6518,6 +6518,12 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
         elif be == "llama" and not c.get("think_budget") and getattr(self, "_step_think_budget", None):
             # this step's thinking budget (the agent's effort, capped by the user's max)
             body["thinking_budget_tokens"] = int(self._step_think_budget)
+        if (be == "llama" and not executor and c.get("template_reasoning_effort")
+                and (body.get("chat_template_kwargs") or {}).get("enable_thinking") is not False):
+            # the template's own reasoning level (Ternary Bonsai 2 defaults to xhigh; PrismML recommends medium — a
+            # token budget only cuts an xhigh deliberation off mid-way). The same value on every request, so the
+            # prompt's opening never changes.
+            body.setdefault("chat_template_kwargs", {})["reasoning_effort"] = str(c["template_reasoning_effort"])
         if max_tokens:
             body["max_completion_tokens" if be == "openai" else "max_tokens"] = int(max_tokens)
         if schema and not (be == "openai" and _provider(c) and not _provider(c).get("native")):

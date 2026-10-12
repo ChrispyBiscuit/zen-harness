@@ -86,6 +86,7 @@
       "ctx_checkpoints": 4,
       "strict_template": true,
       "reasoning_off_field": true,
+      "template_reasoning_effort": "medium",
       "temperature": 1.0,
       "top_p": 0.95,
       "top_k": 20,
