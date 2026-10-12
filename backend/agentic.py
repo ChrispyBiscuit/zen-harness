@@ -77,10 +77,11 @@ only when the user asks for a document, file or page, or for long work they will
 that artifact instead of pasting new copies into the chat. In your reply, say briefly what you made or changed; to link to it, write [its title](artifact://<id>) \
 with the id the artifact tool returned.{extra}
 
-Tools are loaded on demand: at first you only have available_tools and update_tracker. available_tools shows \
-every tool with what it does and enables the ones you need (by tool or group name); enabled tools stay on for \
-this chat. If a capability you need is not enabled, enable it — never say you can't do something without \
-checking available_tools first.
+Tools: you start with the core tools for most work — files, shell and code, web search, calculator, memory and \
+your checklist. available_tools lists every tool by group with what it does, including the browser, documents \
+(Word, Excel, PowerPoint, PDF), artifacts, schedules, screen control and delegation: enable a group there, or just \
+call one of its tools, and it stays on for this chat. Never say you can't do something without checking \
+available_tools first.
 
 Never say you lack access to the PC, PowerShell, a terminal or files. If asked whether you can run \
 commands, the answer is yes. When a request needs live information from this machine (running \
@@ -3721,6 +3722,10 @@ class AgentEngine:
     def run(self, user_text, images=None):
         """One user turn. Returns the final answer text."""
         self._turn_request = str(user_text or "")
+        try:
+            self._profile_tools(self._turn_request)
+        except Exception as e:
+            _log({"tool_profile_error": repr(e)[:200], "conv": self.ctx.conv_id})
         # slash commands: "/<playbook or guide> <request>" runs the request with that playbook/guide from the start;
         # "/help" lists them (answered by the app, no model call)
         self._forced_cmd, self._direct_reply = None, ""
@@ -5282,12 +5287,52 @@ class AgentEngine:
     def _gated(self):
         return bool(self.cfg.get("tool_gate", True)) and self.reg is not None and "available_tools" in self.reg.by_name
 
+    # hierarchical tool loading: every step sent all ~70 tools (~12.7K of the ~17K-token harness). Now a stable core
+    # set plus the groups this chat needs; the rest are listed by available_tools and load when enabled or first
+    # called (one full prompt re-read then — rare, and the list stays stable again after it).
+    CORE_GROUPS = ("files", "shell", "code", "web", "math", "memory")
+    _GROUP_HINTS = (
+        ("browser", r"\b(browser|website|web ?page|web ?site|log ?in|sign ?in|online form|fill (in|out)|click|"
+                    r"scrape|screenshot of)\b"),
+        ("documents", r"\b(word|docx?|excel|xlsx|spreadsheet|power ?point|pptx|slides?|deck|presentation|pdf|"
+                      r"letter|resume|invoice)\b"),
+        ("artifacts", r"\b(artifacts?|diagram|chart|graph|mermaid|dashboard|html page|report)\b"),
+        ("schedule", r"\b(schedule|every (day|morning|evening|week|month|hour|\d+)|daily|weekly|monthly|hourly|"
+                     r"remind|recurring|at \d{1,2}(:\d\d)? ?(am|pm))\b"),
+        ("screen", r"\b(my screen|the screen|desktop app|mouse|keyboard|window|on my pc|open the app)\b"),
+        ("delegation", r"\b(in parallel|delegate|background (task|agent)|several workers|sub-?agents?)\b"),
+    )
+
+    def _profiled(self):
+        return self._gated() and self._stable_tools() and bool(self.cfg.get("tool_profiles", True))
+
+    def _core_names(self):
+        groups = at.tool_groups(self.reg)
+        core, grouped = set(at.ALWAYS_ON), set()
+        for g, _b, ns in groups:
+            grouped |= set(ns)
+            if g in self.CORE_GROUPS or g.startswith("mcp:"):        # the user's own MCP tools always stay
+                core |= set(ns)
+        return core | {n for n in self.reg.by_name if n not in grouped}
+
+    def _profile_tools(self, text):
+        """At the start of a request: turn on the groups its words clearly need (kept for the chat)."""
+        if not self.reg or not self._profiled():
+            return
+        want = [g for g, rx in self._GROUP_HINTS if re.search(rx, text or "", re.I)]
+        if want:
+            added, _unknown = self._enable(want)
+            if added:
+                _log({"tool_profile": want, "added": len(added), "conv": self.ctx.conv_id})
+
     def _active_names(self):
-        if not self._gated() or self._stable_tools():
-            # Local llama.cpp: the full list (~6.5k tokens) is read once and then reused for free, while every change
-            # to the list makes this hybrid model re-read the whole conversation. available_tools stays the planning
-            # step (review the catalog, plan which tools to use when); nothing is hidden.
+        if not self._gated():
             return list(self.reg.by_name)
+        if self._stable_tools():
+            if not self.cfg.get("tool_profiles", True):
+                return list(self.reg.by_name)                 # the old behaviour: every tool on every step
+            on = self._core_names() | self.enabled_tools
+            return [n for n in self.reg.by_name if n in on]
         return [n for n in self.reg.by_name if n in at.ALWAYS_ON or n in self.enabled_tools]
 
     def _enable(self, names):
@@ -5355,6 +5400,10 @@ class AgentEngine:
             if unknown:
                 msg.append("Unknown (not a tool or group): " + ", ".join(unknown) + ". Call available_tools to see names.")
             return "\n".join(msg) or "Nothing to enable."
+        if self._profiled():
+            out = at.tool_catalog(self.reg, set(self._active_names()), a.get("query", ""), gate=True)
+            return out + ("\n\nTools without ✓ load when you enable their group, e.g. "
+                          "available_tools(enable=[\"browser\"]), or when you simply call one of them.")
         out = at.tool_catalog(self.reg, self.enabled_tools, a.get("query", ""),
                               gate=self._gated() and not self._stable_tools())
         if self._gated() and not self._stable_tools():

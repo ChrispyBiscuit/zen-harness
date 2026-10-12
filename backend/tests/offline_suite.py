@@ -1306,6 +1306,23 @@ def contract_is_pinned_from_every_contract_section_and_while_reading():
 
 
 @test
+def tool_profiles_send_a_core_set_and_load_groups_on_demand():
+    e = engine(tool_gate=True, stable_tools=True)
+    groups = {g: set(ns) for g, _b, ns in at.tool_groups(e.reg)}
+    on = set(e._active_names())
+    assert {"read_file", "edit_file", "run_tests", "web_search", "calculate", "update_tracker"} <= on, on
+    assert not (groups.get("browser", set()) & on) and not (groups.get("schedule", set()) & on)
+    assert len(on) < len(e.reg.by_name)
+    e._profile_tools("log in to the website and fill out the form")    # the request's words load the browser
+    assert groups["browser"] <= set(e._active_names())
+    e2 = engine(tool_gate=True, stable_tools=True)
+    e2._enable(["schedule_task"])                                      # a call/enable loads the whole group
+    assert groups["schedule"] <= set(e2._active_names())
+    e3 = engine(tool_gate=True, stable_tools=True, tool_profiles=False)
+    assert set(e3._active_names()) == set(e3.reg.by_name)              # the switch restores every tool
+
+
+@test
 def settled_decisions_stay_in_view():
     c = at.Ctx([tmpdir("dec")])
     at.t_update_tracker({"new": True, "goal": "fix the tracker", "milestones": [{"title": "fix tests"}]}, c)
