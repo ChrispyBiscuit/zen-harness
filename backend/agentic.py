@@ -2799,6 +2799,14 @@ class AgentEngine:
                          "just wrote an approach, turn it into the checklist. Do nothing else until it exists."
                          + (" (Your previous checklist is shown below for reference; replace it unless this "
                             "request just continues it.)" if t else ""))
+        if t and self._role != "exec":
+            try:
+                import obligations
+                b = obligations.brief(self.ctx)
+                if b:
+                    parts.append(b)
+            except Exception as e:
+                _log({"brief_error": repr(e)[:200], "conv": self.ctx.conv_id})
         if t:
             parts.append("Your checklist for this request (kept by the app, not a project file):\n" + at.tracker_prompt(t)
                          + "\n(The user's latest message takes priority over this checklist: if it changes the plan, "

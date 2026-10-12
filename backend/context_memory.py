@@ -90,6 +90,15 @@ def ledger(conv):
     return _read(conv, "ledger.jsonl")
 
 
+def record_tracker(conv, tracker):
+    """Every saved checklist, with the time: a replay starts from the checklist exactly as it was then."""
+    _append(conv, "trackers.jsonl", {"at": time.strftime("%Y-%m-%d %H:%M:%S"), "tracker": tracker})
+
+
+def trackers(conv):
+    return _read(conv, "trackers.jsonl")
+
+
 def record_gen(conv, row):
     """One row per model call: thinking / text / tool-call tokens, prompt tokens read vs cached, timings."""
     _append(conv, "gen.jsonl", dict(row, t=time.strftime("%H:%M:%S")))

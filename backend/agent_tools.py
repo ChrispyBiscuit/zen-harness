@@ -1832,6 +1832,9 @@ def t_update_tracker(a, c):
     if isinstance(ups, dict):
         ups = [{"id": k, "status": v} for k, v in ups.items()]
     bad = []
+    was = {iid: st for iid, _x, st, _m in tracker_items(t)}
+    given = {str((u or {}).get("id", "")).strip().rstrip("."): (u or {}).get("evidence")
+             for u in (ups if isinstance(ups, list) else []) if isinstance(u, dict)}
     for u in ups if isinstance(ups, list) else []:
         iid = str((u or {}).get("id", "")).strip().rstrip(".")
         st = _norm_status((u or {}).get("status"))
@@ -1848,6 +1851,13 @@ def t_update_tracker(a, c):
                 m["status"] = _derive(m)
         except (ValueError, IndexError):
             bad.append(iid)
+    try:
+        import obligations
+        for iid, _x, st, _m in tracker_items(t):
+            if st == "done" and was.get(iid) not in (None, "done"):
+                obligations.on_done(c, t, iid, given.get(iid) or given.get(iid.split(".")[0]) or "")
+    except Exception as e:
+        print("evidence failed:", repr(e))
     notes = a.get("notes") if a.get("notes") is not None else a.get("note")
     if notes:
         for n in (notes if isinstance(notes, list) else [notes]):
@@ -1877,6 +1887,11 @@ def t_update_tracker(a, c):
     with open(path, "w", encoding="utf-8") as f:
         f.write(tracker_markdown(t, c.title))
     c.tracker, c.tracker_path = t, path
+    try:
+        import context_memory as cm
+        cm.record_tracker(c.conv_id, t)
+    except Exception:
+        pass
     done, total = tracker_progress(t)
     c.display = {"type": "tracker", "path": path, "done": done, "total": total, **t}
     cur = tracker_current(t)
@@ -2577,7 +2592,7 @@ def _hist(c):
         h = {"orig": {}, "versions": {}, "states": {}, "green": None, "green_edits": 0}
         try:                                          # an app restart must not lose "what worked" (the baseline)
             saved = json.load(open(_filehist_path(c), encoding="utf-8"))
-            for k in ("orig", "green", "green_edits", "green_t", "green_partial", "best_pass", "last_tests"):
+            for k in ("orig", "green", "green_edits", "green_t", "green_partial", "best_pass", "last_tests", "obl"):
                 if k in saved:
                     h[k] = saved[k]
         except (OSError, ValueError, TypeError):
@@ -2603,7 +2618,7 @@ def _save_filehist(c):
         os.makedirs(os.path.dirname(p), exist_ok=True)
         with open(p, "w", encoding="utf-8") as f:
             json.dump({k: h.get(k) for k in ("orig", "green", "green_edits", "green_t", "green_partial", "best_pass",
-                                             "last_tests")}, f)
+                                             "last_tests", "obl")}, f)
     except (OSError, TypeError, ValueError):
         pass
 
@@ -4014,8 +4029,10 @@ BUILTIN = [
            "milestones": {"type": "array", "items": {"type": "object", "properties": {
                "title": S, "done_when": S, "status": S, "subtasks": {"type": "array", "items": {"type": "object", "properties": {
                    "step": S, "status": S}, "required": ["step"]}}}, "required": ["title"]}},
-           "updates": {"type": "array", "items": {"type": "object", "properties": {"id": S, "status": S},
-                                                  "required": ["id", "status"]}},
+           "updates": {"type": "array", "items": {"type": "object", "properties": {
+               "id": S, "status": S,
+               "evidence": {"type": "string", "description": "optional, with status done: what showed it works"}},
+               "required": ["id", "status"]}},
            "notes": {"type": "array", "items": S}, "decisions": {"type": "array", "items": S}, "next": S,
            "path": S}), t_update_tracker),
     ("calculate", READ, "Exact calculator (SymPy + units + dates). Use it for EVERY calculation instead of "
@@ -4547,6 +4564,14 @@ class Registry:
                 pass
         text, image = (res[0], res[1]) if isinstance(res, tuple) else (res, None)
         try:
+            import obligations
+            obligations.record(self.ctx, name, args, str(text))
+            if name in ("edit_file", "write_file") and isinstance(args, dict) and args.get("path"):
+                text = str(text) + obligations.reopen_note(self.ctx, self.ctx.resolve(args["path"]),
+                                                           args.get("new") or args.get("content"))
+        except Exception as e:
+            print("obligations failed:", repr(e))
+        try:
             if looks_green(name, args, str(text)):
                 mark_green(self.ctx)                  # tests passed: the baseline for changes_since_green
             else:
@@ -4562,6 +4587,11 @@ class Registry:
                            "failing": ci.failing_names(text)}
                     _hist(self.ctx)["last_tests"] = cur
                     text = str(text) + ci.regression(prev, cur)
+                    try:
+                        import obligations
+                        obligations.on_tests(self.ctx, prev, cur)
+                    except Exception:
+                        pass
                     same = set(cur["failing"]) & set((prev or {}).get("failing") or [])
                     _hist(self.ctx)["same_fail"] = (_hist(self.ctx).get("same_fail", 0) + 1) if (f_ and same) else 0
                     tick = _tick_on_green(self.ctx, p_, f_)
