@@ -1286,6 +1286,20 @@ def contract_is_pinned_from_every_contract_section_and_while_reading():
 
 
 @test
+def settled_decisions_stay_in_view():
+    c = at.Ctx([tmpdir("dec")])
+    at.t_update_tracker({"new": True, "goal": "fix the tracker", "milestones": [{"title": "fix tests"}]}, c)
+    at.t_update_tracker({"decisions": ["category = any non-empty string (DESIGN.md)"], "notes": ["n0"]}, c)
+    at.t_update_tracker({"decisions": ["Category = any non-empty string (DESIGN.md)", "client args: --host --port first"]}, c)
+    for i in range(15):                                             # notes scroll; decisions don't
+        at.t_update_tracker({"notes": [f"note {i}"]}, c)
+    shown = at.tracker_prompt(c.tracker)
+    assert "Settled" in shown and "category = any non-empty string" in shown and "--host --port first" in shown, shown
+    assert shown.count("non-empty string") == 1                     # de-duplicated (case-insensitive)
+    assert "n0" not in shown                                        # the old note scrolled away
+
+
+@test
 def reading_new_things_is_not_counted_as_no_progress():
     e = engine()
     e._no_progress = 0

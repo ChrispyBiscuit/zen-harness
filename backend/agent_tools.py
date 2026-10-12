@@ -1610,6 +1610,8 @@ def tracker_prompt(t):
             + ("\n".join(rows) or "  (no milestones yet)")
             + (f"\nCurrent: {cur[0]} {cur[1]}" if cur else "\nAll items are done.")
             + f"\nNext action: {t.get('next') or '(not set)'}"
+            + (("\nSettled — decisions and verified facts (don't re-check one unless new evidence contradicts it):\n"
+                + "\n".join(f"  - {d}" for d in t["decisions"])) if t.get("decisions") else "")
             + (f"\nNotes (latest):\n{notes}" if notes else ""))
 
 
@@ -1738,6 +1740,16 @@ def t_update_tracker(a, c):
             if str(n).strip():
                 t["notes"].append(f"{time.strftime('%H:%M')} {str(n).strip()[:500]}")
         t["notes"] = t["notes"][-60:]
+    dec = a.get("decisions")
+    if isinstance(dec, str):
+        dec = [dec]
+    if dec:
+        have = list(t.get("decisions") or [])
+        for d in dec:
+            d = " ".join(str(d).split())[:300]
+            if d and d.lower() not in {x.lower() for x in have}:
+                have.append(d)
+        t["decisions"] = have[-15:]
     if a.get("next") is not None:
         t["next"] = str(a["next"])[:400]
     path = c.tracker_path or default_tracker_path(c.conv_id)
@@ -3723,7 +3735,10 @@ BUILTIN = [
      "progress='1.2 done, 1.3 started' to your next tool call instead): mark progress with 'updates' "
      "(e.g. [{id:'1.2', status:'done'}, {id:'1.3', status:'in_progress'}]; statuses pending / "
      "in_progress / done / blocked / skipped), add 'notes' (findings, decisions, paths, what failed) "
-     "and set 'next' (the very next action). Send 'milestones' again only to restructure the plan. "
+     "and set 'next' (the very next action). When you settle a question — what the contract or PRD requires, "
+     "which approach, how a library behaved in a probe — add it to 'decisions' (one short line each): they stay in "
+     "view on every step, so you never have to re-read or re-decide them. "
+     "Send 'milestones' again only to restructure the plan. "
      "Optional 'path' keeps it in a project folder (e.g. PROGRESS.md).",
      _obj({"goal": S, "design": S, "new": B,
            "milestones": {"type": "array", "items": {"type": "object", "properties": {
@@ -3731,7 +3746,8 @@ BUILTIN = [
                    "step": S, "status": S}, "required": ["step"]}}}, "required": ["title"]}},
            "updates": {"type": "array", "items": {"type": "object", "properties": {"id": S, "status": S},
                                                   "required": ["id", "status"]}},
-           "notes": {"type": "array", "items": S}, "next": S, "path": S}), t_update_tracker),
+           "notes": {"type": "array", "items": S}, "decisions": {"type": "array", "items": S}, "next": S,
+           "path": S}), t_update_tracker),
     ("calculate", READ, "Exact calculator (SymPy + units + dates). Use it for EVERY calculation instead of "
      "doing math yourself: arithmetic of any size or precision ('2^100/3', digits=50), percentages "
      "('15% of 240'), equations ('x^2-5x+6=0', 'solve([x+y-3, x-y-1], [x,y])'), calculus ('diff(sin(x)*x^2, x)', "
