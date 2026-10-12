@@ -3090,8 +3090,13 @@ class AgentEngine:
     _MAKE_RX = re.compile(r"\b(make|create|build|write|draft|generate|produce|design|format|export|save (it )?as|"
                           r"turn (it|this|that) into|convert|edit|update|fix|redo|rewrite)\b", re.I)
 
+    # an existing project named in the request is worked on where it is: the note used to say "make the project
+    # folder inside this chat's folder", and a model fixing an existing project planned to copy it all over and
+    # redo its docs
     PROJECT_NOTE = ("PROJECT MODE is on for this work: research and plan properly before building. read_guide('project') "
-                    "now and follow it. Make the project folder inside this chat's folder and keep its docs/ tree "
+                    "now and follow it. If the request points at an existing project folder, work THERE: use its "
+                    "existing docs/ and code, and add only what is missing — never copy it elsewhere or start the "
+                    "docs over. Otherwise make the project folder inside this chat's folder. Keep the docs/ tree "
                     "current: INDEX.md (the map), research/NN-*.md (one note per question, with sources), PRD.md, "
                     "DESIGN.md, TASKS.md, DECISIONS.md. Code files are refused until docs/ has a PRD, a design and at "
                     "least one research note. Mirror TASKS.md's milestones in the checklist.")

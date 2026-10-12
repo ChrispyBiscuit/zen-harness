@@ -5,7 +5,7 @@ where a wrong start wastes hours. The work is done in phases, and every phase le
 are the project's memory: you (and a later chat) read them instead of re-deriving anything.
 
 ## The project tree
-Make one project folder inside this chat's own folder (or where the user said), and keep everything in `docs/`:
+Make one project folder inside this chat's own folder (or where the user said), and keep everything in `docs/`. **An existing project the user points to is worked on where it is**: read its docs and code, add only the documents that are missing, never copy it elsewhere or start its docs over:
 
 ```
 <project>/docs/INDEX.md          the map: one line per document below, what it holds, its status
