@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { FormulaEditor } from "./FormulaEditor"
 import { SlashMenu, type SlashCommand } from "./SlashMenu"
 import { Recorder, transcribe } from "@/lib/mic"
-import { ArrowUp, AudioLines, Brain, Check, ChevronDown, Eye, FilePen, Globe, GlobeOff, Hand, ShieldAlert, Zap, Mic, Sigma, ShieldCheck, ShieldOff, FileSpreadsheet, FileText, Image as ImageIcon, Loader2, Paperclip, Presentation, Square, X } from "lucide-react"
+import { ArrowUp, AudioLines, Gauge, Check, ChevronDown, Eye, FilePen, Globe, GlobeOff, Hand, ShieldAlert, Zap, Mic, Sigma, ShieldCheck, ShieldOff, FileSpreadsheet, FileText, Image as ImageIcon, Loader2, Paperclip, Presentation, Square, X } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -315,7 +315,7 @@ export function Composer() {
             <Tooltip>
               <TooltipTrigger render={
                 <label className="ml-0.5 flex cursor-pointer items-center gap-1 rounded-lg px-1.5 @2xl:ml-1 @2xl:px-2 py-1 text-caption text-muted-foreground hover:bg-surface-2 hover:text-foreground" />}>
-                <Brain className="size-3.5" />
+                <Gauge className="size-3.5" />
                 <span className="hidden @2xl:inline">Effort</span>
                 <select value={effort} onChange={(e) => saveSettings({ agent: { effort: e.target.value } as any })}
                   className="cursor-pointer bg-transparent outline-none">

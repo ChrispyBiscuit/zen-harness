@@ -2,7 +2,7 @@ import { Volume2, VolumeX } from "lucide-react"
 import { ImageCarousel } from "./ImageCarousel"
 import { speaker } from "@/lib/tts"
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
-import { ArrowDown, BookOpen, Brain, CheckCircle2, ChevronRight, Loader2, ShieldAlert, XCircle, Compass, FileSpreadsheet, FileText, Image as ImageIcon, Presentation, Paperclip, ScanSearch, ShieldCheck } from "lucide-react"
+import { ArrowDown, BookOpen, Lightbulb, CheckCircle2, ChevronRight, Loader2, ShieldAlert, XCircle, Compass, FileSpreadsheet, FileText, Image as ImageIcon, Presentation, Paperclip, ScanSearch, ShieldCheck } from "lucide-react"
 import { Markdown, SCR_CLOSE, SCR_OPEN } from "./Markdown"
 import { ChangesCard, CompactedDivider, TaskDoneCard, ToolCard } from "./cards/ToolCards"
 import { useApp } from "@/lib/store"
@@ -45,7 +45,7 @@ function Thinking({ text, live, k }: { text: string; live?: boolean; k: string }
   return (
     <div className="text-ui">
       <button onClick={() => toggle(k)} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground">
-        <Brain className="size-3.5" />
+        <Lightbulb className="size-3.5" />
         <span className={cn(live && "shimmer-text")}>{live ? "Thinking" : "Reasoning"}</span>
         <ChevronRight className={cn("size-3.5 transition-transform", show && "rotate-90")} />
       </button>

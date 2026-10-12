@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react"
 import {
-  AlertTriangle, Bot, Brain, Check, ChevronRight, CircleDashed, CircleDot, CheckCircle2, Cpu, ExternalLink,
+  AlertTriangle, Bot, GraduationCap, Check, ChevronRight, CircleDashed, CircleDot, CheckCircle2, Cpu, ExternalLink,
   FileDiff, FileText, Globe, Image as ImageIcon, ListChecks, Loader2, MinusCircle, Pin, Search, Terminal,
   Undo2, Workflow, X, FolderTree, Wrench, Calculator, Code2, ShieldCheck, Table2,
 } from "lucide-react"
@@ -688,7 +688,7 @@ function ToolCardInner({ msg, convId, index }: { msg: Msg; convId: string; index
       )
     case "advisor":
       return (
-        <CardShell icon={<Brain />} title={<span><span className="font-medium">Advisor</span> <span className="text-muted-foreground">{d.model}{d.cost != null ? ` · $${Number(d.cost).toFixed(3)}` : ""}</span></span>}>
+        <CardShell icon={<GraduationCap />} title={<span><span className="font-medium">Advisor</span> <span className="text-muted-foreground">{d.model}{d.cost != null ? ` · $${Number(d.cost).toFixed(3)}` : ""}</span></span>}>
           <div className="border-t border-line-1 px-(--card-px) py-2.5">
             <div className="mb-1.5 text-caption text-muted-foreground">{d.question}</div>
             <Markdown text={d.advice || ""} className="text-ui" />
