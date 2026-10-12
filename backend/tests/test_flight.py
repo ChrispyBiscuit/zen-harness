@@ -115,6 +115,37 @@ def test_leftover_processes_are_stopped_and_reported():
     assert "Stopped what this run left running" in out, out[-1500:]
 
 
+TEST_RESTART = '''import socket, threading, urllib.request
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+class H(BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+    def do_GET(self):
+        self.send_response(200); self.end_headers(); self.wfile.write(b"ok")
+
+def up(port):
+    srv = HTTPServer(("127.0.0.1", port), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
+
+def test_restart_keeps_data():
+    s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
+    srv1 = up(port)
+    srv1.shutdown()                      # stops serving, but the listening socket stays open (no server_close)
+    up(port)                             # binds fine on Windows (SO_REUSEADDR) ...
+    urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=2)   # ... and this can reach the dead socket
+'''
+
+
+def test_a_second_bind_while_the_first_socket_is_open_is_shown():
+    """bonsai9's 80-minute bug: no exception anywhere, a connection just reached the old, unserved socket."""
+    out = _run_tests(_project(TEST_RESTART))
+    if out.startswith("tests: PASSED"):
+        return                           # this OS routed the connection to the new socket: nothing to show
+    assert "was bound again while an earlier socket on it was still open" in out, out[-1500:]
+
+
 def test_quiet_when_nothing_happened_elsewhere():
     d = _project("def test_ok():\n    assert 1 + 1 == 2\n")
     out = _run_tests(d)

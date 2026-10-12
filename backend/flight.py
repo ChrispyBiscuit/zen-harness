@@ -113,6 +113,7 @@ try:
 except Exception:
     pass
 
+_bound = {}                                            # id(socket) -> the address it is bound to
 try:
     import socket as _so
     _base = _so.socket.__mro__[1]
@@ -125,11 +126,25 @@ try:
                 _w(kind_fail, addr=str(a[0] if a else "")[:80], err=str(e)[:200])
                 raise
             if kind_ok:
-                _w(kind_ok, addr=str(a[0] if a else "")[:80])
+                try:
+                    addr = str(self.getsockname())[:80]     # the real port (a request for port 0 gets one)
+                except Exception:
+                    addr = str(a[0] if a else "")[:80]
+                _bound[id(self)] = addr
+                _w(kind_ok, addr=addr, sock=id(self))
             return r
         setattr(_so.socket, name, f)
     _wrap("bind", "bind", "bind_fail")
     _wrap("connect", None, "connect_fail")
+    _orig_close = _so.socket.close
+    def _close(self):
+        addr = _bound.pop(id(self), None)
+        if addr is not None:
+            # a listening socket is closed: a later bind of the same address while this one is still OPEN means
+            # two sockets on one port (Windows allows it with SO_REUSEADDR) and connections can reach the old one
+            _w("close", addr=addr, sock=id(self))
+        return _orig_close(self)
+    _so.socket.close = _close
 except Exception:
     pass
 
@@ -265,6 +280,17 @@ def summarize(d, skip_pid=None, limit=10):
             connect[key] = connect.get(key, 0) + 1
     for (addr, err), n in connect.items():
         lines.append(f"connecting to {addr} failed{f' ×{n}' if n > 1 else ''}: {err}")
+    open_now = {}                                       # (pid, address) -> a socket bound there and not closed yet
+    for e in ev:
+        if e.get("kind") == "bind":
+            key = (e.get("pid"), e.get("addr"))
+            if open_now.get(key) not in (None, e.get("sock")):
+                lines.append(f"[{procs.get(e.get('pid'), 'python')} pid {e.get('pid')}] {e.get('addr')} was bound "
+                             f"again while an earlier socket on it was still open (never closed) — both can listen "
+                             f"on Windows, and connections may reach the old socket that nothing serves")
+            open_now[key] = e.get("sock")
+        elif e.get("kind") == "close":
+            open_now.pop((e.get("pid"), e.get("addr")), None)
     listening = [f"{procs.get(e['pid'], 'python')} on {e.get('addr')}" for e in ev if e.get("kind") == "bind"]
     gone = [f"{procs.get(p)} (pid {p})" for p in procs if p not in exited and p != skip_pid]
     if not lines:
