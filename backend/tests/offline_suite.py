@@ -1192,7 +1192,27 @@ def guide_and_catalog_are_not_cut_at_the_default_limit():
     reg = at.Registry(at.Ctx([tmpdir("g")]), None, None)
     long = "x" * 15000
     assert reg._keep_result("read_guide", long) == long                  # software.md is 11 KB, the biggest 15 KB
-    assert "truncated," in reg._keep_result("read_file_unknown_tool", long)
+    assert "omitted from the middle" in reg._keep_result("read_file_unknown_tool", long)
+
+
+@test
+def a_long_result_keeps_its_errors_and_its_full_text():
+    import re
+    reg =at.Registry(at.Ctx([tmpdir("big")]), None, None)
+    log = ("setup line\n" * 400 + "FAILED tests/test_api.py::test_a5 - assert 201 == 400\n" + "noise line\n" * 600
+           + "== 3 failed, 8 passed ==\n")
+    out = reg._keep_result("powershell", log)
+    assert len(out) <= at.MAX_RESULT + 400, len(out)
+    assert "FAILED tests/test_api.py::test_a5" in out and "3 failed, 8 passed" in out, out[-500:]   # middle + end
+    path = re.search(r"saved at (.+?\.txt)", out).group(1)
+    assert open(path, encoding="utf-8").read() == log                      # the whole result is on disk
+
+
+@test
+def stubs_carry_enough_to_act_on():
+    text = "tests: FAILED — 5 failed, 6 passed\n" + "\n".join(f"FAILED tests/t.py::test_{i} - AssertionError: x" for i in range(5))
+    stub = agentic.AgentEngine._key_output("run_tests", {}, text)
+    assert all(f"test_{i}" in stub for i in range(5)), stub              # every failure, not the first three
 
 
 @test

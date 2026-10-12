@@ -151,6 +151,31 @@ class Ctx:
         return p
 
 
+_KEEP_LINE = re.compile(r"Traceback|Error\b|Exception\b|FAILED|FAIL:|failed|error:|warning:|\bE\s{2,}|assert|"
+                        r"\[Error located\]|exit code [1-9]|HTTP [45]\d\d|not found|denied|refused", re.I)
+
+
+def clip_extract(s, n=MAX_RESULT):
+    """A long tool result cut by extraction only (no rewriting, so identifiers survive): the start, the end, and
+    the error/failure lines from the middle — a plain cut from the top dropped the error at the bottom, and a long
+    test log's failures sat in the part that was cut."""
+    s = str(s)
+    if len(s) <= n:
+        return s
+    head, tail = s[:int(n * 0.35)], s[-int(n * 0.45):]
+    middle = s[len(head):len(s) - len(tail)]
+    keep, room = [], n - len(head) - len(tail) - 200
+    for ln in middle.splitlines():
+        if _KEEP_LINE.search(ln) and room > 0:
+            ln = ln[:300]
+            keep.append(ln)
+            room -= len(ln) + 1
+    mid = (f"\n...[{len(middle):,} characters omitted from the middle"
+           + (f"; the {len(keep)} error/failure line(s) in them:]\n" + "\n".join(keep) + "\n...[end of kept lines]...\n"
+              if keep else "]...\n"))
+    return head + mid + tail
+
+
 def clip(s, n=MAX_RESULT):
     s = str(s)
     return s if len(s) <= n else s[:n] + f"\n...[truncated, {len(s) - n} more characters]"
@@ -4228,14 +4253,15 @@ class Registry:
         (python_sandbox files=[...]) instead of re-typing them — a model has no copy & paste."""
         if name in self.RESULT_LIMITS:
             return clip(text, self.RESULT_LIMITS[name])
-        if name in self.HEAD_TAIL and len(text) > MAX_RESULT:
-            try:
-                import debug_tools as dbg
-                return dbg.clip_ht(text)
-            except Exception:
-                pass
+        if name not in self.SAVE_RESULTS and len(text) > MAX_RESULT and not text.startswith(("Error", "[blocked]")):
+            # too long to show whole: extract (start, end, error lines) and keep the full text on disk, so the cut
+            # part is still there for code or a targeted read — not only for a history search
+            path = self._save_full(name, text)
+            note = (f"[Full result ({len(text):,} characters) saved at {path}; shown: the start, the end and the "
+                    f"error lines.]\n") if path else ""
+            return note + clip_extract(text, MAX_RESULT - len(note))
         if name not in self.SAVE_RESULTS or len(text) < 3000 or text.startswith(("Error", "[blocked]")):
-            return clip(text)
+            return clip_extract(text)
         conv = getattr(self.ctx, "conv_id", None) or "misc"
         base = paths.data_dir()
         folder = os.path.join(base, "agent_attachments", _safe_name(conv), "results")
@@ -4253,7 +4279,26 @@ class Registry:
             return clip(text)
         note = (f"[Full result ({len(text):,} characters) saved at {path} — to use this data in code, pass that path "
                 f"in python_sandbox files=[...] instead of copying text.]\n")
-        return note + clip(text)
+        return note + clip_extract(text)
+
+    def _save_full(self, name, text):
+        """The whole of a long result in the chat's results folder -> its path ('' if it could not be saved)."""
+        conv = getattr(self.ctx, "conv_id", None) or "misc"
+        base = os.environ.get("LWS_DATA_DIR") or APP_DIR
+        folder = os.path.join(base, "agent_attachments", _safe_name(conv), "results")
+        try:
+            os.makedirs(folder, exist_ok=True)
+            with _SAVE_LOCK:
+                n = len([f for f in os.listdir(folder) if f.endswith(".txt")]) + 1
+                path = os.path.join(folder, f"r{n}_{name}.txt")
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(text)
+            parent = os.path.dirname(folder)
+            if not self.ctx.inside(path) and parent not in self.ctx.roots:
+                self.ctx.roots.append(parent)
+            return path
+        except OSError:
+            return ""
 
     def preview(self, name, args):
         """What the chat card shows before the call runs (or while it waits for approval)."""

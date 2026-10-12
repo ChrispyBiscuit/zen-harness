@@ -1628,6 +1628,11 @@ class AgentEngine:
             # per slot; with Qwen3.5 at 128k that reached 12 GB and the 16 GB laptop swapped (5-8 tok/s). Cap both.
             args += ["-cram", str(int(c.get("cache_ram_mib") or 1536)),
                      "-ctxcp", str(int(c.get("ctx_checkpoints") or 6))]
+            if int(c.get("cache_reuse", 256) or 0) > 0:
+                # after a masking batch or a compaction only part of the prompt changed: reuse the matching chunks of
+                # the cache by shifting them, instead of re-reading everything after the first change (off by default
+                # in llama.cpp; a model whose cache can't shift simply doesn't reuse)
+                args += ["--cache-reuse", str(int(c.get("cache_reuse", 256)))]
             if use_fan and not fit.get("moe"):
                 # the model is on the GPU and needs little CPU; by default its threads busy-wait, which stalls the
                 # CPU workers (their threads move in lockstep: one preempted thread holds up every token)
@@ -2920,7 +2925,7 @@ class AgentEngine:
         return stubs
 
     @staticmethod
-    def _key_output(name, args, text, cap=320):
+    def _key_output(name, args, text, cap=480):
         """The facts worth keeping from an old tool result, extracted by code (no model call): for a file read what
         it defined, for tests what failed and why, for commands the exit code and errors, for requests the status."""
         lines = [ln.rstrip() for ln in text.splitlines() if ln.strip()]
@@ -2933,20 +2938,20 @@ class AgentEngine:
             span = f"lines {nums[0]}-{nums[-1]}" if nums else f"{len(lines)} lines"
             out = f"{args.get('path', '')} {span}" + (f"; defines {', '.join(dict.fromkeys(defs))}" if defs else "")
         elif name == "run_tests":
-            fails = [ln.strip() for ln in lines if ln.strip().startswith("FAILED ")][:3]
+            fails = [ln.strip()[:160] for ln in lines if ln.strip().startswith("FAILED ")][:5]
             out = first + ("; " + "; ".join(fails) if fails else "") + ("; " + errs[-1] if errs and not fails else "")
         elif name in ("powershell", "python_host"):
-            tail = [ln.strip()[:100] for ln in lines[1:]][-2:]
+            tail = [ln.strip()[:100] for ln in lines[1:]][-3:]
             out = first.split("  (cwd")[0] + ("; errors: " + " | ".join(errs) if errs else "") + \
                 ("; last output: " + " | ".join(tail) if tail else "")
         elif name == "bg_output":
             tail = [ln.strip()[:100] for ln in lines[1:]][-2:]
             out = first + ("; errors: " + " | ".join(errs) if errs else "") + ("; last: " + " | ".join(tail) if tail else "")
         elif name == "http_request":
-            body = " ".join(lines[1:])[:140]
+            body = " ".join(ln for ln in lines[1:] if ":" not in ln[:30] or ln.lstrip().startswith(("{", "[")))[:300]
             out = f"{args.get('method', 'GET')} {args.get('url', '')} -> {first}" + (f"; {body}" if body else "")
         elif name in ("search_text", "find_files", "list_dir"):
-            out = first + "; " + " | ".join(ln.strip() for ln in lines[1:4])
+            out = first + "; " + " | ".join(ln.strip()[:110] for ln in lines[1:7])
         elif name == "trace_call":
             res = [ln.strip() for ln in lines if ln.startswith(("==", "!!"))][-3:]
             out = " | ".join(res) or first
