@@ -2,7 +2,7 @@ import { Volume2, VolumeX } from "lucide-react"
 import { ImageCarousel } from "./ImageCarousel"
 import { speaker } from "@/lib/tts"
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
-import { ArrowDown, BookOpen, Lightbulb, CheckCircle2, ChevronRight, Loader2, ShieldAlert, XCircle, Compass, FileSpreadsheet, FileText, Image as ImageIcon, Presentation, Paperclip, ScanSearch, ShieldCheck } from "lucide-react"
+import { ArrowDown, BookOpen, Lightbulb, CheckCircle2, ChevronRight, CircleDot, Loader2, ShieldAlert, XCircle, Compass, FileSpreadsheet, FileText, Image as ImageIcon, Presentation, Paperclip, ScanSearch, ShieldCheck } from "lucide-react"
 import { Markdown, SCR_CLOSE, SCR_OPEN } from "./Markdown"
 import { ChangesCard, CompactedDivider, TaskDoneCard, ToolCard } from "./cards/ToolCards"
 import { useApp } from "@/lib/store"
@@ -412,7 +412,9 @@ function NotVerified({ msg }: { msg: Msg }) {
 }
 
 /** The one line that stands for a turn's work; click to see the steps. Open while the run is live, folded after. */
-function RunBlock({ turn, conv, live }: { turn: Turn; conv: Conv; live: boolean }) {
+/** `resting`: the ensō under the last output is showing (nothing arriving) — the run line holds still then, so
+ *  only one thing on screen says "working". */
+function RunBlock({ turn, conv, live, resting }: { turn: Turn; conv: Conv; live: boolean; resting?: boolean }) {
   const k = `${conv.id}:run:${turn.user?.index ?? turn.work[0]?.index ?? 0}`
   const toggled = useApp((s) => s.expanded[k])
   const toggle = useApp((s) => s.toggle)
@@ -427,7 +429,7 @@ function RunBlock({ turn, conv, live }: { turn: Turn; conv: Conv; live: boolean 
   const calls = st?.tool_calls ?? tools.length
   const err = !!turn.answer?.msg.error || turn.answer?.msg.content?.trim() === "(stopped)"
   const tone = live ? "info" : err ? "destructive" : failed ? "warning" : "success"
-  const Icon = live ? Loader2 : err ? XCircle : CheckCircle2
+  const Icon = live ? (resting ? CircleDot : Loader2) : err ? XCircle : CheckCircle2
   const parts: string[] = []
   if (live) parts.push(status || "Working")
   else parts.push(st?.seconds != null ? `Worked ${fmtDuration(st.seconds)}` : calls ? "Worked" : "Thought it through")
@@ -440,8 +442,8 @@ function RunBlock({ turn, conv, live }: { turn: Turn; conv: Conv; live: boolean 
     <div className="rounded-card">
       <button onClick={() => toggle(k)} aria-expanded={open} title={tip}
         className="group flex w-full items-center gap-2 rounded-card px-2 py-1.5 text-left text-caption text-muted-foreground transition-ui hover:bg-surface-1 hover:text-foreground">
-        <Icon data-tone={tone} className={cn("tone-text size-3.5 shrink-0", live && "animate-spin")} />
-        <span className={cn("min-w-0 truncate", live && "shimmer-text")}>{parts.join(" · ")}</span>
+        <Icon data-tone={tone} className={cn("tone-text size-3.5 shrink-0", live && !resting && "animate-spin")} />
+        <span className={cn("min-w-0 truncate", live && !resting && "shimmer-text")}>{parts.join(" · ")}</span>
         {failed > 0 && <span data-tone={err ? "destructive" : "warning"} className="tone-soft tone-text shrink-0 rounded-full px-1.5 text-meta">{failed} failed</span>}
         {drafts > 0 && <span className="shrink-0 rounded-full bg-surface-2 px-1.5 text-meta">{drafts} draft{drafts === 1 ? "" : "s"} revised</span>}
         <ChevronRight className={cn("ml-auto size-3.5 shrink-0 transition-transform", open && "rotate-90")} />
@@ -538,7 +540,7 @@ export function Transcript({ conv }: { conv: Conv }) {
             return (
               <div key={t.user?.index ?? `t${ti}`} className={cn("flex flex-col gap-(--gap-item)", ti > 0 && "mt-4")}>
                 {t.user && <Item msg={t.user.msg} conv={conv} index={t.user.index} />}
-                {showRun && !lean && <RunBlock turn={t} conv={conv} live={live} />}
+                {showRun && !lean && <RunBlock turn={t} conv={conv} live={live} resting={live && quiet} />}
                 {lean && t.work.map((e) => <Item key={e.index} msg={e.msg} conv={conv} index={e.index} />)}
                 {t.answer && <Item msg={t.answer.msg} conv={conv} index={t.answer.index} hideStats={showRun && !lean} />}
                 {t.note && <NotVerified msg={t.note.msg} />}
