@@ -1203,6 +1203,30 @@ def paging_through_a_file_is_not_the_same_attempt():
 
 
 @test
+def masking_keeps_earlier_pages_of_a_paged_file():
+    e = engine()
+    msgs, n = [], 0
+
+    def call(name, args, content):
+        nonlocal n
+        n += 1
+        msgs.append({"role": "assistant", "content": "", "tool_calls": [tc(name, args, f"c{n}")]})
+        msgs.append({"role": "tool", "tool_call_id": f"c{n}", "content": content})
+        return f"c{n}"
+
+    page = "\n".join(f"{i:>6}\tline {i} " + "x" * 40 for i in range(1, 60))
+    p1 = call("read_file", {"path": "C:/p/server.py"}, page)
+    p2 = call("read_file", {"path": "C:/p/server.py", "offset": 137}, page)
+    again = call("read_file", {"path": "C:/p/client.py"}, page)
+    call("read_file", {"path": "C:/p/client.py"}, page)                 # the same page again: the older copy goes
+    for i in range(20):
+        call("list_dir", {"path": f"C:/p/d{i}"}, "x" * 50)
+    stubs = e._stale_tool_stubs(msgs)
+    assert p1 not in stubs and p2 not in stubs, stubs                    # different pages of one file both stay
+    assert again in stubs, stubs
+
+
+@test
 def a_post_makes_the_same_get_a_new_question():
     e = engine()
     t = e.reg.by_name["http_request"]

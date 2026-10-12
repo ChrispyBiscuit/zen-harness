@@ -2874,7 +2874,9 @@ class AgentEngine:
             path = str(a.get("path") or a.get("file") or "")
             norm = os.path.abspath(path).lower() if path else ""
             if name in ("read_file", "read_document"):
-                return ("file", norm)
+                # the page is part of the key: reading page 3 of a file does not replace pages 1 and 2 (it did, so
+                # paging through a long file masked its first pages and forced re-reads); a write still replaces all
+                return ("file", norm, int(a.get("offset") or 1))
             if name in ("write_file", "edit_file", "undo_file"):
                 return ("write", norm)
             if name == "run_tests":
