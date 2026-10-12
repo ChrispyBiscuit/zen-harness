@@ -51,7 +51,10 @@ program exactly as the contract says (the same command-line arguments, endpoints
 contract, don't recall it. **Tests that need the program's server running:** call **add_server_test_helper** first
 and use its `serve([...'{port}'...])` — it starts the server on a free port, waits until it listens, fails at once
 with the server's output if it dies, and stops it afterwards; hand-written start/wait/stop code is where these tests
-hang. If you write your own
+hang. **Keep the layers out of most tests:** put the logic (validation, totals, storage) in plain functions and
+test those directly; only a few end-to-end tests go through a real server. A test that crosses a process, a thread,
+a socket or a lock is where a cause hides far from its symptom. A restart/persistence test starts the server again
+(a fresh port) with the same data file — reusing the port isn't what it tests. If you write your own
 runner, print the full traceback for every error (`traceback.print_exc()`), not just the message: an error without
 its file and line sends you looking in the wrong file.
 
@@ -105,6 +108,15 @@ If a fix fails twice, or you don't understand an error or a wrong behaviour, sto
   Windows; a 404 or response you didn't write means another process answered.
 - **bg_output** with `grep` ('Traceback|Error|GET|POST') and `new_only` — the server's log since your last look;
   log each request in the server (method, path, status) so you can see what actually arrived.
+- **Elsewhere during this run** — under a failing test run or command, the app lists what the OTHER processes and
+  threads did: a server thread that died, an error a request handler caught and turned into a 500, a port that
+  couldn't be opened, a locked file. When the failure shows up in one place (a test, a client), read this first: the
+  cause is usually there. bg_output adds the same for a background server.
+- **Multi-process pitfalls (Python):** `server.shutdown()` stops serving but keeps the port until `server_close()`;
+  a second server on a port still held fails (Windows lets two bind with SO_REUSEADDR and the wrong one answers);
+  `daemon_threads = True` for a threaded server in tests; a server thread's exception is only printed, never raised
+  in the test; bind `0.0.0.0` for the network, connect to `127.0.0.1`; several writers on one file need SQLite or a
+  single writer, not hand-made file locks.
 - **http_request** keeps cookies like a browser: log in once, then call protected routes.
 - python_sandbox is isolated (not on this PC): use http_request / python_host / powershell for anything local.
 **Windows:** `curl.exe` (plain `curl` is a PowerShell alias), the LAN IP from `Get-NetIPConfiguration` (not

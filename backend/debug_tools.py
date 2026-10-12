@@ -51,6 +51,8 @@ def _is_lib(path):
     p = (path or "").replace("\\", "/").lower()
     if not p or p.startswith(("<", "node:")) or "/node_modules/" in p or "site-packages" in p or "dist-packages" in p:
         return True
+    if p.endswith(("/zen_flight.py", "/sitecustomize.py")):     # the app's own hooks (flight.py, stackdump.py)
+        return True
     for base in {sys.base_prefix, sys.prefix, os.path.dirname(shutil.which("python") or "") or "~"}:
         b = base.replace("\\", "/").lower().rstrip("/")
         if b and p.startswith(b + "/lib/"):
@@ -91,13 +93,15 @@ def locate(text, cwd=None):
     e = _PYTEST_E.search(text)
     if e and _PYTEST_FRAME.search(text[:e.start()]):
         start = text.rfind("\n___", 0, e.start())             # the failing test's section header
-        frames = [(_resolve(m["f"], cwd), int(m["l"]), m["fn"]) for m in _PYTEST_FRAME.finditer(text, max(0, start), e.start())]
+        frames = [(_resolve(m["f"], cwd), int(m["l"]), m["fn"]) for m in _PYTEST_FRAME.finditer(text, max(0, start), e.start())
+                  if not str(m["f"]).replace("\\", "/").lower().endswith(("/zen_flight.py", "/sitecustomize.py"))]
         if frames:
             return e["e"].strip(), [f for f in frames if not _is_lib(f[0])] or frames[-1:]
     i = text.rfind(_PY_TB)
     if i >= 0:
         block = text[i:]
-        frames = [(_resolve(m["f"], cwd), int(m["l"]), (m["fn"] or "").strip()) for m in _PY_FRAME.finditer(block)]
+        frames = [(_resolve(m["f"], cwd), int(m["l"]), (m["fn"] or "").strip()) for m in _PY_FRAME.finditer(block)
+                  if not str(m["f"]).replace("\\", "/").lower().endswith(("/zen_flight.py", "/sitecustomize.py"))]
         after = block[block.rfind("File \""):] if frames else block
         exc = next((ln.strip() for ln in after.splitlines()[1:] if _EXC_LINE.match(ln.strip())), "")
         return exc, [f for f in frames if not _is_lib(f[0])] or frames[-1:]
@@ -351,8 +355,9 @@ def _lint_core(path, before=None):
 
 
 # ----------------------------------------------------------------------------- running processes
-def _stream(argv, cwd, timeout, c, env=None):
-    """Run a process, stream its output into the chat card, honour Stop -> (rc, text, seconds, why_stopped)."""
+def _stream(argv, cwd, timeout, c, env=None, flight_root=None):
+    """Run a process, stream its output into the chat card, honour Stop -> (rc, text, seconds, why_stopped).
+    flight_root: record every process and thread it starts (flight.py); the run folder is left on c._flight."""
     try:
         import stackdump
         e = stackdump.env()                  # unbuffered + stack dumps on request (see the timeout below)
@@ -361,6 +366,14 @@ def _stream(argv, cwd, timeout, c, env=None):
     e.update(HEADLESS_ENV)
     if env:
         e.update(env)
+    c._flight = None
+    if flight_root:
+        try:
+            import flight
+            add, c._flight = flight.new_run(flight_root)
+            e.update(add)
+        except Exception:
+            c._flight = None
     t0 = time.time()
     stuck_at = ""
     proc = subprocess.Popen(argv, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
@@ -439,7 +452,40 @@ def _stream(argv, cwd, timeout, c, env=None):
                 except OSError:
                     proc.kill()
     rc = proc.wait()
+    c._flight_pid = proc.pid
     return rc, "\n".join(out).strip("\n"), round(time.time() - t0, 1), why
+
+
+def _project_root(folder):
+    try:
+        import code_insight
+        r = code_insight.project_root(os.path.join(folder, "x"))
+    except Exception:
+        r = folder
+    return os.path.dirname(r) if os.path.basename(r).lower() in ("tests", "test") else r
+
+
+def flight_note(c, failed, clean=False):
+    """After a run: what happened elsewhere (when it failed) and the processes it left running (clean=True)."""
+    d = getattr(c, "_flight", None)
+    if not d:
+        return ""
+    note = ""
+    try:
+        import flight
+        if failed:
+            note += flight.summarize(d, skip_pid=getattr(c, "_flight_pid", None))
+        if clean:
+            protect = set()
+            try:
+                import bg_tasks
+                protect = {p.proc.pid for p in bg_tasks.MANAGER.procs.values() if p.proc is not None}
+            except Exception:
+                pass
+            note += flight.cleanup(d, protect)
+    except Exception:
+        pass
+    return note
 
 
 def run_tests(a, c, resolve, ToolError):
@@ -474,7 +520,8 @@ def run_tests(a, c, resolve, ToolError):
     c.display = {"type": "terminal", "shell": "tests", "cwd": folder, "command": " ".join(os.path.basename(x) if i == 0 else x
                                                                                           for i, x in enumerate(argv)),
                  "output": "", "exit": None}
-    rc, text, secs, why = _stream(argv, folder, timeout, c)
+    rc, text, secs, why = _stream(argv, folder, timeout, c, flight_root=_project_root(folder))
+    elsewhere = flight_note(c, failed=(rc != 0 or bool(why)), clean=True)
     c.display.update(output=clip_ht(text, 30000), exit=rc, seconds=secs, stopped=why)
     summary = ""
     if fw == "pytest":
@@ -491,7 +538,7 @@ def run_tests(a, c, resolve, ToolError):
     head = f"tests: {'PASSED' if rc == 0 else 'FAILED' if rc == 1 else f'exit code {rc}'}" + (f" — {summary}" if summary else "")
     body = enrich(text, folder)
     return clip_ht(f"{head}  ({secs}s, {' '.join(argv[1:4]) if fw != 'npm' else 'npm test'})\n{body}"
-                   + (f"\n[{why}; the process was killed]" if why else ""))
+                   + (f"\n[{why}; the process was killed]" if why else ""), 7600 - len(elsewhere)) + elsewhere
 
 
 _DEBUG_WRAPPER = r'''
@@ -610,7 +657,8 @@ def debug_run(a, c, resolve, ToolError):
                  "command": f"debug_run {os.path.basename(script)}" + (f"  probe {a['probe']}" if probe_file else ""),
                  "output": "", "exit": None}
     try:
-        rc, text, secs, why = _stream([*py, "-X", "faulthandler", wrapper], folder, timeout, c)
+        rc, text, secs, why = _stream([*py, "-X", "faulthandler", wrapper], folder, timeout, c,
+                                      flight_root=_project_root(folder))
     finally:
         try:
             os.remove(wrapper)
@@ -618,4 +666,6 @@ def debug_run(a, c, resolve, ToolError):
             pass
     text = _drop_wrapper_frames(text.replace(wrapper, "<debug_run>"))
     c.display.update(output=clip_ht(text, 30000), exit=rc, seconds=secs, stopped=why)
-    return clip_ht(f"exit code {rc}  ({secs}s)\n{enrich(text, folder)}" + (f"\n[{why}; the process was killed]" if why else ""))
+    elsewhere = flight_note(c, failed=(rc != 0 or bool(why)))
+    return clip_ht(f"exit code {rc}  ({secs}s)\n{enrich(text, folder)}" + (f"\n[{why}; the process was killed]" if why else ""),
+                   7600 - len(elsewhere)) + elsewhere

@@ -3281,6 +3281,13 @@ class AgentEngine:
                 line += (f"; best so far {'(' + h['green_partial'] + ')' if h.get('green_partial') else 'all passing'} at "
                          f"{h.get('green_t')}, {h.get('green_edits', 0)} code edit(s) since (changes_since_green)")
             out.append(line)
+            if lt.get("failed") and h.get("same_fail", 0) >= 2:
+                # a failure that survived two fixes is rarely where it shows: trace it instead of editing again
+                out.append(f"TRACE, DON'T GUESS: the same test(s) failed {h['same_fail'] + 1} runs in a row, so the "
+                           f"cause is probably not where the failure shows. List the layers the failing call crosses "
+                           f"(test → client → server process/thread → storage/OS), check what each one actually did "
+                           f"('Elsewhere during this run' under the test result, bg_output, debug_run with a probe), "
+                           f"and find the first layer that did something unexpected — then edit that.")
             if lt.get("passed") and not lt.get("failed") and h.get("green") is not None and not h.get("green_edits"):
                 # bonsai8 spent 70 min re-proving a green build: a smoke script, hand probes, a new feature to test a
                 # month filter, and re-runs after a compaction hid the earlier results

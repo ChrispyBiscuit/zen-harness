@@ -27,6 +27,8 @@ SOURCE = r'''"""serve_helper — start a program for a test, wait until it liste
 - srv.url is "http://127.0.0.1:<port>"; srv.get / srv.post / srv.request return (status, body) where body is the
   parsed JSON, or the text when it isn't JSON. HTTP errors are returned too, not raised.
 - srv.output() is everything the server printed so far (useful in an assert message).
+- Restart / persistence: leave the first `with` block (the server stops), then start a second serve() with the same
+  data file (pass it on the command line or in env=...); it gets a fresh port — reusing the port isn't the point.
 - "python" as the first word of a command means the Python running the tests.
 """
 import contextlib

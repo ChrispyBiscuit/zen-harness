@@ -514,6 +514,14 @@ def t_write_file(a, c):
                      f"is written, which is much faster.")
     lt = (_hist(c) or {}).get("last_tests") or {}
     base = os.path.basename(p).lower()
+    if ((base.startswith("test_") or base.endswith("_test.py")) and "serve_helper" not in new
+            and re.search(r"serve_forever|HTTPServer\(|ThreadingHTTPServer|TCPServer\(|socketserver\.|"
+                          r"Popen\([^)]{0,200}(server|app)\.py", new)):
+        # bonsai8 and bonsai9 each lost ~50 min to hand-written start/stop/restart code in their tests
+        big_note += ("\nNote: these tests start a server themselves — that start/wait/stop/restart code is where "
+                     "server tests hang and break. Test the logic by calling your functions directly, and run the "
+                     "few end-to-end tests through add_server_test_helper's serve() (each start gets a fresh port; a "
+                     "restart test starts again with the same data file).")
     if (not existed and re.search(r"\.(py|js|ts|mjs|ps1|sh)$", base)
             and re.search(r"smoke|e2e|end_to_end|verif|check|probe|test", base)
             and not (base.startswith("test_") or re.search(r"^\s*(def|async def) test_|^\s*(test|it)\(", new, re.M))
@@ -1067,8 +1075,15 @@ def t_powershell(a, c):
     c.display = {"type": "terminal", "shell": shell, "cwd": cwd, "command": cmd,
                  "output": "", "exit": None}
     t0 = time.time()
+    fl_env, fl_dir = _proc_env(), None
+    try:
+        import flight
+        add, fl_dir = flight.new_run(cwd)
+        fl_env.update(add)
+    except Exception:
+        fl_dir = None
     proc = subprocess.Popen(argv, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT, creationflags=0x08000000, env=_proc_env())
+                            stderr=subprocess.STDOUT, creationflags=0x08000000, env=fl_env)
     q = queue.Queue()
 
     def pump():
@@ -1185,6 +1200,12 @@ def t_powershell(a, c):
                     "(no timeout; it runs until they close it).") + "]")
     elif why_stopped:
         note += f"\n[{why_stopped}; the process was killed]"
+    if fl_dir and (rc not in (0, None) or why_stopped):
+        try:
+            import flight
+            note += flight.summarize(fl_dir)
+        except Exception:
+            pass
     c.display.update(output=clip(text, 30000), exit=rc, cwd_after=c.cwd or cwd,
                      seconds=round(time.time() - t0, 1), stopped=why_stopped)
     if not text.strip():
@@ -3151,8 +3172,18 @@ def t_bg_output(a, c):
         lines = [ln for ln in lines if rx.search(ln)]
     shown = lines[-n:]
     what = ("new lines" if a.get("new_only") else "lines") + (f" matching /{a['grep']}/" if a.get("grep") else "")
+    extra = ""
+    if getattr(p, "flight", None):
+        try:
+            import flight
+            n_ev = len(flight.events(p.flight))
+            if n_ev > getattr(p, "_flight_seen", 0):
+                p._flight_seen = n_ev
+                extra = flight.summarize(p.flight)
+        except Exception:
+            pass
     return (f"{p.id} '{p.name}': {state}, {total} lines of output so far. Last {len(shown)} {what}:\n"
-            + ("\n".join(shown) or "(none)"))
+            + ("\n".join(shown) or "(none)") + extra)
 
 
 def t_bg_stop(a, c):
@@ -4017,8 +4048,9 @@ BUILTIN = [
      t_run_tests),
     ("add_server_test_helper", WRITE, "Write a tested helper into the project's tests folder for tests that need the "
      "project's server running: serve([...'{port}'...]) starts it on a free port, waits until it listens, fails at "
-     "once with the server's output if it dies, and stops it after the test. Use it instead of hand-written "
-     "start/wait/stop code. path = the tests folder (default: tests).", _obj({"path": S}),
+     "once with the server's output if it dies, and stops it after the test. A restart/persistence test: start it "
+     "again (a fresh port) with the same data file. Use it instead of hand-written start/wait/stop code. "
+     "path = the tests folder (default: tests).", _obj({"path": S}),
      t_add_server_test_helper),
     ("debug_run", EXEC, "Run a Python script as a debugger would. On a crash: the traceback plus the LOCAL VARIABLES "
      "of the failing frame (post-mortem). With probe='file.py:LINE': prints the local variables (and any 'watch' "
@@ -4492,6 +4524,8 @@ class Registry:
                            "failing": ci.failing_names(text)}
                     _hist(self.ctx)["last_tests"] = cur
                     text = str(text) + ci.regression(prev, cur)
+                    same = set(cur["failing"]) & set((prev or {}).get("failing") or [])
+                    _hist(self.ctx)["same_fail"] = (_hist(self.ctx).get("same_fail", 0) + 1) if (f_ and same) else 0
                     tick = _tick_on_green(self.ctx, p_, f_)
                     if tick:
                         text = str(text) + tick

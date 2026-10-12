@@ -35,6 +35,11 @@ if _d:
                 pass
             _t.sleep(0.25)
     _th.Thread(target=_zen_watch, daemon=True, name="zen-stackdump").start()
+if _os.environ.get("ZEN_FLIGHT_DIR"):
+    try:
+        import zen_flight  # noqa: F401  the flight recorder (flight.py): what every process and thread did
+    except Exception:
+        pass
 '''
 
 
@@ -47,6 +52,11 @@ def _ensure_hook():
             with open(p, "w", encoding="utf-8") as f:
                 f.write(HOOK)
     except OSError:
+        pass
+    try:
+        import flight
+        flight.ensure(HOOK_DIR)
+    except Exception:
         pass
 
 

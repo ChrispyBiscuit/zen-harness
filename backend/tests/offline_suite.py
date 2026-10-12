@@ -1738,6 +1738,35 @@ def near_json_checklist_is_repaired_not_saved_as_one_title():
         assert "Send it again" in str(ex)
 
 
+@test
+def same_failure_twice_switches_to_tracing():
+    d = tmpdir("trace")
+    e = engine(d)
+    f = os.path.join(d, "app.py")
+    open(f, "w").write("x = 1\n")
+    e.ctx.changed[f] = "created"
+    e._project = True
+    h = at._hist(e.ctx)
+    h["last_tests"] = {"passed": 9, "failed": 2, "t": "02:30:00", "cmd": "tests", "failing": ["t::a6"]}
+    h["same_fail"] = 1
+    assert "TRACE, DON'T GUESS" not in e._work_state()
+    h["same_fail"] = 2
+    assert "TRACE, DON'T GUESS" in e._work_state()
+
+
+@test
+def a_test_that_starts_its_own_server_gets_a_note():
+    d = tmpdir("tsrv")
+    c = at.Ctx([d])
+    src = ("import threading\nfrom http.server import ThreadingHTTPServer\nimport server\n\n"
+           "def test_a():\n    srv = ThreadingHTTPServer(('127.0.0.1', 0), server.H)\n"
+           "    threading.Thread(target=srv.serve_forever).start()\n")
+    out = at.t_write_file({"path": os.path.join(d, "test_api.py"), "content": src}, c)
+    assert "these tests start a server themselves" in out, out
+    out = at.t_write_file({"path": os.path.join(d, "test_logic.py"), "content": "def test_b():\n    assert 1\n"}, c)
+    assert "start a server" not in out
+
+
 def main():
     t_all = time.time()
     for fn in TESTS:

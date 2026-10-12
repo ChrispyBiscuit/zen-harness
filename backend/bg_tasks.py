@@ -95,10 +95,17 @@ class BgManager:
         fd, p.script = tempfile.mkstemp(suffix=".ps1", prefix="agentbg_")
         with os.fdopen(fd, "w", encoding="utf-8-sig") as f:
             f.write(PS_HEAD + command + "\n")
+        env, p.flight = _proc_env(), None
+        try:
+            import flight                 # what its threads and request handlers do (bg_output reports it)
+            add, p.flight = flight.new_run(cwd)
+            env.update(add)
+        except Exception:
+            p.flight = None
         p.proc = subprocess.Popen(
             ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", p.script],
             cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            creationflags=0x08000000, env=_proc_env())
+            creationflags=0x08000000, env=env)
         threading.Thread(target=self._pump, args=(p,), daemon=True).start()
         threading.Thread(target=self._track, args=(p,), daemon=True).start()
         self._notify("started", p)
