@@ -2799,6 +2799,11 @@ class AgentEngine:
                          "just wrote an approach, turn it into the checklist. Do nothing else until it exists."
                          + (" (Your previous checklist is shown below for reference; replace it unless this "
                             "request just continues it.)" if t else ""))
+        if (self.reg is not None and self._role != "exec" and not self._basic
+                and (think_max(self.cfg) == 0 or not getattr(self, "_think_step", True))):
+            # no thinking shown between calls: without a sentence the user sees tool cards appear with no idea why
+            parts.append("Thinking is off for this step: begin your reply with one or two short sentences for the "
+                         "user — what you are about to do and why — then make the tool call(s).")
         if t and self._role != "exec":
             try:
                 import obligations
