@@ -6,6 +6,7 @@ import { ArrowDown, BookOpen, Lightbulb, CheckCircle2, ChevronRight, Loader2, Sh
 import { Markdown, SCR_CLOSE, SCR_OPEN } from "./Markdown"
 import { ChangesCard, CompactedDivider, TaskDoneCard, ToolCard } from "./cards/ToolCards"
 import { useApp } from "@/lib/store"
+import { LogoMark } from "./Logo"
 import type { Attachment, Conv, Msg, TurnStats } from "@/lib/types"
 import { fmtBytes } from "@/lib/paths"
 import { cn } from "@/lib/utils"
@@ -454,6 +455,22 @@ function RunBlock({ turn, conv, live }: { turn: Turn; conv: Conv; live: boolean 
   )
 }
 
+/** Under the last output while the model works but nothing is arriving (reading a long prompt, thinking it doesn't
+ *  stream, a slow tool): without it a quiet run looks hung. The status line (e.g. "12,000 / 40,000 tokens read")
+ *  goes beside it when there is one. */
+function Meditating({ status }: { status?: string }) {
+  const detail = status && /\d/.test(status) ? status : ""          // only a specific one ("12,000 / 40,000 tokens read")
+  return (
+    <div role="status" aria-live="polite" className="enter-fade flex items-center gap-2 text-ui text-muted-foreground">
+      <LogoMark bold className="zen-meditate size-5" />
+      <span className="shimmer-text">Meditating</span>
+      {detail && <span className="min-w-0 truncate text-caption">· {detail}</span>}
+    </div>
+  )
+}
+
+const QUIET_MS = 1200                 // no new output for this long while running -> show the ensō
+
 export function Transcript({ conv }: { conv: Conv }) {
   const ref = useRef<HTMLDivElement>(null)
   const content = useRef<HTMLDivElement>(null)
@@ -485,8 +502,16 @@ export function Transcript({ conv }: { conv: Conv }) {
   }, [conv.id])
 
   const msgs = conv.messages
-  const lastIsLive = msgs.length > 0 && msgs[msgs.length - 1].streaming
   const turns = useMemo(() => toTurns(msgs, !!running), [msgs, running])
+  // every streamed chunk (text, thinking, a tool call being written, a result) replaces the messages array, so a
+  // quiet spell is simply "the array hasn't changed for QUIET_MS"
+  const [quiet, setQuiet] = useState(false)
+  useEffect(() => {
+    setQuiet(false)
+    if (!running) return
+    const t = window.setTimeout(() => setQuiet(true), QUIET_MS)
+    return () => window.clearTimeout(t)
+  }, [msgs, running])
   return (
     <div className="relative min-h-0 flex-1">
       <div ref={ref} className="h-full overflow-y-auto"
@@ -521,12 +546,7 @@ export function Transcript({ conv }: { conv: Conv }) {
               </div>
             )
           })}
-          {running && !lastIsLive && !turns[turns.length - 1]?.work.length && (     // before the first step: the run line takes over after
-            <div className="flex items-center gap-2 text-ui text-muted-foreground">
-              <span className="relative flex size-2"><span className="absolute inline-flex size-full animate-ping rounded-full bg-info/60" /><span className="relative inline-flex size-2 rounded-full bg-info" /></span>
-              <span className="shimmer-text">{status || "Working"}</span>
-            </div>
-          )}
+          {running && quiet && <Meditating status={status} />}
         </div>
       </div>
       {showJump && (

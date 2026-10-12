@@ -310,6 +310,10 @@
 .prose-chat hr { border-color: var(--border); margin: 1.5em 0; }
 .prose-chat strong { font-weight: 600; color: var(--foreground); }
 @keyframes shimmer { 0% { background-position: -200% 0 } 100% { background-position: 200% 0 } }
+/* the model is working but nothing is arriving yet (reading the prompt, a long tool): a slowly turning ensō that
+   breathes. Reduced motion: the global rule above stops it after one frame. */
+@keyframes zen-meditate { 0% { transform: rotate(0deg); opacity: 0.55 } 50% { opacity: 1 } 100% { transform: rotate(360deg); opacity: 0.55 } }
+.zen-meditate { animation: zen-meditate 3.2s linear infinite; transform-origin: 50% 50%; }
 .shimmer-text { background: linear-gradient(90deg, var(--muted-foreground) 25%, var(--foreground) 50%, var(--muted-foreground) 75%);
   background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: shimmer 2.2s linear infinite; }
 
