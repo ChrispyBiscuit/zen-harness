@@ -1339,6 +1339,20 @@ def layered_prompt_and_brief_docs_follow_the_loaded_groups():
 
 
 @test
+def xml_style_tool_arguments_are_coerced_to_their_types():
+    # Qwen-style XML tool calls deliver lists as JSON text: a whole milestone list became one milestone
+    reg = at.Registry(at.Ctx([tmpdir("co")]), None, None)
+    a = reg.normalize_args("update_tracker", {"new": "True", "goal": "g", "notes": "one note",
+                                              "milestones": '[{"title": "Research + PRD"}, {"title": "Build"}]'})
+    assert a["new"] is True and a["notes"] == ["one note"] and [m["title"] for m in a["milestones"]] == ["Research + PRD", "Build"]
+    assert "0/2 done" in at.t_update_tracker(a, reg.ctx)
+    py = reg.normalize_args("update_tracker", {"updates": "[{'id': '1', 'status': 'done'}]"})   # Python-style text
+    assert py["updates"] == [{"id": "1", "status": "done"}]
+    keep = reg.normalize_args("write_file", {"path": "a.py", "content": "[1, 2]"})            # strings stay strings
+    assert keep["content"] == "[1, 2]"
+
+
+@test
 def hesitation_words_are_capitalised_sentence_starts_only():
     import llama_local as ll
     words = [w.strip() for w in ll.HESITATION_WORDS]

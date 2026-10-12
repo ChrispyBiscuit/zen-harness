@@ -4103,6 +4103,45 @@ _HISTORY_STUB = re.compile(r"\[\d[\d,]* chars omitted [—-]+ already applied")
 _STUB_TOOLS = {"write_file", "edit_file", "run_python", "run_command", "write_artifact"}
 
 
+def _coerce(v, spec):
+    """A tool argument as its declared type. Models that write tool calls as XML (Qwen-style
+    <parameter=milestones>[...]</parameter>) deliver lists and objects as JSON *text*: update_tracker saved a
+    whole milestone list as one milestone titled '[{"title": ...'. Also "True"/"false" and number strings."""
+    want = spec.get("type")
+    if not isinstance(v, str) or not want or want == "string":
+        return v
+    txt = v.strip()
+    if want in ("array", "object"):
+        if txt[:1] in "[{":
+            try:
+                got = json.loads(txt)
+            except ValueError:
+                try:
+                    import ast
+                    got = ast.literal_eval(txt)            # Python-style: True, single quotes
+                except (ValueError, SyntaxError):
+                    return v
+            if isinstance(got, (list if want == "array" else dict)):
+                return got
+            return v
+        if want == "array" and ((spec.get("items") or {}).get("type") in (None, "string")) and txt:
+            return [txt]                                   # one note / one decision given as plain text
+        return v
+    if want == "boolean" and txt.lower() in ("true", "false", "yes", "no", "1", "0"):
+        return txt.lower() in ("true", "yes", "1")
+    if want == "integer":
+        try:
+            return int(float(txt))
+        except ValueError:
+            return v
+    if want == "number":
+        try:
+            return float(txt)
+        except ValueError:
+            return v
+    return v
+
+
 class Registry:
     def __init__(self, ctx, mcp=None, enabled=None, screen=False, delegate=False, advisor=False, fanout=False):
         """screen: offer the screen/mouse/keyboard tools (otherwise only enable_screen_control).
@@ -4186,10 +4225,13 @@ class Registry:
         if not isinstance(args, dict):
             return args
         t = self.by_name.get(name)
-        props = set(((t or {}).get("parameters") or {}).get("properties") or {})
+        schema = ((t or {}).get("parameters") or {}).get("properties") or {}
+        props = set(schema)
         out = {}
         for k, v in args.items():
             out.setdefault(ARG_ALIASES.get(k, k) if k not in props else k, v)
+        for k, v in list(out.items()):
+            out[k] = _coerce(v, (schema.get(k) or {}))
         return out
 
     def get(self, name):
