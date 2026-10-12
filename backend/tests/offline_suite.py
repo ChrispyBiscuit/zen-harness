@@ -1339,6 +1339,14 @@ def layered_prompt_and_brief_docs_follow_the_loaded_groups():
 
 
 @test
+def hesitation_words_are_capitalised_sentence_starts_only():
+    import llama_local as ll
+    words = [w.strip() for w in ll.HESITATION_WORDS]
+    assert all(w[0].isupper() for w in words), words                  # never 'wait' (wait_port, await) or 'hmm'
+    assert {"Wait", "Hmm", "Alternatively", "Actually"} == set(words)
+
+
+@test
 def settled_decisions_stay_in_view():
     c = at.Ctx([tmpdir("dec")])
     at.t_update_tracker({"new": True, "goal": "fix the tracker", "milestones": [{"title": "fix tests"}]}, c)

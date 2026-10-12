@@ -6104,6 +6104,12 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
             body["temperature"] = float(c.get("temperature", 0.6))
         if be == "llama" and not executor:
             body.update(_sampling(c))
+            pen = float(c.get("hesitation_penalty") or 0)
+            if pen:
+                ids = llama_local.hesitation_ids()
+                if ids:
+                    # mild: makes the model less likely to start another "Wait…/Hmm…" round, never forbids it
+                    body["logit_bias"] = {str(i): -abs(pen) for i in ids}
         if be == "llama" and (executor or no_think or not self._thinking_now()):
             body["chat_template_kwargs"] = {"enable_thinking": False}
             if c.get("reasoning_off_field"):

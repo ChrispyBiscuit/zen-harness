@@ -574,6 +574,33 @@ def _find_whitespace_ids(slot="main"):
     return sorted(ids)
 
 
+# Sentence-starting hesitation words. Low-bit reasoning models overthink: the right answer appears mid-thought and is
+# abandoned at "Wait…"; a mild penalty on such words cut thinking 12-23% and raised a 3-bit model's accuracy (2026,
+# plans/concise-reasoning-research.md). llama.cpp can't limit a bias to the thinking, so only capitalised,
+# sentence-start forms that code almost never uses — not 'wait' (wait_port, await).
+HESITATION_WORDS = ("Wait", " Wait", "Hmm", " Hmm", "Alternatively", " Alternatively", "Actually", " Actually")
+
+
+def _find_token_ids(words, slot="main"):
+    """Token ids of the words that are a single token for this model."""
+    ids = set()
+    for s in words:
+        try:
+            body = json.dumps({"content": s, "add_special": False}).encode()
+            req = urllib.request.Request(base_url(slot) + "/tokenize", data=body,
+                                         headers={"Content-Type": "application/json"})
+            toks = json.loads(urllib.request.urlopen(req, timeout=10).read()).get("tokens", [])
+            if len(toks) == 1:
+                ids.add(int(toks[0]))
+        except Exception:
+            continue
+    return sorted(ids)
+
+
+def hesitation_ids(slot="main"):
+    return (_slots.get(slot) or {}).get("hes_ids") or []
+
+
 def whitespace_ids():
     return _state.get("ws_ids") or []
 
@@ -674,6 +701,7 @@ def ensure(model_name, parallel=2, num_ctx=10000, status=lambda s: None, extra_a
         while time.time() - t0 < (600 if big else 240):          # a 19 GB model takes a while
             if _healthy(slot):
                 st["ws_ids"] = _find_whitespace_ids(slot)
+                st["hes_ids"] = _find_token_ids(HESITATION_WORDS, slot)
                 return base_url(slot)
             if proc.poll() is not None:
                 break
