@@ -3071,15 +3071,38 @@ class AgentEngine:
             root = os.path.dirname(files[0])
         out = [f"WORK STATE (rebuilt by the app from the real files, tests and processes just now — trust it over "
                f"older copies above). Project folder: {root}"]
+        code_map_block = ""
         try:
             import repomap
-            rows = []
+            # the system map (same budget as the old per-file list): every file with its size, then the definitions
+            # that matter most for the files in play, ranked across the project by who uses what (PageRank)
+            sizes = []
             for p in files:
                 n = sum(1 for _ in open(p, encoding="utf-8", errors="replace"))
-                defs = [(d.get("parent") + "." if d.get("parent") else "") + d.get("name", "") for d in repomap.outline(p)]
-                rows.append(f"- {os.path.relpath(p, root)} ({n} lines): " + (", ".join(defs[:14]) or "-")
-                            + (" …" if len(defs) > 14 else ""))
-            out.append("Files:\n" + "\n".join(rows))
+                sizes.append(f"{os.path.relpath(p, root)} ({n})")
+            out.append("Files (lines): " + ", ".join(sizes))
+            focus = [os.path.relpath(p, root) for p in files]
+            code_map = repomap.build_map(root, focus_files=focus, budget_tokens=550)
+            if code_map:                                 # appended last, in whatever room the rest leaves
+                code_map_block = "Code map (line: signature — the most connected definitions first):\n" + code_map
+            else:
+                raise ValueError("no map")
+        except Exception:
+            try:
+                import repomap
+                rows = []
+                for p in files:
+                    defs = [(d.get("parent") + "." if d.get("parent") else "") + d.get("name", "")
+                            for d in repomap.outline(p)]
+                    rows.append(f"- {os.path.relpath(p, root)}: " + (", ".join(defs[:14]) or "-"))
+                out.append("Files:\n" + "\n".join(rows))
+            except Exception:
+                pass
+        try:
+            import code_insight as ci
+            tmap = ci.tests_map(root)
+            if tmap:
+                out.append("Tests cover: " + tmap)
         except Exception:
             pass
         contract = self._contract_lines(root)
@@ -3108,6 +3131,16 @@ class AgentEngine:
             out.append(f"Context map (turning points + everything condensed, with ids): {cmap} — read it before "
                        f"re-deriving something; history_search(entry='E12') restores an item.")
         text = "\n".join(out)
+        if code_map_block:                               # the map fills the remaining room, cut at whole lines
+            room = 3990 - len(text)
+            lines, used = [], 0
+            for ln in code_map_block.split("\n"):
+                if used + len(ln) + 1 > room:
+                    break
+                lines.append(ln)
+                used += len(ln) + 1
+            if len(lines) > 1:
+                text += "\n" + "\n".join(lines)
         return text[:4000]
 
     def _exec_history(self):

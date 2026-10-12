@@ -1765,6 +1765,12 @@ def t_update_tracker(a, c):
             if str(n).strip():
                 t["notes"].append(f"{time.strftime('%H:%M')} {str(n).strip()[:500]}")
         t["notes"] = t["notes"][-60:]
+    lt = (_hist(c) or {}).get("last_tests") or {}
+    done_now = [u.get("id") for u in (a.get("updates") or []) if isinstance(u, dict)
+                and str(u.get("status") or "").lower() == "done"]
+    done_note = (f"\nNote: you marked {', '.join(map(str, done_now))} done, but the last test run "
+                       f"({lt.get('t')}) had {lt.get('failed')} failing test(s) — make sure none of them belong to it."
+                       if done_now and lt.get("failed") else "")
     dec = a.get("decisions")
     if isinstance(dec, str):
         dec = [dec]
@@ -1797,7 +1803,8 @@ def t_update_tracker(a, c):
         msg += (f". But your next step ('{t['next'][:120]}') is work the checklist doesn't contain — add the "
                 f"remaining milestones now (update_tracker with milestones=[...], each with subtasks and a "
                 f"done_when you will test), so the plan covers the whole task.")
-    return ("(Next time send only 'updates', 'notes' and 'next' — re-sending the whole checklist takes long to write. Or add progress='1.2 done' to your next tool call.) " if resent else "") + msg
+    return (("(Next time send only 'updates', 'notes' and 'next' — re-sending the whole checklist takes long to write. Or add progress='1.2 done' to your next tool call.) " if resent else "") + msg
+            + done_note)
 
 
 def _mem():
@@ -4293,8 +4300,13 @@ class Registry:
             if name == "run_tests" or (name in ("powershell", "python_host") and re.search(r"test|pytest|unittest", cmd_blob)):
                 p_, f_ = test_counts(str(text))
                 if p_ or f_:                                     # the last test run, for the work-state panel
-                    _hist(self.ctx)["last_tests"] = {"passed": p_, "failed": f_, "t": time.strftime("%H:%M:%S"),
-                                                     "cmd": str(args.get("command") or args.get("path") or name)[:80]}
+                    import code_insight as ci
+                    prev = _hist(self.ctx).get("last_tests")
+                    cur = {"passed": p_, "failed": f_, "t": time.strftime("%H:%M:%S"),
+                           "cmd": str(args.get("command") or args.get("path") or name)[:80],
+                           "failing": ci.failing_names(text)}
+                    _hist(self.ctx)["last_tests"] = cur
+                    text = str(text) + ci.regression(prev, cur)
         except Exception:
             pass
         text = self._debug_aids(name, args, str(text))
@@ -4314,7 +4326,15 @@ class Registry:
                 p = self.ctx.resolve(args.get("path"))
                 d = getattr(self.ctx, "display", None) or {}
                 bk = d.get("backup") if d.get("type") == "diff" and d.get("path") == p else None
-                return text + dbg.lint_file(p, before=bk)        # with the backup: only problems NEW in this change
+                out = text + dbg.lint_file(p, before=bk)        # with the backup: only problems NEW in this change
+                try:
+                    import code_insight as ci
+                    old = open(bk, encoding="utf-8", errors="replace").read() if bk and os.path.isfile(bk) else ""
+                    new = open(p, encoding="utf-8", errors="replace").read() if os.path.isfile(p) else ""
+                    out += ci.signature_impact(p, old, new) + ci.contract_drift(p)
+                except Exception as e:
+                    print("code insight failed:", repr(e))
+                return out
         except Exception as e:                              # a helper must never break the tool itself
             print("debug aids failed:", repr(e))
         return text
