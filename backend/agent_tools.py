@@ -4284,7 +4284,7 @@ class Registry:
     def _save_full(self, name, text):
         """The whole of a long result in the chat's results folder -> its path ('' if it could not be saved)."""
         conv = getattr(self.ctx, "conv_id", None) or "misc"
-        base = os.environ.get("LWS_DATA_DIR") or APP_DIR
+        base = paths.data_dir()
         folder = os.path.join(base, "agent_attachments", _safe_name(conv), "results")
         try:
             os.makedirs(folder, exist_ok=True)
