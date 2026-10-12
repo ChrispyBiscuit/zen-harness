@@ -1286,6 +1286,18 @@ def contract_is_pinned_from_every_contract_section_and_while_reading():
 
 
 @test
+def compaction_waits_until_the_reply_would_not_fit():
+    e = engine(num_ctx=61440)
+    assert e.context_budget() == 61440 - 8192                      # was 75% (46,080): compacting is lossy
+    e.cfg["num_ctx"] = 131072
+    assert e.context_budget() == 131072 - 8192
+    e.cfg["num_ctx"] = 20480
+    assert e.context_budget() == 15360                              # small contexts: never below 75%
+    e.cfg["compact_at"] = 0.6
+    assert e.context_budget() == int(20480 * 0.6)                   # an explicit setting still wins
+
+
+@test
 def a_long_single_code_write_gets_a_note():
     d = tmpdir("big")
     reg = at.Registry(at.Ctx([d]), None, None)

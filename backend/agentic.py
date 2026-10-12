@@ -5034,8 +5034,16 @@ class AgentEngine:
         self.emit("context", used=int(used if used is not None else self._history_tokens()),
                   max=int(self.cfg.get("num_ctx") or 16384), compact=self.context_budget())
 
+    REPLY_RESERVE = 8192            # room kept for the next reply: up to 4K thinking + a file write
+
     def context_budget(self):
-        return int(int(self.cfg.get("num_ctx") or 16384) * float(self.cfg.get("compact_at") or 0.75))
+        """Where the history gets compacted. Compacting loses detail, and with a 60K context it fired at 75% (46K)
+        mid-task; now it waits until the history plus room for the next reply would no longer fit (53K of 60K, 120K
+        of 128K). A compact_at setting (a fraction) still wins."""
+        n = int(self.cfg.get("num_ctx") or 16384)
+        if self.cfg.get("compact_at"):
+            return int(n * float(self.cfg["compact_at"]))
+        return max(int(n * 0.75), n - self.REPLY_RESERVE)
 
     def _history_tokens(self):
         fixed = _est_tokens([{"role": "system", "content": self.system_prompt()}]) + \
