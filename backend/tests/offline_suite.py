@@ -1499,6 +1499,102 @@ def each_model_call_logs_where_its_time_went():
     assert r["calls"] == ["list_dir"], r
 
 
+@test
+def prompt_opening_stays_identical_through_a_run():
+    """The server can only reuse its cache up to the first change (on a hybrid model: up to a checkpoint, usually
+    none that early). A `cd`, the workspace being created and the date turning used to change the system prompt."""
+    root = tmpdir("cache")
+    e = engine(root, workspace_root=os.path.join(root, "Zen Harness"))
+    e.turn = {"steps": 1, "today": "Sunday 11 October 2026"}
+    e._ensure_workspace("build an app")
+    first = e.system_prompt()
+    sub = os.path.join(root, "proj")
+    os.makedirs(sub)
+    e.ctx.cwd = sub                                        # what powershell's `cd` does
+    os.makedirs(e.ctx.workspace, exist_ok=True)            # the workspace gets created on first use
+    real = agentic.time.strftime
+    agentic.time.strftime = lambda fmt, *a: "Monday 12 October 2026" if "%A" in fmt else real(fmt, *a)
+    try:
+        assert e.system_prompt() == first, "the system prompt changed mid-request"
+    finally:
+        agentic.time.strftime = real
+    r = e._reminder()
+    assert r and sub in r["content"], "the working folder belongs in the end-of-prompt reminder"
+
+
+@test
+def thinking_off_keeps_the_prompt_opening_when_the_template_moves_it():
+    import urllib.request as ur
+    e = engine(backend="llama")
+    e.base = "http://127.0.0.1:9"
+    e.turn = {"steps": 1}
+    e._think_step = False                                   # a step that shouldn't think
+    sent = []
+
+    class Resp:
+        def __init__(self, body):
+            self.body = body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return self.body
+
+        def __iter__(self):
+            return iter([b'data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}', b"data: [DONE]"])
+
+    def fake(req, *a, **k):
+        body = json.loads(req.data.decode())
+        if req.full_url.endswith("/apply-template"):           # a Bonsai-like template: the header follows the flag
+            on = (body.get("chat_template_kwargs") or {}).get("enable_thinking", True)
+            head = "<|im_start|>system\n" + ("Reasoning effort is set to xhigh.\n\n" if on else "")
+            return Resp(json.dumps({"prompt": head + "S<|im_end|>\nU1 A1 U2"}).encode())
+        sent.append(body)
+        return Resp(b"")
+
+    real = agentic.urllib.request.urlopen
+    agentic.urllib.request.urlopen = fake
+    agentic._THINK_FLAG_MOVES.clear()
+    try:
+        e._call_openai([{"role": "system", "content": "s"}, {"role": "user", "content": "u"}])
+        b = sent[-1]
+        assert "chat_template_kwargs" not in b and b.get("thinking_budget_tokens") == agentic.NO_THINK_BUDGET, b
+        agentic._THINK_FLAG_MOVES.clear()
+        agentic._THINK_FLAG_MOVES[(e.base, e.cfg.get("model") or "")] = False   # an ordinary template: switch it off
+        e._call_openai([{"role": "system", "content": "s"}, {"role": "user", "content": "u"}])
+        assert sent[-1].get("chat_template_kwargs") == {"enable_thinking": False}, sent[-1]
+    finally:
+        agentic.urllib.request.urlopen = real
+        agentic._THINK_FLAG_MOVES.clear()
+
+
+@test
+def masking_waits_until_a_batch_frees_enough():
+    e = engine()
+    msgs = [{"role": "system", "content": "s" * 140000}]          # a big prompt: ~40K tokens
+
+    def call(i, path, content):
+        msgs.append({"role": "assistant", "content": "", "tool_calls": [tc("read_file", {"path": path}, f"c{i}")]})
+        msgs.append({"role": "tool", "tool_call_id": f"c{i}", "content": content})
+
+    call(0, "C:/p/a.py", "x" * 2000)                                # superseded later, but small
+    call(1, "C:/p/a.py", "x" * 2000)
+    for i in range(2, 30):
+        call(i, f"C:/p/f{i}.py", "y" * 500)
+    view = e._masked_view(msgs)
+    assert view == msgs, "a batch that frees almost nothing must not rewrite the prompt"
+    for i in range(30, 44):                                         # big superseded reads pile up
+        call(i, "C:/p/big.py", "z" * 30000)
+    for i in range(44, 60):                                         # ...and fall out of the recent window
+        call(i, f"C:/p/g{i}.py", "w" * 300)
+    view = e._masked_view(msgs)
+    assert any(m.get("content") != o.get("content") for m, o in zip(view, msgs)), "a worthwhile batch applies"
+
+
 def main():
     t_all = time.time()
     for fn in TESTS:

@@ -46,7 +46,7 @@ What you can do (all real, all available right now):
 - PowerShell: the `powershell` tool runs any PowerShell command or script on this PC and returns its \
 output. You DO have PowerShell / terminal / shell access. Use it for processes, services, system info, \
 disk, network, git, python, builds, tests, installing packages, and anything else a terminal can do. \
-The working folder persists between calls (currently {cwd}). For servers, watchers and other \
+The working folder persists between calls (the current one is shown at the end of each step). For servers, watchers and other \
 long-running commands use bg_start (they keep running; read them with bg_output).
 - Files: list_dir, find_files, search_text, read_file (line numbers; also shows images), \
 read_document (PDF, Word, Excel, PowerPoint, CSV), write_file, edit_file, make_dir, move_path, \
@@ -1461,6 +1461,38 @@ def think_level(cfg):
 EFFORT_CAP = {"auto": -1, "minimal": 0, "low": 1024, "medium": 4096, "high": 12288, "max": -1}
 
 
+_THINK_FLAG_MOVES = {}            # (server, model) -> True when the template's OPENING depends on enable_thinking
+NO_THINK_BUDGET = 32              # "don't think" on such a template: a tiny budget instead of switching thinking off
+
+
+def think_flag_moves_prefix(base, model=""):
+    """Does turning thinking off change the START of the rendered prompt? Ternary Bonsai 2's template writes "Reasoning
+    effort is set to xhigh…" into the system header only while thinking is on; on a hybrid (recurrent) model the server
+    can't keep any of its cache past a change, so every on/off switch re-read the whole conversation (3-6 times a run,
+    up to 2.5 minutes each). Asked once per server via llama.cpp's /apply-template; False when it can't tell."""
+    key = (base, model)
+    if key in _THINK_FLAG_MOVES:
+        return _THINK_FLAG_MOVES[key]
+    msgs = [{"role": "system", "content": "S"}, {"role": "user", "content": "U1"},
+            {"role": "assistant", "content": "A1"}, {"role": "user", "content": "U2"}]
+    moved = False
+    try:
+        out = []
+        for flag in (True, False):
+            req = urllib.request.Request(base.rstrip("/") + "/apply-template", headers={"Content-Type": "application/json"},
+                                         data=json.dumps({"messages": msgs,
+                                                          "chat_template_kwargs": {"enable_thinking": flag}}).encode())
+            with urllib.request.urlopen(req, timeout=10) as r:
+                p = str(json.load(r).get("prompt") or "")
+            out.append(p[:p.index("U2")] if "U2" in p else None)
+        moved = None not in out and out[0] != out[1]
+    except Exception:
+        moved = False
+    _THINK_FLAG_MOVES[key] = moved
+    _log({"think_flag_moves_prefix": moved, "server": base, "model": model})
+    return moved
+
+
 def think_max(cfg):
     """The user's cap on thinking tokens per step (the Effort setting: minimal = no thinking, max = no cap) ->
     0 = never think, -1 = no cap. Older think levels map onto it."""
@@ -2151,7 +2183,7 @@ class AgentEngine:
             extra += "\n\nThe user's instructions for you (they take priority):\n" + custom
         if getattr(self.ctx, "web_off", False):
             extra += "\n" + WEB_OFF_NOTE
-        system = LEAN_SYSTEM.format(user=os.environ.get("USERNAME", "the user"), today=time.strftime("%A %d %B %Y"),
+        system = LEAN_SYSTEM.format(user=os.environ.get("USERNAME", "the user"), today=self._today(),
                                     extra=extra)
         convo = []                      # earlier turns as plain text: no tool calls, results or app reminders
         for m in self.history[:-1]:
@@ -2439,7 +2471,7 @@ class AgentEngine:
             extra += "\n\nThe user's instructions for you (they take priority, except the critical-fact rules):\n" + custom
         if getattr(self.ctx, "web_off", False):
             extra += "\n" + WEB_OFF_NOTE
-        return BASIC_SYSTEM.format(user=os.environ.get("USERNAME", "the user"), today=time.strftime("%A %d %B %Y"),
+        return BASIC_SYSTEM.format(user=os.environ.get("USERNAME", "the user"), today=self._today(),
                                    roots="; ".join(self.ctx.roots) or "none", workspace=self._workspace_text(),
                                    extra=extra)
 
@@ -2608,9 +2640,12 @@ class AgentEngine:
                 "project": bool(getattr(self, "_project", False)),
                 "screen": "screenshot" in (self.reg.by_name if self.reg else {})}
 
+    def _today(self):
+        return (getattr(self, "turn", None) or {}).get("today") or time.strftime("%A %d %B %Y")
+
     def _workspace_text(self):
         w = self.ctx.workspace
-        return (w + ("" if os.path.isdir(w) else " (created when first used)")) if w else "none"
+        return w or "none"                       # no "(created when first used)": it flipped mid-run and broke the cache
 
     def _ensure_workspace(self, user_text):
         """Give this chat its own folder under the workspace root (Documents/Zen Harness by default), named by date,
@@ -2704,7 +2739,7 @@ class AgentEngine:
         if getattr(self.ctx, "web_off", False):
             extra += WEB_OFF_NOTE
         s = SYSTEM.format(roots="; ".join(self.ctx.roots), workspace=self._workspace_text(),
-                          today=time.strftime("%A %d %B %Y"),
+                          today=self._today(),
                           user=os.environ.get("USERNAME", "?"), machine=os.environ.get("COMPUTERNAME", "?"),
                           cwd=at.shell_cwd(self.ctx) if self.ctx.roots else "?", extra=extra)
         if self.reg and self._profiled():
@@ -2852,6 +2887,13 @@ class AgentEngine:
                 parts.append(ws)
         except Exception as e:
             _log({"work_state_error": repr(e)[:200], "conv": self.ctx.conv_id})
+        try:
+            cwd = at.shell_cwd(self.ctx) if self.ctx.roots and not self._basic else ""
+            if cwd and (parts or os.path.normcase(cwd) != os.path.normcase(str(self.ctx.workspace or ""))):
+                # here, not in the system prompt: a `cd` used to change the prompt's opening (a full re-read)
+                parts.append(f"Working folder (powershell): {cwd}")
+        except Exception:
+            pass
         if not parts:
             return None
         return {"role": "user", "content": REMINDER_TAG + "\n" + "\n\n".join(parts) + "\n</system-reminder>"}
@@ -2920,17 +2962,25 @@ class AgentEngine:
     # so the prompt prefix stays byte-identical between batches and the server's prompt cache keeps hitting.
     # KEEP 8 at 20K tokens was too eager for a 9B: results it was still using vanished after 8 quick calls and it
     # re-did them (ornith8). Masking now starts later and keeps more.
-    MASK_EVERY, MASK_KEEP, MASK_FROM = 12, 14, 32000
+    MASK_EVERY, MASK_KEEP, MASK_FROM, MASK_MIN_FREED = 12, 14, 32000, 4000
 
     def _masked_view(self, msgs):
         st = self.__dict__.setdefault("_mask", {"at": 0, "stubs": {}})
         if not self.cfg.get("mask_stale", True):
             return msgs
         n_tool = sum(1 for m in msgs if m.get("role") == "tool")
-        if n_tool - st["at"] >= self.MASK_EVERY and _est_tokens(msgs) * self.ratio > self.MASK_FROM:
-            st["stubs"].update(self._stale_tool_stubs(msgs))
-            st["at"] = n_tool
-            _log({"masked_stale": len(st["stubs"]), "conv": self.ctx.conv_id})
+        total = _est_tokens(msgs) * self.ratio
+        if n_tool - st["at"] >= self.MASK_EVERY and total > self.MASK_FROM:
+            # a batch rewrites the middle of the prompt, which the server must then re-read (all of it, on a hybrid
+            # model like Ternary Bonsai 2): only worth it when it frees a real amount — one batch stubbed a single
+            # result for a 125 s re-read. Otherwise wait and let more pile up.
+            new = {k: v for k, v in self._stale_tool_stubs(msgs).items() if k not in st["stubs"]}
+            freed = sum(len(str(m.get("content") or "")) - len(new[m.get("tool_call_id")]) for m in msgs
+                        if m.get("role") == "tool" and m.get("tool_call_id") in new) / 3.6 * self.ratio
+            if freed >= max(self.MASK_MIN_FREED, total * 0.12):
+                st["stubs"].update(new)
+                st["at"] = n_tool
+                _log({"masked_stale": len(st["stubs"]), "freed": int(freed), "conv": self.ctx.conv_id})
         if not st["stubs"]:
             return msgs
         return [dict(m, content=st["stubs"][m.get("tool_call_id")]) if m.get("role") == "tool"
@@ -3907,7 +3957,8 @@ class AgentEngine:
         self.ctx.changed, self.ctx.turn_diffs = {}, []
         self._turn_images = []          # preview images of the pages searched this turn (answer carousel)
         self.turn = {"steps": 0, "tool_calls": 0, "prompt_tokens": 0, "completion_tokens": 0,
-                     "t0": time.time(), "advisor_cost": 0.0, "compactions": 0, "failed_calls": 0}
+                     "t0": time.time(), "advisor_cost": 0.0, "compactions": 0, "failed_calls": 0,
+                     "today": time.strftime("%A %d %B %Y")}     # fixed for the request: a date change re-read it all
         self._fail_streak, self._force_answer, self._since_tracker = 0, False, 0
         self._debugging = False
         self._best_passes, self._textcall_while_off = -1, False
@@ -6284,7 +6335,12 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
                 if ids:
                     # mild: makes the model less likely to start another "Wait…/Hmm…" round, never forbids it
                     body["logit_bias"] = {str(i): -abs(pen) for i in ids}
-        if be == "llama" and (executor or no_think or not self._thinking_now()):
+        if (be == "llama" and not executor and (no_think or not self._thinking_now())
+                and think_flag_moves_prefix(base, model)):
+            # switching thinking off would rewrite the prompt's opening (a full re-read on this template): keep it on
+            # and cut it short instead
+            body["thinking_budget_tokens"] = NO_THINK_BUDGET
+        elif be == "llama" and (executor or no_think or not self._thinking_now()):
             body["chat_template_kwargs"] = {"enable_thinking": False}
             if c.get("reasoning_off_field"):
                 # some templates ignore enable_thinking and turn reasoning off only with reasoning_effort "none"
