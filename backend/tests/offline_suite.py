@@ -1462,6 +1462,43 @@ def prd_check_finds_the_project_prd_above_tests():
     assert not e._is_new_program("write_file", {"path": t, "content": code})      # docs/PRD.md one level up
 
 
+@test
+def each_model_call_logs_where_its_time_went():
+    """gen.jsonl: thinking / text / tool-call tokens and the server's prompt-read and generation timings per call."""
+    import context_memory as cm
+    e = engine(backend="llama")
+    e.base = "http://127.0.0.1:9"                  # never contacted: urlopen is replaced below
+    e.turn = {"steps": 4}
+    ev = [{"choices": [{"delta": {"reasoning_content": "hm"}}]}] * 3 + \
+         [{"choices": [{"delta": {"tool_calls": [{"index": 0, "id": "c1", "function": {"name": "list_dir",
+                                                                                       "arguments": "{}"}}]}}]},
+          {"choices": [{"delta": {}, "finish_reason": "tool_calls"}],
+           "timings": {"prompt_n": 120, "cache_n": 3000, "prompt_ms": 400.0, "predicted_n": 4, "predicted_ms": 300.0}}]
+
+    class Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def __iter__(self):
+            return iter([("data: " + json.dumps(x)).encode() for x in ev] + [b"data: [DONE]"])
+
+    real = agentic.urllib.request.urlopen
+    agentic.urllib.request.urlopen = lambda *a, **k: Resp()
+    try:
+        e._call_openai([{"role": "system", "content": "s"}, {"role": "user", "content": "u"}])
+    finally:
+        agentic.urllib.request.urlopen = real
+    rows = cm.gen_log(e.ctx.conv_id)
+    assert rows, "no gen.jsonl row"
+    r = rows[-1]
+    assert (r["think_tok"], r["call_tok"], r["text_tok"]) == (3, 1, 0), r
+    assert (r["read_tok"], r["cached_tok"], r["gen_tok"], r["step"]) == (120, 3000, 4, 4), r
+    assert r["calls"] == ["list_dir"], r
+
+
 def main():
     t_all = time.time()
     for fn in TESTS:

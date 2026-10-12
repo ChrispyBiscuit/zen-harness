@@ -2871,6 +2871,21 @@ class AgentEngine:
         self._record_ledger(msgs)
         return msgs
 
+    def _record_gen(self, t_start, n, tm, finish, calls, cut):
+        """Per model call, where the time went (context_memory gen.jsonl): thinking / text / tool-call tokens, the
+        prompt tokens the server actually had to read (not cached) and its own timings. Measurement only."""
+        try:
+            import context_memory as cm
+            cm.record_gen(self.ctx.conv_id, {
+                "step": self.turn.get("steps"), "role": self._role, "wall_s": round(time.time() - t_start, 1),
+                "think_tok": n["think"], "text_tok": n["text"], "call_tok": n["call"],
+                "gen_tok": tm.get("predicted_n"), "gen_ms": round(tm.get("predicted_ms") or 0),
+                "read_tok": tm.get("prompt_n"), "cached_tok": tm.get("cache_n"), "read_ms": round(tm.get("prompt_ms") or 0),
+                "finish": finish, "cut": cut,
+                "calls": [(c.get("function") or {}).get("name") for c in (calls or {}).values()]})
+        except Exception as e:
+            _log({"gen_record_error": repr(e)[:200], "conv": self.ctx.conv_id})
+
     def _record_ledger(self, msgs):
         """Per step, what the prompt is made of (context_memory ledger) — to trace a bad step to its context."""
         try:
@@ -6364,6 +6379,7 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
         drafts = {}                      # stream index -> draft card id (cards shown while a call is being written)
         cut_now = False                  # _should_cut said stop: leave BOTH loops (it used to fire again every ~40 chars)
         finish = None                    # the server's stop reason: "length" = cut off at the output limit
+        gen_n, gen_tm = {"think": 0, "text": 0, "call": 0}, {}     # where this step's time went (gen.jsonl)
         with resp:
             for raw in resp:
                 if self.should_stop():
@@ -6382,11 +6398,15 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
                 except ValueError:
                     continue
                 tm = ev.get("timings") or {}
+                if tm:
+                    gen_tm = tm                            # the last one has the whole step's totals
                 if tm.get("predicted_per_second") and tm.get("predicted_n", 0) > 8:
                     self.emit("stats", tps=float(tm["predicted_per_second"]))     # llama.cpp's exact figure
                 for ch in ev.get("choices") or []:
                     dd = ch.get("delta") or {}
                     if dd.get("content") or dd.get("reasoning_content") or dd.get("reasoning") or dd.get("tool_calls"):
+                        gen_n["think" if (dd.get("reasoning_content") or dd.get("reasoning")) else
+                              "call" if dd.get("tool_calls") else "text"] += 1     # one chunk ≈ one token
                         now = time.time()
                         tps_first = tps_first or now
                         tps_count += 1                     # one streamed chunk ≈ one token
@@ -6472,6 +6492,7 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
                     break
         if think:
             self.emit("think_end")
+        self._record_gen(t_start, gen_n, gen_tm, finish, calls, cut or cut_now or bool(too_long))
         if held and not calls:                       # a short answer that never reached the release point
             self.emit(delta, text="".join(held))
         if cut:

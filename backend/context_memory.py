@@ -90,6 +90,15 @@ def ledger(conv):
     return _read(conv, "ledger.jsonl")
 
 
+def record_gen(conv, row):
+    """One row per model call: thinking / text / tool-call tokens, prompt tokens read vs cached, timings."""
+    _append(conv, "gen.jsonl", dict(row, t=time.strftime("%H:%M:%S")))
+
+
+def gen_log(conv):
+    return _read(conv, "gen.jsonl")
+
+
 # ------------------------------------------------------------------------------------------------------- context map
 def write_map(conv, archive_entries, key_line=None):
     """CONTEXT_MAP.md: the turning points, then every archived item with its id and what it was. -> path."""
