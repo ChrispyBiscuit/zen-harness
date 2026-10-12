@@ -3810,6 +3810,7 @@ class AgentEngine:
         self._project_nagged = False
         self._quote_rounds, self._quote_drafts = 0, []                 # quote-check send-backs / checked drafts
         self._no_progress, self._progress_nagged, self._last_write_np = 0, 0, -10 ** 6
+        self._seen_reads = set()
         self._open_count = len(at.tracker_open(self.ctx.tracker)) if self.ctx.tracker else None
         self._singles = 0
         self._offered = None
@@ -4932,7 +4933,20 @@ class AgentEngine:
             pass                                     # waiting on the workers is neither progress nor being stuck
         else:
             self._since_tracker += 1
-            if not text.startswith(("Not run again", "Not saved")) and " did not run:" not in text[:120]:
+            # reading something not seen before this turn is new information, not "no progress": a fix task reads the
+            # docs, code and tests first, and was told "the current approach is not working" 7 minutes in (24 calls
+            # with no checklist item done). Repeats still count; the reads-in-a-row nudge still limits reading.
+            novel = False
+            if name in ("read_file", "read_document", "search_text", "list_dir", "find_files", "trace_symbol") \
+                    and isinstance(args, dict):
+                seen = self.__dict__.setdefault("_seen_reads", set())
+                key = (name, str(args.get("path") or args.get("root") or "").lower(), str(args.get("offset") or ""),
+                       str(args.get("pattern") or args.get("query") or args.get("symbol") or ""))
+                novel = key not in seen
+                seen.add(key)
+            if novel:
+                pass
+            elif not text.startswith(("Not run again", "Not saved")) and " did not run:" not in text[:120]:
                 # a web_search that reads pages is several searches in one: it counts double
                 heavy = name == "web_search" and isinstance(args, dict) and str(args.get("pages", 6)) not in ("0", "")
                 self._no_progress = getattr(self, "_no_progress", 0) + (2 if heavy else 1)

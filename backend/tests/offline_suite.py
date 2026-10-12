@@ -1286,6 +1286,19 @@ def contract_is_pinned_from_every_contract_section_and_while_reading():
 
 
 @test
+def reading_new_things_is_not_counted_as_no_progress():
+    e = engine()
+    e._no_progress = 0
+    for i, off in enumerate((None, 137, 280)):
+        e._watch_progress("read_file", {"path": "C:/p/server.py", "offset": off}, True, "[server.py: …]")
+    e._watch_progress("search_text", {"pattern": "def main", "root": "C:/p"}, True, "client.py:176")
+    assert e._no_progress == 0, e._no_progress                      # orientation: all new information
+    e._watch_progress("read_file", {"path": "C:/p/server.py", "offset": 137}, True, "[server.py: …]")
+    e._watch_progress("powershell", {"command": "dir"}, True, "exit code 0")
+    assert e._no_progress == 2, e._no_progress                      # a repeat and a plain command still count
+
+
+@test
 def compaction_waits_until_the_reply_would_not_fit():
     e = engine(num_ctx=61440)
     assert e.context_budget() == 61440 - 8192                      # was 75% (46,080): compacting is lossy
