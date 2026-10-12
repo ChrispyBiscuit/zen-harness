@@ -30,6 +30,36 @@ export function LogoMark({ className, bold, textured }: { className?: string; bo
   )
 }
 
+const INK_SEGMENTS = 40
+const INK_LAP_S = 2.6
+
+/** "Working, nothing to show yet": an ensō being painted and drying as it goes. The ring is fixed segments; each is
+ *  inked at full width as the brush passes (a slightly loaded head), then thins and fades, so the brush circles
+ *  clockwise chasing its own fading tail — nothing rotates. Reduced motion: the still mark instead. */
+export function InkRing({ className }: { className?: string }) {
+  const r = 11
+  const step = 360 / INK_SEGMENTS
+  const pt = (deg: number) => {
+    const a = ((deg - 90) * Math.PI) / 180                  // 0° = 12 o'clock, clockwise
+    return `${(16 + r * Math.cos(a)).toFixed(2)} ${(16 + r * Math.sin(a)).toFixed(2)}`
+  }
+  return (
+    <span className={cn("relative inline-flex size-5 shrink-0", className)} aria-hidden="true">
+      <svg viewBox="0 0 32 32" className="ink-ring size-full">
+        {Array.from({ length: INK_SEGMENTS }, (_, i) => {
+          const a0 = i * step
+          return (
+            <path key={i} d={`M${pt(a0)} A${r} ${r} 0 0 1 ${pt(a0 + step + 0.6)}`}
+              className="ink-seg" fill="none" stroke="var(--ink)" strokeLinecap="butt"
+              style={{ animationDelay: `${((i / INK_SEGMENTS) - 1) * INK_LAP_S}s`, animationDuration: `${INK_LAP_S}s` }} />
+          )
+        })}
+      </svg>
+      <LogoMark bold className="ink-still absolute inset-0 size-full" />
+    </span>
+  )
+}
+
 /** The wordmark: ZEN (bright) HARNESS (quiet), technical mono, wide tracking. */
 export function Wordmark({ className, compact }: { className?: string; compact?: boolean }) {
   return (

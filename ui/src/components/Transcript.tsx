@@ -6,7 +6,7 @@ import { ArrowDown, BookOpen, Lightbulb, CheckCircle2, ChevronRight, CircleDot, 
 import { Markdown, SCR_CLOSE, SCR_OPEN } from "./Markdown"
 import { ChangesCard, CompactedDivider, TaskDoneCard, ToolCard } from "./cards/ToolCards"
 import { useApp } from "@/lib/store"
-import { LogoMark } from "./Logo"
+import { InkRing } from "./Logo"
 import type { Attachment, Conv, Msg, TurnStats } from "@/lib/types"
 import { fmtBytes } from "@/lib/paths"
 import { cn } from "@/lib/utils"
@@ -464,7 +464,7 @@ function Meditating({ status }: { status?: string }) {
   const detail = status && /\d/.test(status) ? status : ""          // only a specific one ("12,000 / 40,000 tokens read")
   return (
     <div role="status" aria-live="polite" className="enter-fade flex items-center gap-2 text-ui text-muted-foreground">
-      <LogoMark bold className="zen-meditate size-5" />
+      <InkRing />
       <span className="shimmer-text">Meditating</span>
       {detail && <span className="min-w-0 truncate text-caption">· {detail}</span>}
     </div>
