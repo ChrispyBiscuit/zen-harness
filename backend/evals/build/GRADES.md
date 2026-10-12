@@ -229,3 +229,26 @@ two months (introduced a datetime import crash, fixed), re-runs, README, then po
 | 9 | Bad input | 1 | -5 cents, 10/01/2026, 2026-13-45, unknown user, empty category: clear "ERROR: ..." and exit 1 |
 | 10 | Own tests | 1 | 21 passed (13 db + 8 behaviour tests on a real server) |
 | 11 | README | 1 | 238 lines: architecture, host + roommate steps, command table, example session |
+
+## Ternary Bonsai 2 27B + harness (bonsai9, in app, q8/q4 KV, 61K) — 9 / 11 · green at 1 h 45 min, done at 2 h 14 min · 104 tool calls (4 failed) · $0
+Graded hands-on on a copy (2026-10-12). Stdlib `http.server` on 0.0.0.0:8990 + JSON file store, `client.py --host
+--port add/totals/list --month`, PRD/DESIGN first. **Mixed run:** code of the evening's first roll-in (verification
+spiral, build profile, masking, project paperwork) until 03:22, then stopped and resumed on the flight recorder
+(03:24-03:35, a notice listing the new tools, no hints), then you resumed it. One debug episode 02:14-03:38 (84 min,
+63% of the run): test A6 restarted a server on the same port after shutdown() without server_close(); seven probe
+scripts; fixed by the model at 03:38. **Real bug shipped:** whole-dollar amounts are rejected ("".isdigit() is False
+for the missing cents) — the README's own example `--amount 1000` fails; the model hit it in its live run and
+switched to an amount with cents instead of fixing it; its 11 tests never try a whole number.
+| # | Item | Score | Evidence |
+|---|---|---|---|
+| 1 | Starts from README | 0.5 | server starts as written; the README's add example fails (`--amount 1000` rejected) |
+| 2 | Separate users | 0.5 | `--person NAME`, no accounts |
+| 3 | Log an expense | 0.5 | date, category, person stored — but only amounts with cents: 1000 / 100 / 15 / 40 rejected |
+| 4 | Attributed / own data | 1 | person on every row in `list` (no per-person totals, no privacy) |
+| 5 | Monthly totals by category | 1 | correct for what was stored (Oct food 37.49 after a 15.00 add; Sep 9.99) |
+| 6 | Over the network | 1 | 0.0.0.0; an add through the LAN IP worked |
+| 7 | Terminal client | 1 | add / totals / list |
+| 8 | Persistence | 1 | same totals after a restart |
+| 9 | Bad input | 1 | -5, abc, 10/01/2026, 2026-13-45, empty person/category: clear "error: ..." exit 1 |
+| 10 | Own tests | 1 | 11 passed (miss the whole-dollar case) |
+| 11 | README | 0.5 | complete, but its example command fails |
