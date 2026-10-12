@@ -6504,8 +6504,10 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
                 if ids:
                     # mild: makes the model less likely to start another "Wait…/Hmm…" round, never forbids it
                     body["logit_bias"] = {str(i): -abs(pen) for i in ids}
-        if (be == "llama" and not executor and (no_think or not self._thinking_now())
+        if (be == "llama" and not executor and (no_think or not self._thinking_now()) and think_max(c) != 0
                 and think_flag_moves_prefix(base, model)):
+            # (thinking off for the whole run — Effort 'minimal' — never flips, so the template's real off switch
+            # below keeps the prompt's opening fixed too)
             # switching thinking off would rewrite the prompt's opening (a full re-read on this template): keep it on
             # and cut it short instead
             body["thinking_budget_tokens"] = NO_THINK_BUDGET
