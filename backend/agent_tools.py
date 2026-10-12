@@ -1759,8 +1759,12 @@ def t_update_tracker(a, c):
     ms = a.get("milestones")
     if isinstance(ms, str):
         try:
-            ms = json.loads(ms)
-        except ValueError:
+            ms = _loads_lenient(ms.strip())
+        except ValueError as e:
+            if ms.strip()[:1] in "[{":
+                # never save broken JSON as a milestone title (the checklist became one item named '[{"title": ...')
+                raise ToolError(f"milestones looks like JSON but can't be read ({e}). Send it again as a list of "
+                                f"objects: [{{\"title\": ..., \"done_when\": ..., \"subtasks\": [...]}}, ...]")
             ms = [ln.strip("-*☐☑ #").strip() for ln in ms.splitlines() if ln.strip()]
     resent = False
     if ms is not None and not fresh and t.get("milestones"):
@@ -4252,6 +4256,49 @@ _HISTORY_STUB = re.compile(r"\[\d[\d,]* chars omitted [—-]+ already applied")
 _STUB_TOOLS = {"write_file", "edit_file", "run_python", "run_command", "write_artifact"}
 
 
+def _balance_json(s):
+    """Close every bracket the way it was opened (outside strings), drop stray closers, close what is left open.
+    Bonsai 9 ended a 1,800-character milestone list with '})' instead of '}]', and the whole checklist became one
+    milestone titled with the raw JSON."""
+    out, stack, in_str, esc = [], [], False, False
+    for ch in s:
+        if in_str:
+            out.append(ch)
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch in "[{":
+            stack.append("]" if ch == "[" else "}")
+        elif ch in "]})":
+            if stack:
+                out.append(stack.pop())
+            continue
+        out.append(ch)
+    if in_str:
+        out.append('"')
+    return "".join(out) + "".join(reversed(stack))
+
+
+def _loads_lenient(txt):
+    """JSON, else a Python literal, else JSON with its brackets repaired -> the value (ValueError if none)."""
+    try:
+        return json.loads(txt)
+    except ValueError:
+        pass
+    try:
+        import ast
+        return ast.literal_eval(txt)                       # Python-style: True, single quotes
+    except (ValueError, SyntaxError):
+        pass
+    return json.loads(_balance_json(txt))
+
+
 def _coerce(v, spec):
     """A tool argument as its declared type. Models that write tool calls as XML (Qwen-style
     <parameter=milestones>[...]</parameter>) deliver lists and objects as JSON *text*: update_tracker saved a
@@ -4263,13 +4310,9 @@ def _coerce(v, spec):
     if want in ("array", "object"):
         if txt[:1] in "[{":
             try:
-                got = json.loads(txt)
+                got = _loads_lenient(txt)
             except ValueError:
-                try:
-                    import ast
-                    got = ast.literal_eval(txt)            # Python-style: True, single quotes
-                except (ValueError, SyntaxError):
-                    return v
+                return v
             if isinstance(got, (list if want == "array" else dict)):
                 return got
             return v

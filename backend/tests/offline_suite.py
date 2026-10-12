@@ -1717,6 +1717,27 @@ def read_file_one_symbol():
         assert "Ledger.load" in str(ex)
 
 
+@test
+def near_json_checklist_is_repaired_not_saved_as_one_title():
+    """bonsai9 ended its milestone list with '})' instead of '}]': the checklist became one milestone named '[{...'."""
+    raw = ('[{"title": "Docs", "done_when": "PRD written", "subtasks": [{"step": "PRD.md (goal, users)"}]}, '
+           '{"title": "Build", "subtasks": [{"step": "server"}, {"step": "stop server, final report"}]})')
+    assert [m["title"] for m in at._loads_lenient(raw)] == ["Docs", "Build"]
+    assert at._coerce(raw, {"type": "array"})[1]["title"] == "Build"
+    assert at._loads_lenient('{"a": [1, 2}') == {"a": [1, 2]}             # a missing closer
+    assert at._loads_lenient('[{"t": "a ) ] } in a string"}]')[0]["t"] == "a ) ] } in a string"
+    d = tmpdir("nj")
+    c = at.Ctx([d])
+    c.conv_id = "audit-nearjson"
+    out = at.t_update_tracker({"new": True, "goal": "g", "milestones": raw}, c)
+    assert len(c.tracker["milestones"]) == 2 and c.tracker["milestones"][0]["title"] == "Docs", out
+    try:
+        at.t_update_tracker({"new": True, "goal": "g", "milestones": '[{"title": "x" "oops"'}, c)
+        raise AssertionError("unreadable JSON must be refused, not saved as a title")
+    except at.ToolError as ex:
+        assert "Send it again" in str(ex)
+
+
 def main():
     t_all = time.time()
     for fn in TESTS:
