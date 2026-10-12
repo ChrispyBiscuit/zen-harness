@@ -1323,6 +1323,22 @@ def tool_profiles_send_a_core_set_and_load_groups_on_demand():
 
 
 @test
+def layered_prompt_and_brief_docs_follow_the_loaded_groups():
+    e = engine(tool_gate=True, stable_tools=True)
+    s = e.system_prompt()
+    assert 'enable=["browser"]' in s and "browser_read shows the page" not in s
+    assert "NOTES.md" in s and "artifact_create puts a document" not in s
+    e._enable(["browser", "artifacts"])
+    s2 = e.system_prompt()
+    assert "browser_read shows the page" in s2 and "artifact_create puts a document" in s2
+    sch = {t["function"]["name"]: t["function"]["description"] for t in e._schemas(True)}
+    assert "read_guide('tool:browser_devtools')" in sch["browser_devtools"]          # long reference text: brief
+    assert "no &&-chains" in sch["powershell"] and "read_guide('tool:" not in sch["powershell"]   # rules stay whole
+    full = at.t_read_guide({"topic": "tool:browser_devtools"}, None)
+    assert full.startswith("# browser_devtools") and "Parameters:" in full
+
+
+@test
 def settled_decisions_stay_in_view():
     c = at.Ctx([tmpdir("dec")])
     at.t_update_tracker({"new": True, "goal": "fix the tracker", "milestones": [{"title": "fix tests"}]}, c)

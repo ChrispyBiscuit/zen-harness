@@ -2175,6 +2175,27 @@ TOOL_GROUPS = [
 ALWAYS_ON = {"go_extensive", "available_tools", "update_tracker", "read_guide", "history_search", "ask_user"}
 
 
+BRIEF_OVER = 450            # a description longer than this is sent as its first sentences + a pointer
+# descriptions that carry rules the model must follow on every call stay whole (shell syntax, the checklist's
+# fields, the sandbox folder, waiting for a server's port, 'use it for every calculation', Office file rules)
+BRIEF_KEEP = {"update_tracker", "powershell", "python_sandbox", "bg_start", "calculate", "create_document"}
+
+
+def brief_description(name, text, limit=BRIEF_OVER):
+    """A long tool description cut at a sentence end (parameter descriptions are untouched): the full usage text
+    sits one read_guide('tool:<name>') away instead of in every step's prompt."""
+    t = " ".join(str(text or "").split())
+    if len(t) <= limit:
+        return t
+    out = ""
+    for m in re.finditer(r".+?[.!?](?=\s|$)", t):
+        if len(out) + len(m.group(0)) > limit - 60 and out:
+            break
+        out += m.group(0)
+    out = (out or t[:limit - 60]).strip()
+    return out + f" (Full usage: read_guide('tool:{name}').)"
+
+
 def _first_sentence(text, n=150):
     t = " ".join(str(text or "").split())
     m = re.match(r"(.+?[.!?])(\s|$)", t)
@@ -2254,7 +2275,17 @@ GUIDE_ALIASES = {"pptx": "powerpoint", "ppt": "powerpoint", "slides": "powerpoin
 
 
 def t_read_guide(a, c):
-    topic = str(a.get("topic") or "").strip().lower().replace(" ", "_").replace(".md", "")
+    raw = str(a.get("topic") or "").strip()
+    if raw.lower().startswith("tool:"):              # a tool's full usage text (sent in brief in every step)
+        name = raw.split(":", 1)[1].strip()
+        for n, _kind, desc, params, _fn in BUILTIN:
+            if n.lower() == name.lower():
+                props = (params or {}).get("properties") or {}
+                lines = [f"# {n}", " ".join(str(desc).split()), "", "Parameters:"]
+                lines += [f"- {k}: {(v or {}).get('description') or (v or {}).get('type') or ''}" for k, v in props.items()]
+                return "\n".join(lines)
+        return f"No tool named {name!r}. available_tools lists every tool."
+    topic = raw.lower().replace(" ", "_").replace(".md", "")
     topic = GUIDE_ALIASES.get(topic, topic)
     available = sorted(f[:-3] for f in os.listdir(GUIDES_DIR) if f.endswith(".md")) if os.path.isdir(GUIDES_DIR) else []
     if topic not in available:
@@ -4123,6 +4154,8 @@ class Registry:
         self.by_name.pop("enable_screen_control", None)
         return added
 
+    brief = False            # long descriptions sent in brief (the agent sets it from the brief_tool_docs setting)
+
     def schemas(self, names=None):
         out = []
         for t in self.by_name.values():
@@ -4131,7 +4164,10 @@ class Registry:
             params = t["parameters"]
             if t["name"] not in PROGRESS_EXEMPT and isinstance(params, dict) and params.get("type") == "object":
                 params = dict(params, properties={**(params.get("properties") or {}), "progress": PROGRESS_FIELD})
-            out.append({"type": "function", "function": {"name": t["name"], "description": t["description"][:900],
+            desc = t["description"][:900]
+            if self.brief and t["name"] not in BRIEF_KEEP:
+                desc = brief_description(t["name"], desc)
+            out.append({"type": "function", "function": {"name": t["name"], "description": desc,
                                                          "parameters": params}})
         return out
 

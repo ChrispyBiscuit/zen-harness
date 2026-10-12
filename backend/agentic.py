@@ -2656,7 +2656,8 @@ class AgentEngine:
             return self._basic_system_prompt()
         extra = ""
         if self.reg:
-            names = self.reg.by_name
+            # with tool profiles, only what is loaded is described (the rest: available_tools)
+            names = ({n: self.reg.by_name[n] for n in self._active_names()} if self._profiled() else self.reg.by_name)
             if "screenshot" in names:
                 extra += "\n- Screen: screenshot, list_windows, mouse/keyboard control (take a screenshot first)."
             elif "enable_screen_control" in names:
@@ -2688,6 +2689,8 @@ class AgentEngine:
                           today=time.strftime("%A %d %B %Y"),
                           user=os.environ.get("USERNAME", "?"), machine=os.environ.get("COMPUTERNAME", "?"),
                           cwd=at.shell_cwd(self.ctx) if self.ctx.roots else "?", extra=extra)
+        if self.reg and self._profiled():
+            s = self._layer_prompt(s, set(self._active_names()))
         if self.ctx.is_subagent:
             s += SUBAGENT_NOTE
         if self.cfg.get("plan_mode"):
@@ -5303,6 +5306,32 @@ class AgentEngine:
         ("delegation", r"\b(in parallel|delegate|background (task|agent)|several workers|sub-?agents?)\b"),
     )
 
+    # what a tool group's capability text becomes while the group is not loaded (one line; available_tools has more)
+    _LAYERS = (
+        ("browser_open", r"; and a real in-app browser \(.*?use those numbers\.",
+         ". A real in-app browser (open sites, click, type, fill forms, sign in when asked) loads on demand: "
+         "available_tools(enable=[\"browser\"])."),
+        ("artifact_create", r"- Artifacts: artifact_create.*?the artifact tool returned\.",
+         "- Artifacts (a pane beside the chat for documents the user will iterate on) load on demand: "
+         "available_tools(enable=[\"artifacts\"])."),
+        ("artifact_create", r"- Large projects \(.*?The PRD and specs stay as files in the project folder\.",
+         "- Large projects (software, long documents, multi-part research): keep your working memory — the design, "
+         "exact names and APIs you rely on, open problems — in NOTES.md in the project folder, and settled points in "
+         "the checklist's decisions; read them when you resume or after the conversation is compressed."),
+    )
+
+    def _layer_prompt(self, s, active):
+        """The system prompt without the detailed text of tool groups that aren't loaded (stable while the loaded set
+        is: it changes only when a group loads, which re-reads the prompt anyway)."""
+        for tool, rx, short in self._LAYERS:
+            if tool not in active:
+                s = re.sub(rx, lambda _m: short, s, count=1, flags=re.S)
+        return s
+
+    def _brief_docs(self):
+        if self.reg is not None:
+            self.reg.brief = bool(self.cfg.get("brief_tool_docs", True))
+
     def _profiled(self):
         return self._gated() and self._stable_tools() and bool(self.cfg.get("tool_profiles", True))
 
@@ -5427,6 +5456,7 @@ class AgentEngine:
             return []
         if isinstance(tools, list) and self.cfg.get("backend", "llama") != "llama":
             return self.reg.schemas(tools)                  # a restricted step: only what it allows (no cache to keep)
+        self._brief_docs()
         if tools is True or self._stable_tools():
             names = self._active_names()
             if self._role == "exec":
