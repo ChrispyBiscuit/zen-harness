@@ -278,14 +278,15 @@ def clean_plan(text):
     return t.strip()
 
 SUMMARY_PROMPT = """Summarize the conversation so far for an agent that will continue the work \
-without seeing the original messages. Keep, in this order:
-1. The user's requests, goals, constraints and preferences (quote exact requirements).
-2. What has been done: files created/edited (full paths), commands run and their key results, \
-facts discovered, decisions made.
-3. What failed or was ruled out, and why.
-4. The current state: what you were in the middle of, the working hypothesis or finding (with file paths and \
-line numbers), the last thing tried and its result, and the next steps.
-Be specific and factual; at most 450 words. Do not add anything that is not in the conversation."""
+without seeing the original messages. Build it on the turning points the app recorded (listed below, if any): they \
+are facts. Use these headings:
+1. Goal and constraints: the user's requests, quoting exact requirements.
+2. Current understanding: how the problem and the solution work, as you now see them — the concepts, the design, \
+what turned out to matter.
+3. Turning points: what was tried, what was learned, what was ruled out and why — with the exact names, paths, \
+commands, error texts and line numbers involved.
+4. Current state and next step: what you were in the middle of, the last result, what comes next.
+Be specific and factual; at most 500 words. Do not add anything that is not in the conversation."""
 
 
 _OUTCOME_RX = re.compile(r"exit code|\bPASS\b|\bFAIL|passed|failed|error|Error|Traceback|saved at|full text:|"
@@ -479,10 +480,22 @@ def _render_pins(p):
         out.append("Actions already taken, oldest first (→ first line of the result). Don't repeat one unless "
                    "something changed since; a file you edited since you read it has changed:")
         out += [f"- {a}" for a in p["actions"]]
-    if p.get("archived"):
+    if p.get("timeline"):
+        out.append("Turning points, recorded by the app as they happened (facts, oldest first):\n" + p["timeline"])
+    if p.get("map"):
+        out.append(f"Everything condensed is archived in full ({p.get('archived', 0)} entries). The context map at "
+                   f"{p['map']} lists the turning points and every archived item with its id — read it before "
+                   f"redoing earlier work or guessing a detail; history_search(entry='E12') restores one.")
+    elif p.get("archived"):
         out.append(f"Everything summarised above is archived in full ({p['archived']} entries: tool results, code "
                    "sent, earlier steps). Before redoing earlier work or guessing a detail, history_search it.")
     return "\n".join(out)
+
+
+def _archive_key_line(e):
+    """One line on an archived item for the context map: its label and the first meaningful line of its text."""
+    first = next((ln.strip() for ln in str(e.get("text") or "").splitlines() if ln.strip()), "")
+    return (" ".join(str(e.get("label") or "").split())[:70] + (" — " + first[:110] if first else "")).strip(" —")
 
 
 def _log(rec):
@@ -2476,6 +2489,11 @@ class AgentEngine:
         self._resets = n + 1
         self._no_progress, self._fail_streak = 0, 0
         self.__dict__.pop("_attempts", None)               # a new strategy starts a fresh same-attempt window
+        try:
+            import context_memory as cm
+            cm.add_event(self.ctx.conv_id, "reset", reason, self.turn.get("steps"))
+        except Exception:
+            pass
         _log({"strategy_reset": reason, "n": self._resets, "conv": self.ctx.conv_id})
         cur = open_items[0]
         self._last_reset_note = (f"STRATEGY RESET ({reason}; {self._resets}/{self.MAX_RESETS}): the current approach is not working — "
@@ -2850,7 +2868,36 @@ class AgentEngine:
         r = self._reminder()
         if r:
             msgs.append(r)
+        self._record_ledger(msgs)
         return msgs
+
+    def _record_ledger(self, msgs):
+        """Per step, what the prompt is made of (context_memory ledger) — to trace a bad step to its context."""
+        try:
+            import context_memory as cm
+            est = lambda m: int(_est_tokens([m]) * self.ratio)
+            row = {"step": self.turn.get("steps"), "system": est(msgs[0]) if msgs else 0,
+                   "tools": int(len(json.dumps(self._schemas(True) if self.reg else [])) / 3.6 * self.ratio),
+                   "n_tools": len(self._active_names()) if self.reg else 0,
+                   "summary": 0, "user": 0, "reminder": 0, "assistant": 0, "tool_full": 0, "tool_stub": 0,
+                   "n_tool_full": 0, "n_tool_stub": 0, "compactions": self.turn.get("compactions", 0),
+                   "masked": len((self.__dict__.get("_mask") or {}).get("stubs") or {})}
+            for m in msgs[1:]:
+                k, c = m.get("role"), str(m.get("content") or "")
+                if k == "tool":
+                    stub = c.startswith("[earlier ") or "archived as #E" in c[:400]
+                    row["tool_stub" if stub else "tool_full"] += est(m)
+                    row["n_tool_stub" if stub else "n_tool_full"] += 1
+                elif k == "user":
+                    row["summary" if c.startswith("[Summary of the earlier") else
+                        "reminder" if c.startswith(REMINDER_TAG) else "user"] += est(m)
+                else:
+                    row["assistant"] += est(m)
+            row["total"] = row["system"] + row["tools"] + sum(row[x] for x in ("summary", "user", "reminder",
+                                                                              "assistant", "tool_full", "tool_stub"))
+            cm.record_step(self.ctx.conv_id, row)
+        except Exception as e:
+            _log({"ledger_error": repr(e)[:200], "conv": self.ctx.conv_id})
 
     # ---- context focus: superseded tool output becomes a one-line stub in what the MODEL sees (the history itself is
     # untouched). A small model re-read the same files ~30 times because older copies buried them in a 60K history;
@@ -3056,6 +3103,10 @@ class AgentEngine:
                 out.append("Running: " + "; ".join(run))
         except Exception:
             pass
+        cmap = (getattr(self, "_pins", None) or {}).get("map")
+        if cmap:
+            out.append(f"Context map (turning points + everything condensed, with ids): {cmap} — read it before "
+                       f"re-deriving something; history_search(entry='E12') restores an item.")
         text = "\n".join(out)
         return text[:4000]
 
@@ -3718,6 +3769,11 @@ class AgentEngine:
             self.history.append({"role": "user", "content": "(The user sent this while you were working — "
                                  f"take it into account:)\n{text}"})
             self.emit("interjected", text=text)
+            try:
+                import context_memory as cm
+                cm.add_event(self.ctx.conv_id, "user", text, self.turn.get("steps"))
+            except Exception:
+                pass
             got = True
         return got
 
@@ -4908,8 +4964,51 @@ class AgentEngine:
             return "⚠ Still the same attempt after being told to stop. Stop now and report to the user."
         return ""
 
+    _EXC_LINE = re.compile(r"^\s*((?:[\w.]+\.)?\w*(?:Error|Exception)\b.*)$", re.M)
+
+    def _note_turning_point(self, name, args, ok, text):
+        """Record what changed the course of the work (see context_memory): kept outside the conversation, so a
+        compaction can't lose it."""
+        try:
+            import context_memory as cm
+            conv, step = self.ctx.conv_id, self.turn.get("steps")
+            a = args if isinstance(args, dict) else {}
+            titles = {iid: t for iid, t, _st, _ms in at.tracker_items(self.ctx.tracker)} if self.ctx.tracker else {}
+            if name == "update_tracker" and ok:
+                if a.get("new") and (a.get("goal") or a.get("milestones")):
+                    n = len(a.get("milestones") or []) if isinstance(a.get("milestones"), list) else 0
+                    cm.add_event(conv, "plan", f"{str(a.get('goal') or '').strip()[:180]} ({n} milestones)", step)
+                for d in a.get("decisions") or [] if isinstance(a.get("decisions"), list) else []:
+                    cm.add_event(conv, "decided", d, step)
+                for u in a.get("updates") or [] if isinstance(a.get("updates"), list) else []:
+                    if isinstance(u, dict) and str(u.get("status") or "").lower() == "done":
+                        cm.add_event(conv, "done", f"{u.get('id')} {titles.get(str(u.get('id')), '')}".strip(), step)
+            for u in at.parse_progress(a.get("progress") or ""):
+                if u["status"] == "done":
+                    cm.add_event(conv, "done", f"{u['id']} {titles.get(u['id'], '')}".strip(), step)
+            if not ok:
+                return
+            if name == "write_file" and str(text).startswith("created"):
+                cm.add_event(conv, "created", str(text).split(" Code check")[0].split("\n")[0][:220], step)
+            if name in ("run_tests", "powershell", "python_host", "debug_run", "bg_output"):
+                passed, failed = at.test_counts(str(text))
+                if passed or failed:
+                    names = re.findall(r"^FAILED\s+(\S+)", str(text), re.M)[:3]
+                    cm.add_event(conv, "tests", f"{passed} passed, {failed} failed"
+                                 + (f" ({', '.join(names)})" if names else ""), step)
+                seen = self.__dict__.setdefault("_seen_errors", set())
+                for m in self._EXC_LINE.finditer(str(text)[-6000:]):
+                    err = " ".join(m.group(1).split())[:200]
+                    if err not in seen:
+                        seen.add(err)
+                        cm.add_event(conv, "error", err, step)
+                        break
+        except Exception as e:
+            _log({"timeline_error": repr(e)[:200], "conv": self.ctx.conv_id})
+
     def _watch_progress(self, name, args, ok, text):
         """Loop and failure detection: warn the model, then make it stop and report."""
+        self._note_turning_point(name, args, ok, text)
         refused = text.startswith(("Not run again", "Not saved")) or " did not run" in text[:120] or (
             " was not enabled, so it did not run" in text[:120])
         passes = self._test_passes(name, text)
@@ -5175,6 +5274,11 @@ class AgentEngine:
         # 3) pinned, not summarised: what a summary tends to lose (the user's exact words and constraints, the
         #    project's PRD, the latest test results, the files changed). Kept and merged across compactions.
         self._pins = _collect_pins(old, getattr(self, "_pins", None))
+        try:
+            import context_memory as cm
+            self._pins["timeline"] = cm.render_timeline(conv)
+        except Exception:
+            pass
         self._pins["outline"] = self._code_outline()
         for m in old:                         # everything summarised away is archived in full, message by message
             if id(m) in archived:
@@ -5188,6 +5292,16 @@ class AgentEngine:
                        (text or "") + ("\n" + "\n".join(calls) if calls else ""))
                 archived.add(id(m))
         self._pins["archived"] = len(ha.entries(conv))
+        try:
+            import context_memory as cm
+            cm.add_event(conv, "compacted", f"context of {before:,} tokens condensed; "
+                         f"{self._pins['archived']} items archived in total", self.turn.get("steps"))
+            self._pins["map"] = cm.write_map(conv, ha.entries(conv), key_line=_archive_key_line)
+            folder = os.path.dirname(os.path.dirname(self._pins["map"]))      # the chat's own folder: readable
+            if not self.ctx.inside(self._pins["map"]) and folder not in self.ctx.roots:
+                self.ctx.roots.append(folder)
+        except Exception as e:
+            _log({"context_map_error": repr(e)[:200], "conv": conv})
         pinned = _render_pins(self._pins)
         head = [{"role": "user", "content": "[Summary of the earlier part of this conversation, written "
                  "automatically to save space]\n" + summary + ("\n\n" + pinned if pinned else "")}]
@@ -5216,7 +5330,14 @@ class AgentEngine:
             fn = m["tool_calls"][0].get("function") or {}
             anchor = f"(your call) {fn.get('name')}({' '.join(str(fn.get('arguments') or '').split())[:110]})"
         who = "your message" if m.get("role") == "assistant" else "the user message"
-        ask = (f"{REMINDER_TAG}\nPause the task. {SUMMARY_PROMPT}\n\nSummarize ONLY the part of this conversation BEFORE "
+        try:
+            import context_memory as cm
+            tl = cm.render_timeline(self.ctx.conv_id)
+        except Exception:
+            tl = ""
+        ask = (f"{REMINDER_TAG}\nPause the task. {SUMMARY_PROMPT}"
+               + (f"\n\nTurning points the app recorded:\n{tl}" if tl else "")
+               + "\n\nSummarize ONLY the part of this conversation BEFORE "
                f"{who} that begins: «{anchor}». That message and everything after it will be kept word for "
                f"word, so don't repeat them. Don't call tools; reply with the summary only.\n</system-reminder>")
         if self.summary:

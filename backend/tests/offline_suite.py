@@ -1339,6 +1339,45 @@ def layered_prompt_and_brief_docs_follow_the_loaded_groups():
 
 
 @test
+def turning_points_compaction_map_and_ledger():
+    import context_memory as cm
+    e = engine(num_ctx=16384)
+    conv = e.ctx.conv_id
+    e.turn = {"steps": 3}
+    at.t_update_tracker({"new": True, "goal": "expense tracker", "milestones": [{"title": "PRD"}, {"title": "Build"}]},
+                        e.ctx)
+    e._watch_progress("update_tracker", {"new": True, "goal": "expense tracker", "milestones": [{"title": "PRD"},
+                                                                                               {"title": "Build"}],
+                                        "decisions": ["category = any non-empty string"]}, True, "checklist saved")
+    e._watch_progress("write_file", {"path": "C:/p/server.py"}, True, "created C:/p/server.py (120 lines, +120 -0)")
+    log = "FAILED tests/test_api.py::test_a5 - assert 201 == 400\nValueError: bad amount\n== 1 failed, 8 passed =="
+    e._watch_progress("run_tests", {}, True, log)
+    e._watch_progress("run_tests", {}, True, log)                                     # the same state: no new point
+    e._watch_progress("run_tests", {}, True, "== 9 passed ==")
+    kinds = [x["kind"] for x in cm.events(conv)]
+    assert kinds == ["plan", "decided", "created", "tests", "error", "tests"], kinds
+    # a forced compaction builds on the timeline, pins it, and writes the map
+    e.history = [{"role": "user", "content": "build me an expense tracker"}]
+    for i in range(12):
+        e.history.append({"role": "assistant", "content": f"step {i}", "tool_calls": [tc("read_file", {"path": f"f{i}.py"}, f"c{i}")]})
+        e.history.append({"role": "tool", "tool_call_id": f"c{i}", "name": "read_file", "content": f"file {i}\n" + "x = 1\n" * 300})
+    asked = []
+    e._call_openai = lambda messages, **k: (asked.append(messages[-1]["content"]) or
+                                            ({"role": "assistant", "content": "SUMMARY: " + "built and tested. " * 10}, 10, 100))
+    e._compact_req = True
+    e._maybe_compact()
+    head = e.history[0]["content"]
+    assert "Turning points, recorded by the app" in head and "category = any non-empty string" in head, head[:600]
+    path = e._pins.get("map")
+    assert path and os.path.isfile(path) and "| E1 |" in open(path, encoding="utf-8").read()
+    assert any("Turning points the app recorded" in a for a in asked), asked[-1:]       # the summary builds on them
+    assert "CONTEXT_MAP.md" in head                                                       # and the head points at the map
+    e._payload_messages()
+    rows = cm.ledger(conv)
+    assert rows and rows[-1]["total"] > 0 and "tool_stub" in rows[-1], rows[-1:]
+
+
+@test
 def xml_style_tool_arguments_are_coerced_to_their_types():
     # Qwen-style XML tool calls deliver lists as JSON text: a whole milestone list became one milestone
     reg = at.Registry(at.Ctx([tmpdir("co")]), None, None)
