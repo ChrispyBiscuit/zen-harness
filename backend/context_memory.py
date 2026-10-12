@@ -114,6 +114,25 @@ def write_map(conv, archive_entries, key_line=None):
     return path
 
 
+def save_snapshot(conv, history, cut, summary=None):
+    """The conversation just before a compaction (and where it was cut) -> path. Kept for offline replay."""
+    d = os.path.join(_dir(conv), "snapshots")
+    with _lock:
+        os.makedirs(d, exist_ok=True)
+        n = len([f for f in os.listdir(d) if f.endswith(".json")]) + 1
+        path = os.path.join(d, f"compaction_{n}.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"conv": conv, "cut": cut, "summary_before": summary, "history": history,
+                       "timeline": events(conv)}, f, ensure_ascii=False, default=str)
+    return path
+
+
+def snapshots(conv):
+    d = os.path.join(_dir(conv), "snapshots")
+    return sorted((os.path.join(d, f) for f in os.listdir(d) if f.endswith(".json")),
+                  key=os.path.getmtime) if os.path.isdir(d) else []
+
+
 def map_path(conv):
     p = os.path.join(_dir(conv), "CONTEXT_MAP.md")
     return p if os.path.exists(p) else ""

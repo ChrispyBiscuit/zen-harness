@@ -5252,6 +5252,11 @@ class AgentEngine:
         if not cut:
             return
         old = self.history[:cut]
+        try:                                   # the conversation as it was before the cut: for offline replay
+            import context_memory as cm        # (evals/context/compaction_quiz.py measures what a compaction keeps)
+            cm.save_snapshot(conv, self.history, cut, getattr(self, "summary", None))
+        except Exception as e:
+            _log({"snapshot_error": repr(e)[:200], "conv": conv})
         self.emit("status", text="Compressing earlier conversation…")
         summary = None
         if as_cached is not None:
