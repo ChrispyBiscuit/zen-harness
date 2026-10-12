@@ -206,3 +206,26 @@ showed it an earlier attempt's request. Fixed bugs itself: `w+b` truncation, msv
 | 9 | Bad input | 1 | negative / missing category -> 400 with message; non-numeric -> usage error (no date input) |
 | 10 | Own tests | 1 | 10 passed; they start their own server |
 | 11 | README | 1 | 133 lines, host + roommate commands |
+
+## Ternary Bonsai 2 27B + harness (bonsai8, in app, q8/q4 KV, 61K) — 10.5 / 11 · working at 1 h 49 min, stopped at 2 h 58 min · 125 tool calls (3 failed) · $0
+Graded hands-on on a copy (2026-10-12): README commands, two people (one through the PC's LAN IP), a restart,
+bad input, its own tests. Stdlib only: `http.server` 0.0.0.0:8080 + SQLite (`db.py`), `cli.py --host/--port
+add-user/add-expense/list-users/list-expenses/totals [--user] [--month] [--date]`, docs/ tree (research, PRD, DESIGN,
+TASKS, DECISIONS) first. **Mixed run:** old code 22:27-00:21 (app closed by accident), then resumed on the new code
+(coherence checks, testing aids, cache fixes). Time to a working app: 22:27 -> 00:16 (21/21 tests at 23:48, its live
+3-roommate smoke test green at 00:16). After that ~70 min of self-imposed extra verification: a --date feature to test
+two months (introduced a datetime import crash, fixed), re-runs, README, then post-compaction re-testing — stopped at
+01:28 before its final report. Old-code half: 79 calls, 1 failed; ~45 of 95 min debugging its own server tests.
+| # | Item | Score | Evidence |
+|---|---|---|---|
+| 1 | Starts from README | 1 | as written (needs the shipped empty data/ folder: the server doesn't create it) |
+| 2 | Separate users | 0.5 | `add-user NAME`, `--user NAME`; no passwords |
+| 3 | Log an expense | 1 | amount (integer cents), category, note, date (default today) |
+| 4 | Attributed / own data | 1 | per-user rows; `list-expenses --user`, `totals --user` (no privacy) |
+| 5 | Monthly totals by category | 1 | Oct all: rent 100.00, food 37.49, transport 40.00 = 177.49; bob 55.00; Sep 9.99 — all correct |
+| 6 | Over the network | 1 | 0.0.0.0; an expense added via the LAN IP; README explains ipconfig + firewall |
+| 7 | Terminal client | 1 | every action from cli.py |
+| 8 | Persistence | 1 | identical totals after a server restart (SQLite) |
+| 9 | Bad input | 1 | -5 cents, 10/01/2026, 2026-13-45, unknown user, empty category: clear "ERROR: ..." and exit 1 |
+| 10 | Own tests | 1 | 21 passed (13 db + 8 behaviour tests on a real server) |
+| 11 | README | 1 | 238 lines: architecture, host + roommate steps, command table, example session |
