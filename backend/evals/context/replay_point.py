@@ -99,7 +99,6 @@ def rebuild_state(ctx, rows, conv_id=None):
     saved = []
     if conv_id:
         try:
-            import paths
             p = os.path.join(DATA, "agent_attachments", conv_id, "archive", "trackers.jsonl")
             saved = [json.loads(ln) for ln in open(p, encoding="utf-8") if ln.strip()]
         except (OSError, ValueError):
@@ -169,8 +168,11 @@ def main():
                                    "(default: this install's)")
     a = ap.parse_args()
     global DATA
-    import paths
-    DATA = a.data or paths.data_dir()
+    try:
+        import paths
+        DATA = a.data or paths.data_dir()
+    except ImportError:                               # an older layout without paths.py: data next to the code
+        DATA = a.data or BACKEND
     # everything the replay writes (checklist, file history, logs) goes to a scratch data folder, never the app's
     os.environ["LWS_DATA_DIR"] = tempfile.mkdtemp(prefix="replay_data_")
 
