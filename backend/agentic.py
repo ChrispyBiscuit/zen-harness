@@ -3299,10 +3299,20 @@ class AgentEngine:
             if lt.get("passed") and not lt.get("failed") and h.get("green") is not None and not h.get("green_edits"):
                 # bonsai8 spent 70 min re-proving a green build: a smoke script, hand probes, a new feature to test a
                 # month filter, and re-runs after a compaction hid the earlier results
+                # what is already done is retired here, not left as an open instruction (a model kept re-doing
+                # the live run because this line never said it had happened)
+                obs = ((h.get("obl") or {}).get("obs") or [])
+                live = next((o for o in reversed(obs) if o.get("ok") and o.get("tool") != "run_tests"
+                             and str(o.get("t", "")) >= str(lt.get("t", ""))), None)
+                readme = os.path.isfile(os.path.join(root, "README.md"))
+                left = ([] if live else ["ONE live run of the real app if the request asks for it (start it, use it "
+                                         "once the way a user would, stop)"]) + ([] if readme else ["the README"]) + \
+                    ["the final answer"]
                 out.append(f"VERIFIED: the suite passed at {lt['t']} and no app code changed since — that run is "
-                           f"the evidence the code works; cite it. Left: ONE live run of the real app if the request "
-                           f"asks for it (start it, use it once the way a user would, stop), then the README and the "
-                           f"final answer. No new scripts, probes or re-runs.")
+                           f"the evidence the code works; cite it."
+                           + (f" Live run DONE at {live['t']} ({live['line'][:100]})." if live else "")
+                           + (" README.md exists." if readme else "")
+                           + f" Left: {', then '.join(left)}. Nothing else: no new scripts, probes or re-runs.")
         try:
             import bg_tasks
             run = []
@@ -4679,8 +4689,9 @@ class AgentEngine:
         _log({"repeat_blocked": name, "conv": self.ctx.conv_id})
         return (f"{name} did not run: it is identical to a call you already made this turn, and nothing has changed "
                 f"since, so the result would be the same. That result began:\n{seen['head']}\n"
-                f"Do something different: use what that result told you, test a new hypothesis, or look the problem "
-                f"up (web_search the exact error) — or report what you found.")
+                f"If that result already did what you needed, that step is DONE: mark it done and move to the next "
+                f"item — doing the same thing another way (a script, another tool) is still a repeat. If it failed, "
+                f"use what it told you, test a new hypothesis, or look the error up — or report what you found.")
 
     def _record_call(self, name, t, args, text, ok=True):
         if not hasattr(self, "_calls_seen"):

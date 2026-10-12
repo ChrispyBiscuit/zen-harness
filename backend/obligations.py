@@ -255,6 +255,14 @@ def brief(c):
             for n, r in list(st["resolved"].items())[-4:]))
     if stale:
         rows.append("STALE (its own files changed after it was verified — re-check once): " + "; ".join(stale[-4:]))
+    if cur:                                           # a pending item whose deliverable already exists
+        import re as _re
+        m = _re.search(r"\b([\w-]+\.(?:md|txt|py|json|html|csv))\b", cur[1])
+        hit = next((p for p in (getattr(c, "changed", None) or {}) if m
+                    and os.path.basename(p).lower() == m.group(1).lower() and os.path.isfile(p)), None)
+        if hit:
+            rows.append(f"{os.path.basename(hit)} already exists ({sum(1 for _ in open(hit, encoding='utf-8', errors='replace'))} "
+                        f"lines): if it is complete, mark {cur[0]} done now instead of redoing it.")
     mine = [o for o in st["obs"] if cur and o.get("item") == cur[0]]
     if mine:
         o = mine[-1]

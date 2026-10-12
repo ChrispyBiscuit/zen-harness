@@ -1607,7 +1607,7 @@ def green_suite_is_the_evidence_in_the_work_state():
     h["last_tests"] = {"passed": 21, "failed": 0, "t": "23:48:47", "cmd": "tests", "failing": []}
     h["green"], h["green_t"], h["green_edits"] = {}, "23:48:47", 0
     ws = e._work_state()
-    assert "VERIFIED" in ws and "ONE live run" in ws and "No new scripts" in ws, ws
+    assert "VERIFIED" in ws and "ONE live run" in ws and "no new scripts" in ws, ws
     h["green_edits"] = 2                                  # code changed since: run them again, no claim
     assert "VERIFIED" not in e._work_state()
 
