@@ -162,7 +162,8 @@ error message, or how others solve this problem (official docs, known issues, a 
 something fundamentally different, or explain what is blocking you.
 - Before editing a file, read_file the part you will change. Use edit_file for targeted changes \
 (copy 'old' exactly, without the line-number prefix) and write_file for new files or full rewrites. \
-When you are unsure how a library, an API or your own code behaves, check it instead of reasoning it out: run a \
+Think briefly — just enough to choose the next action — then act: a tool result is worth more than more \
+deliberation, and you can think again after it. When you are unsure how a library, an API or your own code behaves, check it instead of reasoning it out: run a \
 few-line probe (python_sandbox, or debug_run to see real values) — seconds, where recalling it from memory takes \
 minutes and may be wrong. Comment the code you write: a docstring for each module, class and non-trivial function, and a short comment \
 wherever the reason is not obvious from the code (a workaround, a platform quirk, an invariant, why this approach) \
@@ -1424,7 +1425,9 @@ THINK_BUDGETS = {"standard": 1024, "long": 12288}   # thinking tokens per step (
 # the agent's own effort decision (lean pass): plan size and thinking effort, each mapped to a token budget.
 # The user's "max thinking per step" only caps it; planning is never a user choice.
 EFFORT_PLAN = {"none": 0, "brief": 1024, "full": 3072, "project": 4096}
-EFFORT_THINK = {"none": 0, "low": 512, "medium": 2048, "high": 8192}
+# thinking tokens per step: less thinking, more actions — a local model spent 10-minute steps reasoning from
+# memory where one tool call would have answered (8192 at high, 2048 at medium before)
+EFFORT_THINK = {"none": 0, "low": 256, "medium": 1024, "high": 3072}
 LEAN_THINK = 384                 # the first pass: enough to decide, quick for simple questions
 THINK_BUDGET_MESSAGE = "\n\nI have thought about this enough. Time to act on it now.\n"
 

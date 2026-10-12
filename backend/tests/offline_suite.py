@@ -298,32 +298,32 @@ def think_max_effort_mapping():
 def step_budget_levels_and_caps():
     e = engine(effort="auto")
     e._think_effort = "low"
-    assert e._step_budget(True, 2) == 512
+    assert e._step_budget(True, 2) == agentic.EFFORT_THINK["low"]
     e._fail_streak = 1
     assert e._effective_effort() == "medium"          # one level up from the first failure
-    assert e._step_budget(True, 2) == 8192            # debugging: at least the high budget
+    assert e._step_budget(True, 2) == agentic.EFFORT_THINK["high"]     # debugging: at least the high budget
     e._fail_streak = 0
     e._watch_progress("run_tests", {}, True, "== 4 failed, 6 passed in 1.2s ==")
     assert e._debugging and e._fail_streak == 0      # failing tests are not a failed call, but they are debugging
     e._watch_progress("read_file", {}, True, "1| import os")
-    assert e._debugging and e._wants_thinking(True, 5) and e._step_budget(True, 5) == 8192
+    assert e._debugging and e._wants_thinking(True, 5) and e._step_budget(True, 5) == agentic.EFFORT_THINK["high"]
     e._watch_progress("run_tests", {}, True, "== 10 passed in 1.0s ==")
-    assert not e._debugging and e._step_budget(True, 2) == 512
+    assert not e._debugging and e._step_budget(True, 2) == agentic.EFFORT_THINK["low"]
     e.cfg["effort"] = "low"
     e._watch_progress("powershell", {}, True, "exit code 1\nTraceback (most recent call last):\nValueError")
-    assert e._debugging and e._step_budget(True, 2) == 1024   # debugging never goes above the user's cap
+    assert e._debugging and e._step_budget(True, 2) == min(agentic.EFFORT_THINK["high"], 1024)   # never above the user's cap
     e.cfg["effort"], e._debugging = "auto", False
     e._fail_streak, e._think_effort = 0, "high"
     e._fc_rounds = 1                                  # wrapping up (after a fact check): doubled
-    assert e._step_budget(True, 2) == 16384
+    assert e._step_budget(True, 2) == 2 * agentic.EFFORT_THINK["high"]
     e.cfg["effort"] = "low"
     assert e._effective_effort() == "low"             # the setting caps the level, not only the tokens
-    assert e._step_budget(True, 2) == 512             # low effort's budget (and never above the setting)
+    assert e._step_budget(True, 2) == agentic.EFFORT_THINK["low"]      # low effort's budget (and never above the setting)
     e.cfg["effort"], e._fc_rounds = "medium", 0                 # (not wrapping up: the answer step always thinks)
     e.turn = {"planned": True}
     assert e._effective_effort() == "medium" and not e._wants_thinking(True, 5)   # Medium: key steps only
     e._debugging = True
-    assert e._effective_effort() == "high" and e._step_budget(True, 5) == 4096   # debugging: up, within Medium
+    assert e._effective_effort() == "high" and e._step_budget(True, 5) == min(agentic.EFFORT_THINK["high"], 4096)   # within Medium
     e._debugging = False
 
 
@@ -1026,7 +1026,7 @@ def effort_auto_none_max_and_quick_size():
     assert e._wants_thinking(True, 1) is False and e._step_budget(True, 1) == 0     # quick work: no thinking
     e._think_effort = "low"
     e._fc_rounds = 1                                                                # final answer of low work
-    assert e._step_budget(True, 2) == 512, "only medium/high answers get the doubled budget"
+    assert e._step_budget(True, 2) == agentic.EFFORT_THINK["low"], "only medium/high answers get the doubled budget"
     e.cfg["effort"] = "max"
     assert e._effective_effort() == "high" and e._wants_thinking(True, 3) is True
     e.cfg["effort"] = "low"
