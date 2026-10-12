@@ -4426,6 +4426,9 @@ class AgentEngine:
                         except Exception:
                             pass
                         open_items = []
+                    # a BLOCKED item waits on the user (admin rights, a password): the answer is where it says so.
+                    # Counting it as open sent a finished run back to work after its answer, where it re-ran checks
+                    open_items = [x for x in open_items if x[2] != "blocked"]
                     asks_user = "?" in (msg.get("content") or "")[-300:] or bool(self.ctx.asked)
                     if (open_items and not asks_user and getattr(self, "_open_nags", 0) < 8
                             and (not self._force_answer or getattr(self, "_resets", 0) < self.MAX_RESETS)):
