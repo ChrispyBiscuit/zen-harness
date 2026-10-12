@@ -339,7 +339,13 @@ def system_ram_mib():
 KV_BYTES = {"f16": 2.0, "bf16": 2.0, "q8_0": 1.0625, "q4_0": 0.5625}     # bytes per cached value
 # bf16: same size as f16; the Qwen3.6-35B-A3B REAP card says f16 KV accumulates error on that architecture and corrupts
 # tool calls over long agent contexts, and that -ctk bf16 -ctv bf16 is "not optional"
-COMPUTE_PER_TOKEN = 4096           # compute-buffer growth per context token (measured on Qwythos-9B)
+COMPUTE_PER_TOKEN = 4096           # compute-buffer growth per context token (measured on Qwythos-9B, ubatch 512)
+
+
+def compute_per_token(ubatch=None):
+    """The compute buffers grow with ubatch x context: a smaller processing batch leaves room for more context
+    (slightly slower prompt reading, same generation speed)."""
+    return COMPUTE_PER_TOKEN * max(64, int(ubatch or 512)) / 512
 FIXED_OVERHEAD_MB = 450            # CUDA context, scratch buffers
 MARGIN_MB = 200                    # left free for the desktop
 
@@ -394,7 +400,7 @@ def gpu_total_mib():
         return 0
 
 
-def fit_context(model_name, want_ctx, kv_choice="auto", reserve_mib=0, kv_v=None):
+def fit_context(model_name, want_ctx, kv_choice="auto", reserve_mib=0, kv_v=None, ubatch=None):
     """-> dict(ctx, kv, max={kv: ctx}, note) — the largest context (up to want_ctx) whose KV cache and
     compute buffers fit in GPU memory next to the model weights, so nothing spills to system RAM.
     reserve_mib: GPU memory kept free for another model (the hybrid mode's executor)."""
@@ -411,7 +417,7 @@ def fit_context(model_name, want_ctx, kv_choice="auto", reserve_mib=0, kv_v=None
     if not total:
         return {"ctx": want_ctx, "kv": "q8_0" if kv_choice == "auto" else kv_choice, "max": {}, "note": ""}
     if meta.get("expert_count"):
-        return _fit_moe(blob, meta, want_ctx, kv_choice, total, kv_v=kv_v)
+        return _fit_moe(blob, meta, want_ctx, kv_choice, total, kv_v=kv_v)        # MoE runs its own ubatch
     mtp = bool(meta.get("nextn_predict_layers"))
     if weights_mib + FIXED_OVERHEAD_MB + MARGIN_MB > total:
         # a dense model bigger than the card: llama.cpp's --fit splits its layers between GPU and CPU (slow), so
@@ -421,16 +427,17 @@ def fit_context(model_name, want_ctx, kv_choice="auto", reserve_mib=0, kv_v=None
                 "note": f"The model ({weights_mib / 1024:.1f} GB) is bigger than the GPU: part of it runs on the CPU (slow).",
                 "weights_mib": round(weights_mib), "total_mib": total}
     budget = (total - MARGIN_MB - FIXED_OVERHEAD_MB - weights_mib) * 1048576
+    cpt = compute_per_token(ubatch)
     mx = {}
     for kv in ("f16", "q8_0", "q4_0"):
-        per = kv_bytes_per_token(meta, kv) + COMPUTE_PER_TOKEN
+        per = kv_bytes_per_token(meta, kv) + cpt
         mx[kv] = max(0, int((budget - kv_fixed_bytes(meta, kv)) / per) // 4096 * 4096)
     if kv_choice == "auto":
         kv = "f16" if mx["f16"] >= want_ctx else "q8_0"      # 4-bit only when asked for: it hurts small models
     else:
         kv = kv_choice
     if kv_v and kv_v != kv and kv in KV_BYTES and kv_v in KV_BYTES:     # a coarser V cache than K: the average
-        per = (kv_bytes_per_token(meta, kv) + kv_bytes_per_token(meta, kv_v)) / 2 + COMPUTE_PER_TOKEN
+        per = (kv_bytes_per_token(meta, kv) + kv_bytes_per_token(meta, kv_v)) / 2 + cpt
         fixed = (kv_fixed_bytes(meta, kv) + kv_fixed_bytes(meta, kv_v)) / 2
         mx[kv] = max(0, int((budget - fixed) / per) // 4096 * 4096)
     ctx = min(want_ctx, mx.get(kv, want_ctx))       # 0 means "barely fits", not "no limit"

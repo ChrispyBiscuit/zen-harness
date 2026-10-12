@@ -1607,7 +1607,8 @@ class AgentEngine:
                 _log({"ctx_auto": auto, "conv": self.ctx.conv_id})
         if be == "llama":
             fit = llama_local.fit_context(model, int(c.get("num_ctx") or 16384), str(c.get("kv_cache") or "auto"),
-                                          reserve_mib=reserve, kv_v=c.get("kv_cache_v") or None)
+                                          reserve_mib=reserve, kv_v=c.get("kv_cache_v") or None,
+                                          ubatch=c.get("ubatch") or (256 if draft else None))
             if fit.get("note"):
                 self.emit("status", text=fit["note"])
                 _log({"context_fit": fit, "conv": self.ctx.conv_id})
@@ -1664,6 +1665,9 @@ class AgentEngine:
                 self.emit("status", text=f"Mixture-of-experts: experts of {fit['experts_gpu_layers']}/{fit['layers']} "
                                          f"layers on the GPU, {fit['experts_cpu_gib']} GB in system RAM"
                                          + (", multi-token prediction on" if fit.get("mtp") and c.get("mtp", True) else ""))
+            if c.get("ubatch") and not draft and not fit.get("moe"):
+                # a plain model's own processing batch: smaller compute buffers leave room for more context
+                args += ["-ub", str(int(c["ubatch"]))]
             if fit.get("partial") and c.get("fit_target_mib"):
                 # GPU memory llama.cpp's --fit leaves free (1024 by default): less margin = more layers on the GPU.
                 # Given after the default, so this value wins

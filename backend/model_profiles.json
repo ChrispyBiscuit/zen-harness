@@ -82,7 +82,7 @@
       "kv_unified": false,
       "spec_ngram": "",
       "mtp": false,
-      "cache_ram_mib": 1024,
+      "cache_ram_mib": 3072,
       "ctx_checkpoints": 4,
       "strict_template": true,
       "reasoning_off_field": true,
