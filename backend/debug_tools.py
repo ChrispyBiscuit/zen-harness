@@ -459,7 +459,7 @@ def run_tests(a, c, resolve, ToolError):
         else:
             fw = "pytest"
     if fw == "pytest":
-        argv = [*py, "-m", "pytest", target, "-q", "--tb=short", "--color=no", "-p", "no:cacheprovider",
+        argv = [*py, "-m", "pytest", *(a.get("_ids") or [target]), "-q", "--tb=short", "--color=no", "-p", "no:cacheprovider",
                 "--maxfail", str(int(a.get("max_failures") or 10))]
         if a.get("filter"):
             argv += ["-k", str(a["filter"])]

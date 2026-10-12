@@ -48,7 +48,10 @@ hides a traceback), and fix until it passes. **Write the tests a group at a time
 criterion per write (`append=true` for the next group), running them after each: a 500-line test file written in
 one go comes back with duplicate functions and syntax errors, and its failures are hard to tell apart. Tests call the
 program exactly as the contract says (the same command-line arguments, endpoints and file names) — check the
-contract, don't recall it. If you write your own
+contract, don't recall it. **Tests that need the program's server running:** call **add_server_test_helper** first
+and use its `serve([...'{port}'...])` — it starts the server on a free port, waits until it listens, fails at once
+with the server's output if it dies, and stops it afterwards; hand-written start/wait/stop code is where these tests
+hang. If you write your own
 runner, print the full traceback for every error (`traceback.print_exc()`), not just the message: an error without
 its file and line sends you looking in the wrong file.
 

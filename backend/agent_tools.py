@@ -475,6 +475,13 @@ def t_write_file(a, c):
         # syntax error); the next file of this size is better written and checked in parts
         big_note = ("\nNote: that was a long file in one write. Run it or its tests now, and write the next big file in "
                     "parts (one feature or test group, then append=true), checking each part.")
+    old_n = len(old.splitlines())
+    if existed and not a.get("append") and old_n >= 120 and max(add, rem) <= old_n * 0.35:
+        # most of the file came back unchanged: the whole thing was re-typed for a local change (a 236-line test file
+        # rewritten to change its setup, minutes of output on a slow model)
+        big_note += (f"\nNote: you re-wrote all {len(new.splitlines())} lines of {os.path.basename(p)} to change about "
+                     f"{max(add, rem)}. For a change inside a big file use edit_file (old → new): only the changed part "
+                     f"is written, which is much faster.")
     return (f"{verb} {p} ({len(new.splitlines())} lines, +{add} -{rem})" + _note_change(c, p, old, new, existed)
             + prd_note + big_note)
 
@@ -2163,7 +2170,7 @@ TOOL_GROUPS = [
     ("math", "exact calculator: arithmetic, algebra, calculus, units, dates; read formulas from images",
      ["calculate", "read_formula"]),
     ("code", "run Python (isolated sandbox, or on the PC), SQL over data files, run tests, debug scripts",
-     ["python_sandbox", "python_host", "query_data", "record", "run_tests", "debug_run", "trace_call",
+     ["python_sandbox", "python_host", "query_data", "record", "run_tests", "add_server_test_helper", "debug_run", "trace_call",
       "changes_since_green", "undo_file", "port_info", "stack_dump"]),
     ("artifacts", "documents in the Artifacts pane you create and keep revising",
      ["artifact_create", "artifact_edit", "artifact_read", "artifact_list"]),
@@ -3220,9 +3227,78 @@ def t_record(a, c):
     return text
 
 
+SUBSET_HEAD = "tests (only the ones that failed last time)"
+_SERVER_FAIL_RX = re.compile(r"ConnectionRefused|Connection refused|WinError 10061|URLError|RemoteDisconnected|"
+                             r"timed out|Timeout(?:Error|Expired)|did not (?:start|listen)", re.I)
+
+
 def t_run_tests(a, c):
+    """Re-running after a failure runs the tests that failed first (smaller result, faster); once they pass, the
+    whole suite runs in the same call so a fix that broke something else still shows. all=true runs everything."""
     import debug_tools as dbg
-    return dbg.run_tests(a, c, lambda p, must=False: c.resolve(p, must), ToolError)
+    res = lambda p, must=False: c.resolve(p, must)
+    target = res(a.get("path"), True) if a.get("path") else (c.cwd or c.roots[0])
+    folder = target if os.path.isdir(target) else os.path.dirname(target)
+    prev = _hist(c).get("last_tests") or {}
+    ids = []
+    if (prev.get("failing") and not a.get("all") and not a.get("filter")
+            and str(a.get("framework") or "auto").lower() in ("auto", "pytest")
+            and str(prev.get("cmd") or "") == str(a.get("path") or "run_tests")[:80]):
+        for nid in prev["failing"][:20]:
+            base = next((b for b in (folder, os.path.dirname(folder), c.cwd) if b
+                         and os.path.isfile(os.path.join(b, nid.split("::")[0]))), None)
+            if base:
+                ids.append(os.path.join(base, nid))
+    if ids:
+        text = dbg.run_tests(dict(a, _ids=ids), c, res, ToolError)
+        if text.startswith("tests: FAILED"):            # anything else (passed, nothing collected): the whole suite
+            return (f"{SUBSET_HEAD}: {text[len('tests: '):]}\n(Only the {len(ids)} test(s) that failed last time "
+                    f"were run; once they pass the whole suite runs. all=true runs everything now.)"
+                    + _server_tip(text, folder))
+        full = dbg.run_tests(a, c, res, ToolError)
+        return full + f"\n(The {len(ids)} test(s) that failed last time pass now; the result above is the whole suite.)" \
+            + _server_tip(full, folder)
+    text = dbg.run_tests(a, c, res, ToolError)
+    return text + _server_tip(text, folder)
+
+
+def _server_tip(text, folder):
+    """A test failure that looks like the server never came up -> point at the tested helper, once per project."""
+    if text.startswith("tests: PASSED") or not _SERVER_FAIL_RX.search(text):
+        return ""
+    for d in (folder, os.path.join(folder, "tests"), os.path.dirname(folder)):
+        if os.path.isfile(os.path.join(d, "serve_helper.py")):
+            return ""
+    return ("\nTip: these failures look like the server not starting or not answering inside the tests. "
+            "add_server_test_helper writes a tested helper (serve(...) starts it on a free port, waits until it "
+            "listens, shows its output if it dies, stops it) so the tests can't hang on that.")
+
+
+def t_add_server_test_helper(a, c):
+    import serve_helper
+    folder = c.resolve(a.get("path") or "tests")
+    if os.path.splitext(folder)[1]:
+        folder = os.path.dirname(folder)
+    p = os.path.join(folder, "serve_helper.py")
+    if os.path.isfile(p) and _read_text(p) == serve_helper.SOURCE:
+        out = f"{p} is already there and current."
+    else:
+        os.makedirs(folder, exist_ok=True)
+        _backup(p)
+        with open(p, "w", encoding="utf-8", newline="") as f:
+            f.write(serve_helper.SOURCE)
+        c.changed[p] = "created"
+        out = f"wrote {p}."
+    imp = ("from tests.serve_helper import serve" if os.path.isfile(os.path.join(folder, "__init__.py"))
+           else "from serve_helper import serve")
+    return (out + f" In a test file in that folder:\n\n    {imp}\n\n    def test_ping():\n"
+            f"        with serve([\"python\", \"server.py\", \"--port\", \"{{port}}\"]) as srv:\n"
+            f"            status, body = srv.get(\"/api/ping\")\n            assert status == 200, (status, body, srv.output())\n\n"
+            f"\"{{port}}\" becomes a free port (also in the PORT environment variable); the command runs from the "
+            f"project folder (the one above tests/). srv.get/srv.post/srv.request return (status, parsed JSON or text); "
+            f"srv.run([...\"{{url}}\"...]) runs a client against the same server; srv.output() is what the server "
+            f"printed. If the server exits or never listens, serve() fails at once with its output. Your server must "
+            f"take its port from the command line or PORT.")
 
 
 def t_debug_run(a, c):
@@ -3873,7 +3949,15 @@ BUILTIN = [
      "runner: it never hides a traceback.",
      _obj({"path": S, "framework": {"type": "string", "enum": ["auto", "pytest", "node", "npm"]},
            "filter": {"type": "string", "description": "run only tests whose name matches (pytest -k)"},
-           "max_failures": I, "timeout": I}), t_run_tests),
+           "max_failures": I, "timeout": I,
+           "all": {"type": "boolean", "description": "run every test now (by default a re-run after a failure runs "
+                                                     "the failed tests first, then everything once they pass)"}}),
+     t_run_tests),
+    ("add_server_test_helper", WRITE, "Write a tested helper into the project's tests folder for tests that need the "
+     "project's server running: serve([...'{port}'...]) starts it on a free port, waits until it listens, fails at "
+     "once with the server's output if it dies, and stops it after the test. Use it instead of hand-written "
+     "start/wait/stop code. path = the tests folder (default: tests).", _obj({"path": S}),
+     t_add_server_test_helper),
     ("debug_run", EXEC, "Run a Python script as a debugger would. On a crash: the traceback plus the LOCAL VARIABLES "
      "of the failing frame (post-mortem). With probe='file.py:LINE': prints the local variables (and any 'watch' "
      "expressions) each time that line is reached, up to max_hits — to see what the data really is instead of "
@@ -4299,7 +4383,7 @@ class Registry:
             cmd_blob = json.dumps(args or {}).lower()
             if name == "run_tests" or (name in ("powershell", "python_host") and re.search(r"test|pytest|unittest", cmd_blob)):
                 p_, f_ = test_counts(str(text))
-                if p_ or f_:                                     # the last test run, for the work-state panel
+                if (p_ or f_) and not str(text).startswith(SUBSET_HEAD):   # the last FULL run, for the work state
                     import code_insight as ci
                     prev = _hist(self.ctx).get("last_tests")
                     cur = {"passed": p_, "failed": f_, "t": time.strftime("%H:%M:%S"),
