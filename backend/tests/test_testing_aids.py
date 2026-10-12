@@ -75,6 +75,7 @@ def test_rerun_failed_first_then_full_suite():
     open(tf, "w").write("def test_a():\n    assert True\n\ndef test_b():\n    assert False\n")
     c = at.Ctx([d])
     c.cwd = d
+    c.conv_id = "aids-rerun"                          # its own file history (contexts without an id share one)
     reg = at.Registry(c, None, None)
     first, _ = reg.call("run_tests", {"path": os.path.join(d, "tests")})
     assert first.startswith("tests: FAILED") and "1 failed, 1 passed" in first, first

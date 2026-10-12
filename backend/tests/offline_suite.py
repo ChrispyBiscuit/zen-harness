@@ -1607,7 +1607,7 @@ def green_suite_is_the_evidence_in_the_work_state():
     h["last_tests"] = {"passed": 21, "failed": 0, "t": "23:48:47", "cmd": "tests", "failing": []}
     h["green"], h["green_t"], h["green_edits"] = {}, "23:48:47", 0
     ws = e._work_state()
-    assert "VERIFIED" in ws and "No new verification" in ws, ws
+    assert "VERIFIED" in ws and "ONE live run" in ws and "No new scripts" in ws, ws
     h["green_edits"] = 2                                  # code changed since: run them again, no claim
     assert "VERIFIED" not in e._work_state()
 
@@ -1765,6 +1765,31 @@ def a_test_that_starts_its_own_server_gets_a_note():
     assert "these tests start a server themselves" in out, out
     out = at.t_write_file({"path": os.path.join(d, "test_logic.py"), "content": "def test_b():\n    assert 1\n"}, c)
     assert "start a server" not in out
+
+
+@test
+def scratch_scripts_do_not_make_a_green_run_stale():
+    """bonsai9 wrote _realrun.py after a green suite: it counted as a code change, switching VERIFIED off and
+    're-run the tests now' on."""
+    d = tmpdir("scratch")
+    os.makedirs(os.path.join(d, "docs"))
+    os.makedirs(os.path.join(d, "tests"))
+    open(os.path.join(d, "server.py"), "w").write("x = 1\n")
+    open(os.path.join(d, "client.py"), "w").write("y = 2\n")
+    open(os.path.join(d, "tests", "test_a.py"), "w").write("import client\nCMD = ['python', 'server.py']\n")
+    for f, want in (("server.py", True), ("client.py", True), (os.path.join("tests", "test_a.py"), True)):
+        assert at._part_of_app(os.path.join(d, f)) is want, f
+    c = at.Ctx([d])
+    c.conv_id = "audit-scratch"                       # its own file history (contexts without an id share one)
+    at.mark_green(c)
+    at.t_write_file({"path": os.path.join(d, "_realrun.py"), "content": "import client\nprint(1)\n"}, c)
+    assert at._hist(c)["green_edits"] == 0, "a scratch script nothing refers to is not an app change"
+    c.files_read = {}
+    at._hist(c)  # same history
+    out = at.t_edit_file({"path": os.path.join(d, "server.py"), "old": "x = 1", "new": "x = 3"}, c) \
+        if hasattr(at, "t_edit_file") else ""
+    if out:
+        assert at._hist(c)["green_edits"] == 1, "an app file still counts"
 
 
 def main():

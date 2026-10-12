@@ -2612,6 +2612,44 @@ def _code_path(p):
     return bool(re.search(r"\.(py|js|ts|tsx|jsx|mjs|cjs|html?|css|java|cs|go|rs|rb|php|ps1|sh|sql)$", str(p), re.I))
 
 
+def _part_of_app(p, cap=400):
+    """Does a change to this file make the last green test run stale? Yes for a test file and for anything another
+    project file imports or names (a test that runs server.py, a README that mentions client.py); no for a scratch or
+    probe script nothing refers to (bonsai9's _realrun.py, written after a green suite, counted as a code change: it
+    switched off 'VERIFIED' and switched on 're-run the tests now')."""
+    key = os.path.abspath(p)
+    base = os.path.basename(key)
+    if base.startswith("test_") or base.endswith(("_test.py", ".test.js", ".test.ts", ".spec.js", ".spec.ts")):
+        return True
+    if not base.endswith(".py"):
+        return True                                   # other languages: keep counting every code change
+    mod = os.path.splitext(base)[0]
+    try:
+        import code_insight
+        proj = code_insight.project_root(key)
+    except Exception:
+        proj = os.path.dirname(key)
+    rx = re.compile(r"^\s*(?:from|import)\s+(?:[\w.]*\.)?" + re.escape(mod) + r"\b|\b" + re.escape(base) + r"\b", re.M)
+    seen = 0
+    for dp, dns, fns in os.walk(proj):
+        dns[:] = [d for d in dns if not d.startswith((".", "__")) and d not in ("venv", ".venv", "node_modules")]
+        for f in fns:
+            fp = os.path.join(dp, f)
+            if not f.endswith((".py", ".md", ".txt", ".toml", ".cfg", ".ini", ".json", ".bat", ".ps1")) or \
+                    os.path.abspath(fp) == key:
+                continue
+            seen += 1
+            if seen > cap:
+                return True                           # a big project: don't guess, count it
+            try:
+                with open(fp, encoding="utf-8", errors="replace") as fh:
+                    if rx.search(fh.read(400000)):
+                        return True
+            except OSError:
+                pass
+    return False
+
+
 def _note_change(c, p, old, new, existed):
     """Record a write/edit -> a note for the model (an edit loop, or tests not re-run since they last passed)."""
     h, key = _hist(c), os.path.abspath(p)
@@ -2630,7 +2668,7 @@ def _note_change(c, p, old, new, existed):
                      f"(run it and read the actual error; changes_since_green shows what really changed).")
     states.append(now)
     del states[:-30]
-    if h["green"] is not None and _code_path(p):
+    if h["green"] is not None and _code_path(p) and _part_of_app(p):
         h["green_edits"] += 1
         if h["green_edits"] in (1, 4, 8):
             notes.append(f"Tests last passed {h['green_edits']} code edit(s) ago — re-run them now (run_tests) so a "

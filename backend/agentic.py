@@ -3291,9 +3291,10 @@ class AgentEngine:
             if lt.get("passed") and not lt.get("failed") and h.get("green") is not None and not h.get("green_edits"):
                 # bonsai8 spent 70 min re-proving a green build: a smoke script, hand probes, a new feature to test a
                 # month filter, and re-runs after a compaction hid the earlier results
-                out.append(f"VERIFIED: the suite passed at {lt['t']} and no code changed since — that run is the "
-                           f"evidence the code works; cite it. Left: only what the tests can't cover, then the README "
-                           f"and the final answer. No new verification scripts, probes or re-runs.")
+                out.append(f"VERIFIED: the suite passed at {lt['t']} and no app code changed since — that run is "
+                           f"the evidence the code works; cite it. Left: ONE live run of the real app if the request "
+                           f"asks for it (start it, use it once the way a user would, stop), then the README and the "
+                           f"final answer. No new scripts, probes or re-runs.")
         try:
             import bg_tasks
             run = []
