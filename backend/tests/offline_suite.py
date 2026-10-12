@@ -317,7 +317,14 @@ def step_budget_levels_and_caps():
     e._fc_rounds = 1                                  # wrapping up (after a fact check): doubled
     assert e._step_budget(True, 2) == 16384
     e.cfg["effort"] = "low"
-    assert e._step_budget(True, 2) == 1024            # never above the user's cap
+    assert e._effective_effort() == "low"             # the setting caps the level, not only the tokens
+    assert e._step_budget(True, 2) == 512             # low effort's budget (and never above the setting)
+    e.cfg["effort"], e._fc_rounds = "medium", 0                 # (not wrapping up: the answer step always thinks)
+    e.turn = {"planned": True}
+    assert e._effective_effort() == "medium" and not e._wants_thinking(True, 5)   # Medium: key steps only
+    e._debugging = True
+    assert e._effective_effort() == "high" and e._step_budget(True, 5) == 4096   # debugging: up, within Medium
+    e._debugging = False
 
 
 @test

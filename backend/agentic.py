@@ -5325,12 +5325,22 @@ class AgentEngine:
             return "medium"
         return eff
 
+    _EFFORT_LEVELS = ("none", "low", "medium", "high")
+    _CAP_LEVEL = {"minimal": "none", "low": "low", "medium": "medium", "high": "high"}
+
     def _effective_effort(self):
-        """The thinking effort for this step: the agent's own choice (none/low/medium/high), one level up after
-        repeated failures; the user's Effort 'max' means high on every step."""
-        if str(self.cfg.get("effort") or "").lower() == "max":
+        """The thinking effort for this step: the agent's own choice (none/low/medium/high), capped by the user's
+        Effort setting, then one level up while something is broken (a failure, a traceback, failing tests) — the
+        token ceiling of the setting still applies (think_max). The user's Effort 'max' means high on every step.
+        The setting caps the LEVEL, not only the tokens: with Medium the agent used to keep choosing 'high' and
+        think on every step, just with fewer tokens; now Medium thinks on the steps that matter."""
+        setting = str(self.cfg.get("effort") or "").lower()
+        if setting == "max":
             return "high"
         eff = getattr(self, "_think_effort", "medium") or "medium"
+        cap = self._CAP_LEVEL.get(setting)
+        if cap and self._EFFORT_LEVELS.index(eff) > self._EFFORT_LEVELS.index(cap):
+            eff = cap
         if (self._fail_streak >= 1 or getattr(self, "_debugging", False)) and eff != "high":
             eff = {"none": "low", "low": "medium", "medium": "high"}[eff]
         return eff
