@@ -73,8 +73,20 @@ def test_brief_tracker_keeps_decisions_and_open_blockers():
     assert "Docs" not in brief
 
 
+def _long_history():
+    out = []
+    for i in range(75):
+        call_id = f"c{i}"
+        out.append({"role":"assistant", "content":f"Investigating module {i}. " + ("Reasoning before the next test. " * 70),
+                    "tool_calls":[{"id":call_id, "type":"function", "function":{
+                        "name":"read_file", "arguments":json.dumps({"path":f"module{i}.js"})}}]})
+        out.append({"role":"tool", "tool_call_id":call_id,
+                    "name":"read_file", "content":f"module{i}.js returned: " + ("source line\n" * 50)})
+    return out
+
+
 def test_long_history_compacts_to_target_with_exact_request_and_pairs():
-    e = _engine()
+    e = _engine(compact_target_tokens=20000)          # an explicit target (the default is now 72% of the budget)
     e.history = [{"role":"user", "content":"Build the FPS game. Keep the character model and never remove shooting."}]
     for i in range(75):
         call_id = f"c{i}"
@@ -90,6 +102,14 @@ def test_long_history_compacts_to_target_with_exact_request_and_pairs():
     assert e.turn["compactions"] == 1
     assert e._history_tokens() <= 22000
     assert "never remove shooting" in e.history[0]["content"]
+    # the default keeps much more of the recent work verbatim, still well under the compaction point
+    d = _engine()
+    d.history = [{"role":"user", "content":"Build the FPS game. Keep the character model and never remove shooting."}] \
+        + _long_history()
+    d._call_openai = e._call_openai
+    d._compact_req = True
+    d._maybe_compact()
+    assert 30000 < d._history_tokens() <= d.context_budget() * 0.85
     assert "Full checkpoint:" in e.history[0]["content"]
     saved = checkpoint.load(e.ctx.conv_id)
     assert saved["contract"]

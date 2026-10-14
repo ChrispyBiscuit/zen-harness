@@ -291,8 +291,22 @@ def step_budget_levels_and_caps():
     e.turn = {"planned": True}
     assert e._effective_effort() == "medium" and not e._wants_thinking(True, 5)   # Medium: key steps only
     e._debugging = True
-    assert e._effective_effort() == "high" and e._step_budget(True, 5) == min(agentic.EFFORT_THINK["high"], 4096)   # within Medium
+    assert e._effective_effort() == "high" and e._step_budget(True, 5) == agentic.DEBUG_THINK   # Medium: debugging is bounded
+    e.cfg["effort"], e._think_effort = "auto", "high"
+    assert e._step_budget(True, 5) == agentic.DEBUG_THINK      # the agent's own 'high' too (a debug streak: 3072/step)
+    e.cfg["effort"] = "high"
+    assert e._step_budget(True, 5) == agentic.EFFORT_THINK["high"]   # the user's High keeps the bigger budget
     e._debugging = False
+
+
+@test
+def compaction_target_scales_with_the_window():
+    e = engine(num_ctx=61440, compact_target_tokens=0)
+    assert e._compact_target() == int(e.context_budget() * e.COMPACT_TARGET_SHARE) > 35000   # was a fixed 20K
+    e.cfg["num_ctx"] = 131072
+    assert e._compact_target() > 80000
+    e.cfg["compact_target_tokens"] = 30000
+    assert e._compact_target() == 30000                         # an explicit setting still wins
 
 
 @test

@@ -98,6 +98,6 @@ def model_profile(cfg, name):
 # Structured checkpoints are the text baseline; optical remains gated.
 DEFAULT_AGENT["context_compaction_v2"] = True
 DEFAULT_AGENT["compact_prompt"] = True  # evidence-linked compact policy; legacy remains selectable
-DEFAULT_AGENT["compact_target_tokens"] = 20000
+DEFAULT_AGENT["compact_target_tokens"] = 0     # 0 = auto: 72% of the compaction point (agentic._compact_target)
 DEFAULT_AGENT["execution_memory_test_mode"] = False  # code-owned action journal and compact state view
 DEFAULT_AGENT["occ"] = {"enabled": False, "experimental": True, "max_pages_per_turn": 2}

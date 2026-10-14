@@ -5381,6 +5381,15 @@ class AgentEngine:
             return int(n * float(self.cfg["compact_at"]))
         return max(int(n * 0.75), n - self.REPLY_RESERVE)
 
+    COMPACT_TARGET_SHARE = 0.72     # auto target: the prompt right after a compaction, as a share of context_budget()
+
+    def _compact_target(self):
+        """How big the prompt should be right after a compaction (compact_prompt mode). compact_target_tokens > 0
+        wins; 0 (the default) = 72% of the compaction point: 38K of a 53K budget (61K window) keeps ~20K of
+        verbatim history and leaves ~15K to grow before the next compaction; it scales with bigger windows."""
+        own = int(self.cfg.get("compact_target_tokens") or 0)
+        return own if own > 0 else int(self.context_budget() * self.COMPACT_TARGET_SHARE)
+
     def _history_tokens(self):
         fixed = _est_tokens([{"role": "system", "content": self.system_prompt()}]) + \
             len(json.dumps(self._schemas(True) if self.reg else [])) // 3
@@ -5442,8 +5451,10 @@ class AgentEngine:
         if self.cfg.get("compact_prompt", False):
             # Allow for the evidence-linked checkpoint and pins before deciding how much raw
             # history to retain. This is a target, never a hard cut through an active step.
-            target = int(self.cfg.get("compact_target_tokens") or 20000)
-            keep_tokens = max(2000, min(keep_tokens, target - fixed - 4000))
+            # The kept part is target - fixed - 4000: at the old 20K target with ~13K of system prompt and tools that
+            # was ~3K tokens of real history, and a Bonsai build repeated 20-55% of its next 40 calls after each
+            # compaction (mostly re-reading files it had just read).
+            keep_tokens = max(2000, self._compact_target() - fixed - 4000)
         cut, acc = None, 0
         for i in range(len(self.history) - 1, 0, -1):
             acc += int(_est_tokens([self.history[i]]) * self.ratio)
@@ -5543,8 +5554,8 @@ class AgentEngine:
         self._exec_from = 0
         after = self._history_tokens()
         if self.cfg.get("compact_prompt", False):
-            _log({"compact_target":int(self.cfg.get("compact_target_tokens") or 20000),
-                  "actual_estimate":after,"target_met":after<=int(self.cfg.get("compact_target_tokens") or 20000),
+            _log({"compact_target":self._compact_target(),
+                  "actual_estimate":after,"target_met":after<=self._compact_target(),
                   "conv":self.ctx.conv_id})
         _log({"compacted": True, "before": before, "after": after, "conv": self.ctx.conv_id})
         self.emit("compacted", summary=summary, before=before, after=after)
@@ -5922,10 +5933,10 @@ class AgentEngine:
         b = EFFORT_THINK[eff] * (2 if self._wrapping_up() and eff in ("medium", "high") else 1)
         if getattr(self, "_debugging", False) or self._fail_streak >= 1:
             # debugging: half-finished reasoning about a bug costs more steps — but bounded: at 3072 an edit averaged
-            # 2.8 min of thinking (bonsai8). The agent's own 'high', or the user's Effort 'max', keeps its budget.
-            own = EFFORT_THINK.get(getattr(self, "_think_effort", "medium") or "medium", 1024)
-            b = (max(b, EFFORT_THINK["high"]) if str(self.cfg.get("effort") or "").lower() == "max"
-                 else max(own, DEBUG_THINK))
+            # 2.8 min of thinking (bonsai8). Only the user's Effort High / Max keeps the bigger budget; the agent's own
+            # 'high' used to as well, and a debug streak then spent 3072 tokens (~3 min) on every step.
+            setting = str(self.cfg.get("effort") or "").lower()
+            b = max(b, EFFORT_THINK["high"]) if setting in ("max", "high") else DEBUG_THINK
         cap = think_max(self.cfg)
         return b if cap < 0 else min(b, cap)
 
