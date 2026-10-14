@@ -275,6 +275,13 @@ export function SettingsDialog() {
                 <Toggle checked={a.lean_first !== false} onChange={(v) => setA({ lean_first: v })}
                   label="Answer simple questions directly"
                   hint="Questions it can answer well are answered in seconds; anything that needs tools or work loads the full agent." />
+                <Toggle checked={!a.compact_prompt} onChange={(v) => { if (v) setA({ compact_prompt: false }) }}
+                  label="Legacy compaction"
+                  hint="Use the previous, larger checkpoint policy. Off uses Zen's default evidence-linked compact policy; full older records remain retrievable." />
+                <Toggle checked={!!a.execution_memory_test_mode}
+                  onChange={(v) => setA({ execution_memory_test_mode: v })}
+                  label="Test Mode (experimental)"
+                  hint="Keep a durable action journal and show a small, evidence-linked current-state view with recent actions and the next step. Works with either compaction setting." />
                 <Toggle checked={a.delegation !== false} onChange={(v) => setA({ delegation: v })}
                   label="Allow sub-tasks" hint="The agent may hand independent parts of a task to background threads (shown in the Tasks panel)." />
                 <Toggle checked={!!a.advisor?.enabled} onChange={(v) => setA({ advisor: { model: "gpt-6.1-sol", ...a.advisor, enabled: v } })}

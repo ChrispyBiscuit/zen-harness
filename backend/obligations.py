@@ -11,7 +11,7 @@ just failed. This module keeps that from what actually happened, and turns it in
   RESOLVED     tests that failed and pass now (when, after which change) — don't re-fix
   STALE        a done item whose own files changed since its evidence — re-check that one, once
   LAST CHECK   the latest observation on the current item; a failure is ONE narrow retry, not a restart
-  STALLED      many actions without new evidence on the current item: the blocker, then escalation
+  UNCHANGED    observations without new evidence; the engine's recovery policy decides what to do
 
 Evidence goes on the checklist item itself (saved with the checklist). An item's files are the app files edited while
 it was the current item; a later edit to one of them makes its evidence stale. Scratch scripts never count.
@@ -22,7 +22,6 @@ import re
 import time
 
 OBS_KEEP = 16
-STALL_BRIEF, STALL_ESCALATE = 8, 14
 CHECK_TOOLS = ("run_tests", "powershell", "python_host", "debug_run", "http_request", "bg_start", "bg_output")
 EDIT_TOOLS = ("write_file", "edit_file")
 _FAIL_LINE = re.compile(r"(Error|Exception|error:|FAILED|refused|timed out|not found|denied|invalid|exit code [1-9])",
@@ -140,7 +139,7 @@ def record(c, tool, args, text, ok_call=True, at=None):
             if p not in files:
                 files.append(p)
             _mark_stale(c, p, except_item=cid)
-            st["stall"] = 0 if st["stall"] < STALL_BRIEF else st["stall"]   # an edit is progress, unless looping
+            st["stall"] = 0  # the evidence store records an edit; recovery is decided by RunPolicy
             return
     st["stall"] += 1
 
@@ -269,16 +268,6 @@ def brief(c):
         rows.append(f"LAST CHECK on {cur[0]}: {o['t']} {'passed' if o['ok'] else 'FAILED'} — {o['line']}"
                     + ("" if o["ok"] else " → fix that one thing and retry that one step; the steps before it "
                                           "already worked, don't restart the sequence."))
-    if cur and st["stall"] >= STALL_ESCALATE:
-        last_fail = next((o for o in reversed(mine) if not o["ok"]), None)
-        rows.append(f"STUCK: {st['stall']} actions without new evidence on {cur[0]}. Stop trying variations: ask the "
-                    f"user (ask_user) about the specific blocker"
-                    + (f" ({last_fail['line'][:120]})" if last_fail else "")
-                    + ", or mark the item blocked with the reason and move on.")
-    elif cur and st["stall"] >= STALL_BRIEF:
-        last_fail = next((o for o in reversed(mine) if not o["ok"]), None)
-        rows.append(f"NO NEW EVIDENCE in the last {st['stall']} actions on {cur[0]}. "
-                    + (f"The blocker is the last failure: {last_fail['line'][:160]}. " if last_fail else
-                       "Nothing has failed: decide what would show this item is done, do exactly that once, mark it. ")
-                    + "Do the one action that would change that — not another variation of what was tried.")
+    if cur and st['stall']:
+        rows.append(f"NO NEW EVIDENCE: {st['stall']} unchanged observations on {cur[0]}.")
     return "BRIEF (kept by the app from what actually happened; rebuilt every step):\n" + "\n".join(rows)

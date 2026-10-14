@@ -9,6 +9,8 @@ DEFAULT_AGENT = {
     "think_level": "standard",        # (older setting; Effort below replaces it)
     # "effort" (set from the message box): the cap — minimal (no thinking) / low / medium / high / max. The agent
     # picks its own effort per request under it. Unset: derived from think_level (off→minimal, standard→medium).
+    "problem_workbook": True,       # normal goal/question/experiment/evidence/revision workflow
+    "build_test_record": True,       # ordinary software contracts, current test receipts and prerequisite gates
     "require_checklist": True,        # every request starts with a milestone/subtask checklist
     "plan_tokens": 0,                 # tokens spent writing an approach before acting (0 = skip; the checklist
                                       # still gets made — PROGRAM P2: 30% faster, same pass rate)
@@ -31,6 +33,11 @@ DEFAULT_AGENT = {
     "auto_read": True, "auto_net": True, "auto_safe_cmds": True, "allow_rules": [],
     "screen_control": False, "plan_mode": False, "delegation": True, "max_delegates": 3,
     "auto_continue": True, "advisor": {"enabled": False, "model": "gpt-6.1-sol"},
+    "batch_execution": {"enabled": True, "max_operations": 8, "max_parallel_reads": 4,
+                        "max_batch_duration_seconds": 120, "max_operation_duration_seconds": 60,
+                        "max_result_tokens": 2000, "max_result_tokens_per_operation": 800,
+                        "preserve_full_outputs": True, "retention_batches": 100,
+                        "retention_bytes": 67108864},
     "max_failures": 6, "mcp_servers": [],
     # hybrid: a small fast model makes the routine tool calls; the main model plans, checks in, recovers
     # from failures and writes the final answer. Both run on the GPU at once.
@@ -87,3 +94,10 @@ def model_profile(cfg, name):
     if isinstance(own, dict):
         prof.update(own)
     return prof
+
+# Structured checkpoints are the text baseline; optical remains gated.
+DEFAULT_AGENT["context_compaction_v2"] = True
+DEFAULT_AGENT["compact_prompt"] = True  # evidence-linked compact policy; legacy remains selectable
+DEFAULT_AGENT["compact_target_tokens"] = 20000
+DEFAULT_AGENT["execution_memory_test_mode"] = False  # code-owned action journal and compact state view
+DEFAULT_AGENT["occ"] = {"enabled": False, "experimental": True, "max_pages_per_turn": 2}

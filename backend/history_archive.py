@@ -11,6 +11,7 @@ import math
 import os
 import re
 import threading
+import hashlib
 
 _lock = threading.Lock()
 _WORD = re.compile(r"[A-Za-z_]{2,}|\d+")              # words of 2+ letters, and every number (ids, lines, years)
@@ -44,8 +45,15 @@ def add(conv, kind, label, text):
     """Archive one item; -> its id ('E12')."""
     with _lock:
         os.makedirs(_dir(conv), exist_ok=True)
-        n = len(entries(conv)) + 1
-        e = {"id": f"E{n}", "kind": kind, "label": str(label)[:200], "text": str(text)}
+        label, text = str(label)[:200], str(text)
+        digest = hashlib.sha256((kind + "\0" + label + "\0" + text).encode("utf-8")).hexdigest()
+        existing = entries(conv)
+        for item in existing:
+            if item.get("sha256") == digest or (item.get("sha256") is None and
+                item.get("kind") == kind and item.get("label") == label and item.get("text") == text):
+                return item["id"]
+        n = len(existing) + 1
+        e = {"id": f"E{n}", "kind": kind, "label": label, "text": text, "sha256": digest}
         with open(_path(conv), "a", encoding="utf-8") as f:
             f.write(json.dumps(e, ensure_ascii=False) + "\n")
         return e["id"]
@@ -57,6 +65,15 @@ def get(conv, entry_id):
         if e["id"] == eid:
             return e
     return None
+
+
+def page(text, offset=0, size=4000):
+    """Return a bounded exact slice and coordinates for subsequent retrieval."""
+    text = str(text)
+    offset = max(0, min(int(offset), len(text)))
+    size = max(1, min(int(size), 8000))
+    end = min(len(text), offset + size)
+    return text[offset:end], offset, end, len(text)
 
 
 def search(conv, query, limit=5):

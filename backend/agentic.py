@@ -52,7 +52,8 @@ long-running commands use bg_start (they keep running; read them with bg_output)
 read_document (PDF, Word, Excel, PowerPoint, CSV), write_file, edit_file, make_dir, move_path, \
 trash_path. Allowed folders: {roots}. This chat's own folder: {workspace} — put new files and projects there \
 (a subfolder per project) unless the user names another place. Other chats have their own folders: use files \
-from another chat only when the user points you to them.
+from another chat only when the user points you to them. For work inside the current working folder, use relative \
+filenames (for example sales.csv), and '.' to list it. Copy user-named paths exactly; never regenerate their spelling.
 - Web: web_search searches several phrasings at once and reads the top pages, returning the relevant passages with sources (pages=0 for just a result list); web_fetch reads one page, or several at once with urls=[...] (add question= for just the relevant passages); and a real in-app browser (browser_open, browser_read, \
 browser_click, browser_type, browser_press, browser_scroll, browser_tabs…) that you operate like a person: \
 search sites, use their search boxes and filters, open results, sign in when the user asks. Use the browser \
@@ -428,7 +429,7 @@ def _collect_pins(msgs, prev=None):
         if role == "user" and isinstance(c, str) and not c.startswith(REMINDER_TAG) and not c.startswith("[Summary"):
             req = re.split(r"\n\n<system-reminder>|\n\n\(Reference for any facts", c)[0].strip()
             if req and req not in p["requests"]:
-                p["requests"].append(req[:900])
+                p["requests"].append(req)
         for tc in m.get("tool_calls") or []:
             fn = tc.get("function") or {}
             try:
@@ -447,7 +448,17 @@ def _collect_pins(msgs, prev=None):
         if role == "tool" and isinstance(c, str) and re.search(r"\b(PASS|FAIL)\b|\d+ (passed|failed)|\d+/\d+ passed", c):
             lines = [ln.strip() for ln in c.splitlines() if re.search(r"PASS|FAIL|passed|failed|exit code|Error", ln)]
             p["tests"] = "\n".join(lines[:30])
-    p["requests"] = p["requests"][-6:]
+    # The first request and later explicit decisions form the contract for a long-running task.
+    # Repetitive chatter can otherwise evict them before the model summarizes them faithfully.
+    if len(p["requests"]) > 6:
+        first = p["requests"][0]
+        decisions = [r for r in p["requests"][1:] if re.search(
+            r"\b(?:decision|requirement|constraint|contract|must|never|exact|preserve|do not)\b", r, re.I)]
+        recent = decisions[-5:] if decisions else p["requests"][-5:]
+        latest = p["requests"][-1]
+        if latest not in recent and latest != first:
+            recent = (recent + [latest])[-5:]
+        p["requests"] = [first] + [r for r in recent if r != first]
     p["files"] = p["files"][-40:]
     p["actions"] = p["actions"][-30:]
     p["notes"] = p["notes"][-4:]
@@ -459,7 +470,7 @@ def _render_pins(p):
         return ""
     out = ["[Pinned — kept exactly, not summarised]"]
     if p.get("requests"):
-        out.append("The user's own words (requests, constraints and preferences still apply):")
+        out.append("The user's own words (requests and decisions; later instructions supersede conflicting earlier ones):")
         out += [f"- «{r}»" for r in p["requests"]]
     if p.get("prd"):
         out.append("Project spec (read it before continuing the build): " + ", ".join(p["prd"]))
@@ -830,6 +841,9 @@ def parse_gemma_calls(content):
         tail = re.match(r"\s*<tool_call\|>", content[end:])
         found.append((m.group(1), args, m.start(), end + (tail.end() if tail else 0)))
         pos = end
+
+
+
 
 
 def parse_pseudo_calls(content, tool_names):
@@ -1366,6 +1380,7 @@ GET_TOOLS = {"type": "function", "function": {
         "size": {"type": "string", "enum": ["quick", "standard", "deep"],
                  "description": "quick: seconds, 1-3 calls; standard: about a minute, 3-8 calls; deep: minutes or more"},
         # how the request is understood (this used to be a separate model call before this one)
+        "workspace": {"type": "string", "description": "Absolute project folder explicitly selected by the user; copy exactly, or empty if none. Never invent a path."},
         "goal": {"type": "string", "description": "what the user wants and what 'done' looks like, one sentence"},
         "constraints": {"type": "array", "items": {"type": "string"}, "maxItems": 6,
                         "description": "the user's own limits or preferences, word for word; omit if none"},
@@ -1382,7 +1397,7 @@ GET_TOOLS = {"type": "function", "function": {
                                       "news, health/legal/financial, anything for a report); light: recommendations and "
                                       "lists of places/products (even with names and addresses), how-tos, summaries of "
                                       "pages just read; none: conversation, opinions, code and work that is tested"}},
-        "required": ["why", "size", "depth", "plan", "think", "goal", "fact_check"]}}}
+        "required": ["why", "size", "depth", "plan", "think", "goal", "fact_check", "workspace"]}}}
 
 # The basic path: a mid-size prompt (~3-4k tokens with its tools instead of ~12k) — the lean identity plus only the
 # rules a short tool task needs. The extensive path loads the full harness (SYSTEM + every tool).
@@ -1411,7 +1426,8 @@ facts and earlier conversations.
 that print the information); bg_start runs a long-lived one (a dev server, a watcher) \
 and bg_output / bg_list / bg_stop manage it; edit_file / write_file change files; show_user opens your result for \
 the user. Word, Excel, PowerPoint and PDF files: create_document (one call, styled — don't write python-pptx/docx \
-code). Totals, counts and averages over a data file: query_data (SQL) or python_sandbox.
+code). PowerPoint content: use a # heading per slide followed by - bullets. Totals, counts and averages over a \
+data file: query_data (SQL) or python_sandbox.
 - Independent lookups go in ONE step as several tool calls: they run at the same time.
 - If the task turns out bigger than it looked (several sources or items to cover, a comparison, a document or \
 software to build), call go_extensive: a plan, a checklist and parallel research workers take over, keeping what you found.
@@ -1532,6 +1548,9 @@ class AgentEngine:
         self.tainted = False
         self.ctx = at.Ctx(cfg.get("roots") or [os.path.expanduser("~")], emit=emit)
         self.ctx.conv_id, self.ctx.title, self.ctx.host = conv_id, title, host
+        self.ctx.build_test_record = bool(cfg.get("build_test_record", False))
+        self.ctx.verification_root = cfg.get("verification_root")
+        self.ctx.problem_workbook = cfg.get("problem_workbook", True)
         self.ctx.is_subagent = subagent
         self.ctx.vision = bool(cfg.get("vision"))
         self._can_see = None          # known once the server starts: a llama server sees only with an image projector
@@ -1548,7 +1567,6 @@ class AgentEngine:
         self.last_prompt_tokens = 0
         self.ratio = 1.0             # real tokens / estimated tokens (calibrated on every reply)
         self.turn = {}
-        self._recent = collections.deque(maxlen=10)
         self._fail_streak = 0
         self._debugging = False          # a failure / traceback / failing test is being worked on (more thinking)
         self._force_answer = False
@@ -1607,6 +1625,8 @@ class AgentEngine:
         self.reg = at.Registry(self.ctx, self.mcp, c.get("tools"), screen=bool(c.get("screen_control")),
                                delegate=self.ctx.host is not None and c.get("delegation", True),
                                advisor=bool(adv.get("enabled")) and bool(swarm.api_key()), fanout=use_fan)
+        from batch_tools import attach
+        attach(self)
         self.ctx.gopher = self._gopher if use_fan else None
         self.ctx.gopher_wait = self._wait_workers if use_fan else None
         self.ctx.go_extensive = self._request_extensive
@@ -2201,21 +2221,21 @@ class AgentEngine:
             last += f"\n\n({self._interp_note})"
         if self.cfg.get("facts_need_source", True):
             # a 9B model hallucinates most specific facts it recalls (AA-Omniscience ~80%): on the lean path those
-            # come from the Reference below, or the tools — never from memory
-            system += ("\nSpecific facts a user relies on — figures, dates of events, rankings, claims about particular "
-                       "people, businesses or places, anything recent — must come from a source, not memory (common "
+            # come from the Reference below, or the tools â€” never from memory
+            system += ("\nSpecific facts a user relies on â€” figures, dates of events, rankings, claims about particular "
+                       "people, businesses or places, anything recent â€” must come from a source, not memory (common "
                        "knowledge, explanations and definitions are fine from memory): answer them from the Reference "
                        "when one is given with the message; if "
                        "there is none, or it doesn't contain the fact, look it up with encyclopedia (instant); if the "
-                       "encyclopedia doesn't have it either, call get_tools to search the web — never answer 'the "
+                       "encyclopedia doesn't have it either, call get_tools to search the web â€” never answer 'the "
                        "reference doesn't contain it' before searching. Only after the web search also finds nothing, "
                        "say you couldn't verify it rather than guessing. General "
                        "explanations, reasoning, advice and conversation need no source.")
             if self.cfg.get("quote_check", False):
                 system += "\n" + self.QUOTE_RULE
         ref = getattr(self, "_turn_ref", "")          # searched at the start of the turn (_supplement)
-        if ref:      # open book: a 9B model mis-recalls most facts but reads well — answer from the text, not memory
-            last += (f"\n\n{REMINDER_TAG}\nReference found automatically by the app (not from the user — they did not "
+        if ref:      # open book: a 9B model mis-recalls most facts but reads well â€” answer from the text, not memory
+            last += (f"\n\n{REMINDER_TAG}\nReference found automatically by the app (not from the user â€” they did not "
                      "send it and cannot see it; never mention it, \"the reference\" or \"the search results\"; if it "
                      "doesn't fit the message, ignore it silently). For any facts in your answer use its names and "
                      "figures, and link the source of "
@@ -2226,10 +2246,10 @@ class AgentEngine:
                      "like a population or a census count is fine to give from the Reference WITH its year (e.g. 'as "
                      f"of the 2021 census'); if web and Wikipedia disagree, say so.\n{ref}\n</system-reminder>")
         msgs = [{"role": "system", "content": system}] + convo[-12:] + [{"role": "user", "content": last}]
-        self.emit("status", text="Thinking…")
+        self.emit("status", text="Thinkingâ€¦")
         self._delta = "ans_delta"
         if self.cfg.get("backend", "llama") == "ollama":
-            return None                                   # (Ollama backend: no raw tool hook — full harness)
+            return None                                   # (Ollama backend: no raw tool hook â€” full harness)
         # the lean pass has the calculator too: exact arithmetic without loading the harness. Its calls run here;
         # the answer is then checked like any final answer (wrong equations, figures worked out in the head).
         raw = [GET_TOOLS] + ([LEAN_CALC] if self.reg is not None and "calculate" in self.reg.by_name else [])
@@ -2276,7 +2296,7 @@ class AgentEngine:
                     # shown in the chat like any tool call (it used to run invisibly: "it didn't use the calculator")
                     self.emit("tool_call", id=cid, name=name, args=largs, desc=self.reg.describe(name, largs),
                               kind=(self.reg.get(name) or {}).get("kind", "read"), display=None, by="")
-                    self.emit("status", text="Calculating…" if name == "calculate" else "Checking Wikipedia…")
+                    self.emit("status", text="Calculatingâ€¦" if name == "calculate" else "Checking Wikipediaâ€¦")
                     ok = True
                     try:
                         out, _img = self.reg.call(name, largs)
@@ -2285,7 +2305,7 @@ class AgentEngine:
                     display, self.ctx.display = self.ctx.display, None
                     self.emit("tool_result", id=cid, text=str(out), ok=ok, image=None, display=display)
                     if name == "calculate" and largs.get("expression"):
-                        out = f"{largs['expression']} → {out}"     # the expression's numbers count as calculated too
+                        out = f"{largs['expression']} â†’ {out}"     # the expression's numbers count as calculated too
                     tm = {"role": "tool", "tool_call_id": c.get("id"), "name": name, "content": str(out)}
                     msgs.append(tm)
                     lean_hist.append(tm)
@@ -2323,16 +2343,16 @@ class AgentEngine:
                     msgs += [{"role": "assistant", "content": text}, {"role": "user", "content": (
                         f"{REMINDER_TAG}\nThese details in your answer are not supported by anything you were given: "
                         + "; ".join(bad[:6]) + ". Remove each one, or look it up with encyclopedia (or get_tools for "
-                        "something current), then give your answer again — complete and fresh; the earlier version is "
+                        "something current), then give your answer again â€” complete and fresh; the earlier version is "
                         "hidden from the user, so don't mention it or this note. This note is from the app, not the "
-                        "user: don't reply to it — begin with the answer itself, and answer every part of the "
+                        "user: don't reply to it â€” begin with the answer itself, and answer every part of the "
                         "user's message.\n</system-reminder>")}]
                     continue
             break
         if lean_trace:                       # its tool results join the history (the agent and later turns see them)
             self.history.extend(lean_trace)
         if text and not msg.get("tool_calls") and _is_narration(text):
-            # "Let me look at the artifact…": an intention, not an answer — hand the message to the agent
+            # "Let me look at the artifactâ€¦": an intention, not an answer â€” hand the message to the agent
             msg = dict(msg, content="")
             self._effort = self._effort or {"plan": "none", "think": "medium"}
             _log({"lean_announced": text[:160], "conv": self.ctx.conv_id})
@@ -2348,7 +2368,7 @@ class AgentEngine:
                 size = str(a.get("size") or "").lower()
                 if repair_sent:
                     # it answered directly first (it judged the request quick), the check flagged details, and the
-                    # repair asked for tools: verify those details — not a research project (a local pick became a
+                    # repair asked for tools: verify those details â€” not a research project (a local pick became a
                     # "deep" job with a full plan and hit the time limit)
                     size = "quick"
                 if size == "quick":                   # the size decides the ceiling: quick work stays quick
@@ -2368,13 +2388,13 @@ class AgentEngine:
             self._depth = depth
             if (msg.get("content") or "").strip() and not getattr(self, "_held_hidden", False):
                 self.emit("answer_retract", reason="loading the tools")
-            self.emit("status", text=f"Loading tools ({depth})" + (f": {why}" if why else "…"))
+            self.emit("status", text=f"Loading tools ({depth})" + (f": {why}" if why else "â€¦"))
             _log({"lean": "tools", "depth": depth, "why": str(why)[:160], "effort": getattr(self, "_effort", None),
                   "fact_check": getattr(self, "_check_level", None), "conv": self.ctx.conv_id})
             self.turn["lean"] = "tools"
             return None
         if self._verify() and text and not checked and not self._lean_facts_ok(msgs, raw, text):
-            # facts the sources don't contain (an invented name, a joke post read as consensus): not shown — the
+            # facts the sources don't contain (an invented name, a joke post read as consensus): not shown â€” the
             # full agent takes the message, researches it and runs the full fact check
             self.emit("answer_retract", reason="facts not supported by the sources: researching properly")
             self._depth = "basic"
@@ -2389,10 +2409,13 @@ class AgentEngine:
         self.turn["lean"] = "answered"
         return text
 
+
     def _prefetch_parallel(self, calls):
-        """Several read-only calls in one step (searches, fetches, file reads…) run at the same time, each with its
+        """Several read-only calls in one step (searches, fetches, file readsâ€¦) run at the same time, each with its
         own copy of the tool context. _run_tool then takes their results in order, so every check, the history and
         the cards stay exactly as with one-by-one calls. A call _run_tool refuses simply discards its result."""
+        if getattr(self, "_batch_adapter", None):
+            return  # BTE owns preflight and barriers; restricted/basic phases execute through the normal gates.
         from concurrent.futures import ThreadPoolExecutor
         jobs = []
         for tc in calls or []:
@@ -2423,7 +2446,7 @@ class AgentEngine:
                 return tid, (False, f"Error: {e}", None, None)
             except Exception as e:
                 return tid, (False, f"Error: {type(e).__name__}: {e}", None, None)
-        self.emit("status", text=f"Running {len(jobs)} lookups at the same time…")
+        self.emit("status", text=f"Running {len(jobs)} lookups at the same timeâ€¦")
         t0 = time.time()
         with ThreadPoolExecutor(max_workers=min(6, len(jobs))) as ex:
             for tid, res in ex.map(one, jobs):
@@ -2431,6 +2454,7 @@ class AgentEngine:
                     self._prefetched[tid] = res
         self.turn["parallel_calls"] = self.turn.get("parallel_calls", 0) + len(jobs)
         _log({"parallel": [n for _, n, _ in jobs], "secs": round(time.time() - t0, 1), "conv": self.ctx.conv_id})
+
 
     def _evidence_history(self):
         """The history for fact checks, with every tool result compaction archived put back in front: a report on a
@@ -2441,7 +2465,7 @@ class AgentEngine:
                    for e in ha.entries(self.ctx.conv_id) if e.get("kind") == "tool result"]
         except Exception:
             old = []
-        return old + list(self.history)
+        return old + list(self.history) + getattr(self, "_batch_evidence", [])
 
     def _evidence_check(self, rows):
         """record: check each row against everything read in this chat (quote in that source, value in the quote)."""
@@ -2490,6 +2514,8 @@ class AgentEngine:
     def _basic_budget(self):
         return max(2, int(self.cfg.get("basic_calls") or 6))
 
+
+
     def _request_extensive(self, reason=""):
         """go_extensive: switch this message from the basic to the extensive path (at the next step)."""
         if not self._basic:
@@ -2523,54 +2549,26 @@ class AgentEngine:
     MAX_RESETS = 4
 
     def _stuck_reset(self, reason):
-        """A stuck safeguard fired. While the checklist still has open items the run must not end: instead of
-        switching tools off, force a change of strategy (up to MAX_RESETS times per turn; the step limit still
-        applies, and that ends as a check-in, not a 'done'). -> the reset note, or None (fall back to stopping)."""
-        open_items = at.tracker_open(self.ctx.tracker) if self.ctx.tracker else []
-        n = getattr(self, "_resets", 0)
-        if not open_items or n >= self.MAX_RESETS or self._role == "exec":
+        """A bounded strategy change; the recovery policy alone decides when to stop."""
+        if self._role == "exec" or getattr(self, "_resets", 0) >= self.MAX_RESETS:
             return None
-        self._resets = n + 1
-        self._no_progress, self._fail_streak = 0, 0
-        self.__dict__.pop("_attempts", None)               # a new strategy starts a fresh same-attempt window
-        try:
-            import context_memory as cm
-            cm.add_event(self.ctx.conv_id, "reset", reason, self.turn.get("steps"))
-        except Exception:
-            pass
+        self._resets = getattr(self, "_resets", 0) + 1
+        self._last_reset_note = (f"Recovery {self._resets}/{self.MAX_RESETS}: {reason}. "
+                                "Use the actual result to choose a different action. Preserve completed work; "
+                                "if no viable action remains, report the blocker honestly.")
         _log({"strategy_reset": reason, "n": self._resets, "conv": self.ctx.conv_id})
-        cur = open_items[0]
-        self._last_reset_note = (f"STRATEGY RESET ({reason}; {self._resets}/{self.MAX_RESETS}): the current approach is not working — "
-                f"drop it, but don't stop: the task is not done ({len(open_items)} checklist item(s) open; current: "
-                f"{cur[0]} {cur[1]}). 1) In update_tracker notes write what you tried and why it failed. 2) Get "
-                f"fresh evidence with a different tool: trace_call on the failing function, changes_since_green "
-                f"(what changed since tests passed), bg_output grep='Traceback|Error' / port_info for a server, or "
-                f"run the failing test alone. 3) Form 2-3 new hypotheses from that evidence and test the cheapest "
-                f"one. If the design is the problem, change the design.")
         return self._last_reset_note
+
 
     def _wrote_code_this_turn(self):
         return any(name in ("write_file", "edit_file") and self._CODE_EXT_RX.search(str(a.get("path") or ""))
                    for name, a in self._calls_this_turn())
 
-    def _is_new_program(self, name, args):
-        """A new source file of real size in a folder without a PRD — the start of a build, not a small script."""
-        if name != "write_file" or not isinstance(args, dict):
-            return False
-        path, content = str(args.get("path") or ""), str(args.get("content") or "")
-        if not self._CODE_EXT_RX.search(path) or content.count("\n") < 80:
-            return False
-        # the project's PRD may sit a few levels up: a test file in tests/ belongs to the project above it (bonsai2
-        # wrote tests/test_*.py, docs/PRD.md existed one level up, and the write was refused)
-        folder = os.path.abspath(os.path.dirname(path) or ".")
-        for _ in range(4):
-            if any(os.path.isfile(os.path.join(d, "PRD.md")) for d in (folder, os.path.join(folder, "docs"))):
-                return False
-            parent = os.path.dirname(folder)
-            if parent == folder:
-                break
-            folder = parent
-        return True
+
+
+
+
+
 
     def _fan_workers(self):
         """How many fan-out workers run at once (Settings → fan-out); the model is told this number."""
@@ -2646,9 +2644,9 @@ class AgentEngine:
             if m.get("role") == "tool" and len(m.get("content") or "") > 4000:
                 m["content"] = m["content"][:4000] + " …[trimmed when saved]"
             hist.append(m)
-        return {"history": hist, "summary": self.summary, "cwd": self.ctx.cwd, "workspace": self.ctx.workspace,
+        return {"history": hist, "summary": self.summary, "pins": getattr(self, "_pins", {}), "cwd": self.ctx.cwd, "workspace": self.ctx.workspace,
                 "enabled_tools": sorted(self.enabled_tools),
-                "tracker_path": self.ctx.tracker_path, "session_ok": sorted(self.session_ok),
+                "verification_root": getattr(self.ctx,"verification_root",None), "tracker_path": self.ctx.tracker_path, "session_ok": sorted(self.session_ok),
                 "project": bool(getattr(self, "_project", False)),
                 "screen": "screenshot" in (self.reg.by_name if self.reg else {})}
 
@@ -2658,6 +2656,20 @@ class AgentEngine:
     def _workspace_text(self):
         w = self.ctx.workspace
         return w or "none"                       # no "(created when first used)": it flipped mid-run and broke the cache
+
+    def _bind_workspace(self, path):
+        """Adopt only a literal user-supplied absolute folder inside the existing allowed roots."""
+        if not isinstance(path, str) or not path or self.ctx.is_subagent:
+            return False
+        request = str(getattr(self, "_turn_request", "") or "")
+        if path not in request or not os.path.isabs(path):
+            return False
+        target = os.path.abspath(path)
+        if not self.ctx.inside(target) or os.path.isfile(target):
+            return False
+        os.makedirs(target, exist_ok=True)
+        self.ctx.cwd = self.ctx.workspace = target
+        return True
 
     def _ensure_workspace(self, user_text):
         """Give this chat its own folder under the workspace root (Documents/Zen Harness by default), named by date,
@@ -2675,15 +2687,18 @@ class AgentEngine:
         cid = re.sub(r"[^A-Za-z0-9]", "", str(self.ctx.conv_id or ""))[:6] or time.strftime("%H%M%S")
         self.ctx.workspace = os.path.join(root, f"{time.strftime('%Y-%m-%d')} {topic} ({cid})")
 
+
     def import_state(self, st):
         if not st:
             return
         self.history = list(st.get("history") or [])
         self.summary = st.get("summary") or ""
+        self._pins = dict(st.get("pins") or {})
         if st.get("cwd") and os.path.isdir(st["cwd"]):
             self.ctx.cwd = st["cwd"]
         if st.get("workspace"):
             self.ctx.workspace = st["workspace"]
+        self.ctx.verification_root = self.cfg.get("verification_root") or st.get("verification_root")
         tp = st.get("tracker_path")
         if tp and os.path.exists(tp):
             self.ctx.tracker, self.ctx.tracker_path = at.load_tracker(tp), tp
@@ -2813,7 +2828,10 @@ class AgentEngine:
             except Exception as e:
                 _log({"brief_error": repr(e)[:200], "conv": self.ctx.conv_id})
         if t:
-            parts.append("Your checklist for this request (kept by the app, not a project file):\n" + at.tracker_prompt(t)
+            checklist = (at.tracker_prompt_brief(t) if (self.cfg.get("compact_prompt", False)
+                         or self.cfg.get("execution_memory_test_mode", False))
+                         and not self._need_plan else at.tracker_prompt(t))
+            parts.append("Your checklist for this request (kept by the app, not a project file):\n" + checklist
                          + "\n(The user's latest message takes priority over this checklist: if it changes the plan, "
                            "revise the checklist.)")
             if not self._need_plan:
@@ -2838,50 +2856,6 @@ class AgentEngine:
             parts.append("Your checklist is up to date: don't update it now. Your next call must be real work — "
                          "e.g. read_file one of the saved result files listed above, web_fetch a candidate URL, "
                          "web_search with new angles, or give your answer.")
-        lim = int(self.cfg.get("progress_check") or 12)
-        if self._built_software():
-            lim = int(lim * 1.5)   # building means more write/run/fix cycles per item (2x let a 9B circle for 30 calls)
-        stuck = getattr(self, "_no_progress", 0)
-        # a build whose files changed within the last window is still moving: it gets the step-back note, not a forced
-        # stop (a 9B that rarely ticks its checklist was cut off mid-debugging at 2x the limit)
-        moving = (self._built_software() or self._edited_code()) and \
-            stuck - getattr(self, "_last_write_np", -10 ** 6) < lim
-        if self._role != "exec" and t and not self._need_plan and stuck >= lim:
-            if stuck >= 2 * lim and not self._force_answer and not (moving and stuck < 4 * lim):
-                note = self._stuck_reset("no checklist item finished in two windows")
-                if note:
-                    parts.append(note)
-                else:
-                    self._force_answer = True         # two rounds with nothing finished: report instead
-                    _log({"forced_answer": "progress check (no checklist item finished in 2 windows)", "conv": self.ctx.conv_id})
-            elif moving and stuck >= 2 * lim and (stuck - 2 * lim) % lim == 0:
-                parts.append(f"CHECKLIST: {stuck} tool calls since you last marked an item done. If an item is "
-                             "finished, mark it now (progress='1.2 done' on your next call). If not, write in "
-                             "update_tracker notes what you have tried and your current hypothesis — then continue.")
-            elif stuck - lim >= 2:
-                pass                                  # said once already: repeating it gets parroted, not followed
-            elif not self._force_answer and (self._edited_code() or self._built_software()):
-                # stuck while building or fixing: the missing piece is usually knowledge, not another guess
-                parts.append(f"PROGRESS CHECK: {stuck} tool calls since a checklist item was last completed. Stop "
-                             "probing. In update_tracker notes write 2-3 concrete hypotheses for what is wrong, then "
-                             "run the ONE smallest test that tells them apart: a few-line script that prints, one "
-                             "http_request, or the program run in the foreground with its real output and error. A "
-                             "server you started: bg_list / bg_output show whether it is listening and on which port. "
-                             "Never blame the environment (sandbox, network, Windows) without a test that proves it. "
-                             "If the real error names a library or behaviour you don't know, web_search it. Change "
-                             "one thing at a time and re-test; if the design itself is the problem, revise it.")
-            elif not self._force_answer:
-                parts.append(f"PROGRESS CHECK: {stuck} tool calls since a checklist item was last completed. Don't "
-                             "search again with reworded queries. Decide now, write the decision in update_tracker "
-                             "notes, then act on it: (a) the closest real substitute you already found is good enough "
-                             "— use it, mark the item done and say so; (b) what's asked for isn't realistically "
-                             "available — tell the user what you found and what's possible, and ask how to proceed; "
-                             "or (c) a genuinely different KIND of source or method, not another rewording.")
-        if self._role == "main" and self._exec_said is not None and self._handoff:
-            parts.append("The executor model handed this step to you"
-                         + (f", saying: \"{self._exec_said}\"" if self._exec_said else "")
-                         + ". Check its work against the tool results, mark finished subtasks done with update_tracker (with notes), "
-                           "then continue with the next subtask, or give the final answer if everything is done and verified.")
         if (self.cfg.get("verify_before_commit", False) and self._role != "exec" and not self._force_answer
                 and self._wrapping_up() and self._edited_code()):
             # a fix that runs is not a fix that is right: "mean=17.00" was accepted for data whose mean is 18 (a
@@ -2908,6 +2882,30 @@ class AgentEngine:
                          "tried that didn't work, and what you need from them or suggest as the next step.")
         if self.cfg.get("plan_mode"):
             parts.append("Plan mode is on: read-only investigation only.")
+        if getattr(self.ctx, "problem_workbook", False):
+            import problem_workbook as pw
+            problem_state = pw.ctx_summary(self.ctx)
+            parts.append("For complex tasks use problem_plan to preserve the goal/constraints and identify the blocking question, then problem_experiment -> normal tool -> problem_record. Distinguish alternatives with evidence; inspect test oracles and setup before blaming implementation. Conclusions are conditional interpretations. Repeated unchanged observations require a revised experiment. Integrate against original acceptance conditions; small checks alone do not establish completion. Do not add this ceremony to simple one-step answers.")
+            if problem_state:
+                view_budget = 3000 if self.cfg.get("compact_prompt", False) else 6000
+                parts.append("Durable problem workbook (retrieve older details with problem_status):\n" +
+                             json.dumps(pw.prompt_view(problem_state, budget=view_budget), ensure_ascii=False))
+        if getattr(self.ctx,"build_test_record",False):
+            import verification_ledger as vl
+            ledger_state=(vl.ctx_brief(self.ctx) if self.cfg.get("compact_prompt", False)
+                          else vl.ctx_summary(self.ctx))
+            if ledger_state is not None:
+                parts.append("Software build policy: contract -> build -> verify_module before dependent work. "
+                             "Verify integration against the original task; unit checks alone are insufficient. "
+                             "Full contracts and receipts: module_status. Current durable workbook:\n"
+                             +json.dumps(ledger_state,ensure_ascii=False))
+        if self.cfg.get("execution_memory_test_mode", False) and self._role == "main":
+            try:
+                import execution_memory as em
+                parts.append(em.brief(self.ctx.conv_id, t))
+            except Exception as e:
+                _log({"execution_memory_brief_error": repr(e)[:200], "conv": self.ctx.conv_id})
+                parts.append("Test Mode action journal could not be read; inspect the saved history before relying on it.")
         try:
             ws = self._work_state()
             if ws:
@@ -3389,13 +3387,10 @@ class AgentEngine:
     # an existing project named in the request is worked on where it is: the note used to say "make the project
     # folder inside this chat's folder", and a model fixing an existing project planned to copy it all over and
     # redo its docs
-    PROJECT_NOTE = ("PROJECT MODE is on for this work: plan before building. read_guide('project') now and follow it. "
-                    "If the request points at an existing project folder, work THERE: use its existing docs/ and code, "
-                    "and add only what is missing — never copy it elsewhere or start the docs over. Otherwise make the "
-                    "project folder inside this chat's folder. Required in docs/: PRD.md (with acceptance criteria) and "
-                    "DESIGN.md — code files are refused until both exist. A research note (docs/research/) when a "
-                    "choice depends on facts you must look up. INDEX.md, TASKS.md and DECISIONS.md only for big work "
-                    "that spans sessions: the checklist is the status, don't spend steps keeping status files current.")
+    PROJECT_NOTE = ("Project work: plan before building, preserve existing work, record requirements and design "
+                    "in the project's documentation, and test the acceptance criteria. Keep decisions and evidence "
+                    "available for later sessions. Scale documentation to the task; it is a working memory, not a "
+                    "prerequisite ceremony.")
 
     def _start_project(self):
         """Project mode for this chat: the docs/ tree before the build (guide, gates, more steps, deeper thinking)."""
@@ -3432,39 +3427,9 @@ class AgentEngine:
             d = nd
         return ""
 
-    def _project_gate(self, name, args):
-        """Project mode: no code file before the project has its research, PRD and design (-> refusal text or '')."""
-        if not getattr(self, "_project", False) or name not in ("write_file", "edit_file") or not isinstance(args, dict):
-            return ""
-        p = str(args.get("path") or "")
-        if not self._CODE_EXT_RX.search(p) or re.search(r"[\\/]docs[\\/]", p, re.I):
-            return ""
-        docs = self._project_docs(p)
-        have = {f.lower() for f in os.listdir(docs)} if docs else set()
-        res = os.path.join(docs, "research") if docs else ""
-        notes = [f for f in os.listdir(res) if f.lower().endswith(".md")] if res and os.path.isdir(res) else []
-        missing = [label for label, ok in (("docs/PRD.md", "prd.md" in have), ("docs/DESIGN.md", "design.md" in have))
-                   if not ok]
-        if not missing:
-            return ""
-        _log({"project_gate": missing, "path": p[-120:], "conv": self.ctx.conv_id})
-        return (f"{name} did not run: project mode — research and design come before code. Missing next to this "
-                f"project: {', '.join(missing)}. Follow read_guide('project'): PRD.md and DESIGN.md in "
-                f"<project>/docs/ (and a research note if a choice needs facts), then build.")
 
-    def _project_unfinished(self):
-        """Project mode at the final answer: the map and the plan must exist and be current -> what is missing."""
-        if not getattr(self, "_project", False):
-            return []
-        docs = ""
-        for p in list(self.ctx.changed or {}):
-            docs = self._project_docs(p)
-            if docs:
-                break
-        if not docs:
-            return ["the project's docs/ tree (read_guide('project'))"] if self._built_software() else []
-        have = {f.lower() for f in os.listdir(docs)}
-        return [] if "prd.md" in have else ["docs/PRD.md"]       # status files are optional (the checklist is the status)
+
+
 
     def _guide_hint(self, text):
         if self.ctx.is_subagent or not text or not (self.reg and "read_guide" in self.reg.by_name):
@@ -3560,8 +3525,6 @@ class AgentEngine:
             self.emit("tool_result", id=tid, text=text, ok=True, image=None, display=display)
             self._since_tracker = 0
             n_open = len(at.tracker_open(self.ctx.tracker))
-            if getattr(self, "_open_count", None) is None or n_open < self._open_count:
-                self._no_progress = 0
             self._open_count = n_open
         except Exception as e:
             _log({"progress_error": repr(e)})
@@ -3586,7 +3549,10 @@ class AgentEngine:
         """(tool name, parsed args) of every call this turn, in order."""
         out = []
         for m in self.history[getattr(self, "_fc_from", 0):]:
+            expanded = []
             for tc in m.get("tool_calls") or []:
+                expanded.extend(getattr(self, "_batch_calls", {}).get(tc.get("id"), [tc]))
+            for tc in expanded:
                 fn = tc.get("function") or {}
                 try:
                     a = json.loads(fn.get("arguments") or "{}")
@@ -4017,6 +3983,8 @@ class AgentEngine:
     def run(self, user_text, images=None):
         """One user turn. Returns the final answer text."""
         self._turn_request = str(user_text or "")
+        import problem_workbook as pw
+        pw.user_turn(self.ctx, self._turn_request)
         try:
             self._profile_tools(self._turn_request)
         except Exception as e:
@@ -4090,7 +4058,8 @@ class AgentEngine:
         if getattr(self, "_restore_screen", False) and self.reg and "screenshot" not in self.reg.by_name:
             self.reg.add_screen()
             self._restore_screen = False
-        max_steps = int(self.cfg.get("max_steps") or 40)
+        from run_policy import step_budget, step_allowed
+        max_steps = step_budget(self.cfg.get("max_steps"))
         final = ""
         self.ctx.changed, self.ctx.turn_diffs = {}, []
         self._turn_images = []          # preview images of the pages searched this turn (answer carousel)
@@ -4098,6 +4067,11 @@ class AgentEngine:
                      "t0": time.time(), "advisor_cost": 0.0, "compactions": 0, "failed_calls": 0,
                      "today": time.strftime("%A %d %B %Y")}     # fixed for the request: a date change re-read it all
         self._fail_streak, self._force_answer, self._since_tracker = 0, False, 0
+        self._batch_calls = {}
+        self._batch_evidence = []
+        self._batch_grants = {}
+        from run_policy import RunPolicy
+        self._run_policy = RunPolicy(failure_limit=int(self.cfg.get("max_failures") or 6))
         self._debugging = False
         self._best_passes, self._textcall_while_off = -1, False
         self._reality_checks, self._reality_note, self._claim_checks = 0, "", 0
@@ -4124,7 +4098,6 @@ class AgentEngine:
         self._deliver_nagged = False                                   # build without README / tests / criteria
         self._project_nagged = False
         self._quote_rounds, self._quote_drafts = 0, []                 # quote-check send-backs / checked drafts
-        self._no_progress, self._progress_nagged, self._last_write_np = 0, 0, -10 ** 6
         self._seen_reads = set()
         self._open_count = len(at.tracker_open(self.ctx.tracker)) if self.ctx.tracker else None
         self._singles = 0
@@ -4202,6 +4175,8 @@ class AgentEngine:
                 if text is not None:
                     raise _LeanDone(text)
                 self._escalated = True
+                if self.cfg.get("require_first_tool"):
+                    self._require_call = True
             need, decided = False, False
             if self._effort:
                 # the agent judged the effort itself (guideline in the lean prompt): plan size and thinking per step.
@@ -4267,7 +4242,7 @@ class AgentEngine:
             step = 0
             if getattr(self, "_project", False):
                 max_steps *= 2                    # project mode: research, design and build in one run
-            while step < max_steps:
+            while step_allowed(step, max_steps):
                 if self.should_stop():
                     raise Stopped()
                 self._drain_inputs()
@@ -4436,7 +4411,7 @@ class AgentEngine:
                     open_items = [x for x in open_items if x[2] != "blocked"]
                     asks_user = "?" in (msg.get("content") or "")[-300:] or bool(self.ctx.asked)
                     if (open_items and not asks_user and getattr(self, "_open_nags", 0) < 8
-                            and (not self._force_answer or getattr(self, "_resets", 0) < self.MAX_RESETS)):
+                            and not self._force_answer):
                         # the task is not done while its checklist has open items: back to work (the only way out
                         # before then is a question the user must answer — or the step limit, which checks in)
                         self._open_nags = getattr(self, "_open_nags", 0) + 1
@@ -4505,17 +4480,6 @@ class AgentEngine:
                             final = fixed
                             self.emit("answer_retract", reason="cleaned")
                             self.emit("ans_delta", text=final)
-                    unfinished = (self._project_unfinished() if (final and not self._force_answer and self._role != "exec"
-                                                                  and not getattr(self, "_project_nagged", False)) else [])
-                    if unfinished:
-                        self._project_nagged = True
-                        self.emit("answer_retract", reason="project docs incomplete")
-                        self.history.append({"role": "user", "content": f"{REMINDER_TAG}\nProject mode: before the "
-                                             f"final answer, bring the project's docs up to date — missing: "
-                                             f"{', '.join(unfinished)}. INDEX.md maps every document with its status; "
-                                             f"TASKS.md shows each milestone's status. Then give the final answer."
-                                             f"\n</system-reminder>"})
-                        continue
                     if (final and not self._behaviour_nagged and not self._force_answer and self._role != "exec"
                             and self._built_software() and not self._tested_behaviour()):
                         # running without an error is not working: a build is done when its behaviour was checked
@@ -4542,6 +4506,21 @@ class AgentEngine:
                                              + "; ".join(m for _f, m in missing)
                                              + ". Then run the tests and give the final answer.\n</system-reminder>"})
                         continue
+                    import problem_workbook as pw
+                    if pw.incomplete(self.ctx) and not asks_user and not self._force_answer:
+                        self.emit("answer_retract", reason="problem evidence incomplete")
+                        self.history.append({"role":"user", "content": REMINDER_TAG + "\nThe problem workbook is incomplete. Record the pending experiment, revise the blocker or validate integration acceptance. problem_status shows current evidence. Use ask_user to report a concrete blocker; narration does not clear the workbook.\n</system-reminder>"})
+                        self._require_call = True
+                        continue
+                    if getattr(self.ctx,"build_test_record",False):
+                        import verification_ledger as vl
+                        state=vl.ctx_summary(self.ctx)
+                        blocked=bool(state and (state["unowned_changes"] or any(m["state"]!="verified" for m in state["modules"])))
+                        if blocked and not asks_user and not self._force_answer:
+                            self.emit("answer_retract",reason="build verification incomplete")
+                            self.history.append({"role":"user","content":REMINDER_TAG+"\nBuild/test/record is incomplete. Finish relevant verification or report a concrete blocker using ask_user; do not claim completion from narration. module_status shows stale/failing/uncovered work.\n</system-reminder>"})
+                            self._require_call=True
+                            continue
                     if final:
                         self._keep_servers_in_answer(final)
                     if final and self._math_rounds < 1 and not self._force_answer and self._verify():
@@ -4571,11 +4550,16 @@ class AgentEngine:
                 if tools == ["update_tracker"] and not self._need_plan:
                     took = any(self.reg.canonical(c["function"]["name"]) == "update_tracker" for c in calls)
                     self._checkin_ignored = 0 if took else self._checkin_ignored + 1
-                self._prefetch_parallel(calls)        # independent read-only calls of this step: all at once
-                for tc in calls:
-                    if self.should_stop():
-                        raise Stopped()
-                    self._run_tool(tc)
+                batch = getattr(self, "_batch_adapter", None)
+                if (batch and len(calls) > 1 and not self._basic and self._offered is None
+                        and all(c["function"]["name"] not in ("batch_execute", "get_batch_result") for c in calls)):
+                    batch.native(calls)
+                else:
+                    self._prefetch_parallel(calls)
+                    for tc in calls:
+                        if self.should_stop():
+                            raise Stopped()
+                        self._run_tool(tc)
                 self._prefetched.clear()
                 if getattr(self, "_reality_note", ""):
                     self.history.append({"role": "user", "content": self._reality_note})
@@ -4603,6 +4587,19 @@ class AgentEngine:
                 self.emit("ans_delta", text=final)
         except _LeanDone as done:                  # answered in the lean pass: nothing else ran
             final = done.text
+        import problem_workbook as pw
+        if final != "(stopped)" and pw.incomplete(self.ctx):
+            final = "Problem evidence incomplete; unresolved questions or acceptance remain.\n\n" + final
+            self.emit("answer_retract", reason="authoritative problem status")
+            self.emit("ans_delta", text=final)
+        if getattr(self.ctx,"build_test_record",False) and final not in ("(stopped)",):
+            import verification_ledger as vl
+            state=vl.ctx_summary(self.ctx)
+            outstanding=[m["id"]+" ("+m["state"]+")" for m in (state or {}).get("modules",[]) if m["state"]!="verified"]
+            if outstanding or (state or {}).get("unowned_changes"):
+                final="Verification incomplete: "+", ".join(outstanding+(state or {}).get("unowned_changes",[]))+".\n\n"+final
+                self.emit("answer_retract",reason="authoritative verification status")
+                self.emit("ans_delta",text=final)
         if self.ctx.changed:
             self.emit("files_changed", files=dict(self.ctx.changed), reverts=list(self.ctx.turn_diffs))
         st = dict(self.turn)
@@ -4633,7 +4630,42 @@ class AgentEngine:
                         "listing": bool(im.get("listing")), "cited": im["page"] in rank})
         return out[:limit]
 
+
+
+
+
+
+
     # ---------------------------------------------------------------- approvals
+    def _authorize_tool(self, t, name, args, tid, desc):
+        """The shared single-operation authorization path; batch grants apply to one exact call ID."""
+        grants = getattr(self, "_batch_grants", {})
+        signature = (name, json.dumps(args, sort_keys=True))
+        if grants.get(tid) == signature:
+            grants.pop(tid)
+            return ""
+        dec = self._decision(t, name, args)
+        if dec.startswith("refuse:"):
+            return dec[7:]
+        elif dec == "ask":
+            warn = []
+            if self.tainted and t["kind"] in (at.WRITE, at.EXEC, at.INPUT, at.MCP, at.CLOUD):
+                warn.append("Web, document or tool content was read earlier in this chat. If that "
+                            "content influenced this action, check it was not an injected instruction.")
+            if t["kind"] == at.CLOUD:
+                warn.append("This sends a summary of this chat to OpenAI.")
+            rule = at.suggest_rule(name, args)
+            answer = self.ask({"id": tid, "name": name, "kind": t["kind"], "desc": desc,
+                               "warnings": warn, "rule": rule, "rule_label": at.rule_label(rule)})
+            if answer == "session":
+                self.session_ok.add(name)
+            elif answer == "always":
+                self.cfg.setdefault("allow_rules", []).append(rule)
+                self.emit("rule_added", rule=rule)
+            elif answer != "once":
+                return "The user denied this action. Do not retry it; ask or try another way."
+        return ""
+
     def _decision(self, t, name, args):
         """'auto' | 'ask' | 'refuse:<why>' for one tool call."""
         k, c = t["kind"], self.cfg
@@ -4712,11 +4744,11 @@ class AgentEngine:
         if ok and t and (t["kind"] in (at.WRITE, at.EXEC, at.INPUT) or sends   # a refused or failed write changed nothing
                          or name in ("artifact_create", "artifact_edit")):   # note tools that change what a read returns
             self._change_seq += 1                 # anything that may change files or state invalidates earlier results
-            if t["kind"] == at.WRITE:             # files still changing = work still moving (see the progress check)
-                self._last_write_np = getattr(self, "_no_progress", 0)
         if key:
             head = "\n".join(ln for ln in (text or "").splitlines() if ln.strip())[:400]
             self._calls_seen[key] = {"seq": self._change_seq, "head": head}
+
+
 
     def _run_tool(self, tc):
         asked, raw = tc["function"]["name"], tc["function"].get("arguments") or "{}"
@@ -4730,12 +4762,22 @@ class AgentEngine:
         progress = args.pop("progress", None) if isinstance(args, dict) and name != "update_tracker" else None
         if t and isinstance(args, dict):
             args = self.reg.normalize_args(name, args)
+            tc['function']['arguments'] = json.dumps(args)
         if progress:
             self._apply_progress(progress)
         desc = self.reg.describe(name, args) if (t and isinstance(args, dict)) else str(raw)
         preview = self.reg.preview(name, args) if (t and isinstance(args, dict)) else None
         self.emit("tool_call", id=tid, name=name, args=args, desc=desc, kind=(t or {}).get("kind", "?"),
                   display=preview, by=getattr(self, "exec_name", "") if self._role == "exec" else "")
+        action_id = None
+        if self.cfg.get("execution_memory_test_mode", False) and self._role == "main":
+            try:
+                import execution_memory as em
+                action_id = em.begin(self.ctx.conv_id, tid, name, args if args is not None else raw,
+                                     self.turn.get("steps"))
+            except Exception as e:
+                _log({"execution_memory_begin_error": repr(e)[:200], "conv": self.ctx.conv_id})
+                self.emit("status", text="Test Mode could not save this action before dispatch.")
         ok, text, image, display = True, "", None, None
         gather_wait = (name in ("wait_task", "task_status") and self._gather_job is not None and isinstance(args, dict)
                        and (not str(args.get("id") or "").startswith("t") or str(args.get("id")).startswith("gather")))
@@ -4748,22 +4790,6 @@ class AgentEngine:
             basic_block = (f"{name} did not run: this is the basic path (no parallel workers). Do it with your own tools "
                            f"— several independent lookups can go in one step — or call go_extensive if the task "
                            f"really needs workers.")
-        elif self._basic and self._is_new_program(name, args):
-            # a program written on the basic path is a build mis-sized as quick: plan it properly first (a 9B wrote a
-            # 278-line app in one go with no PRD, then patched it after the basic budget ran out)
-            self._upgrade, self._build_upgrade = "this is a software build", True
-            basic_block = (f"{name} did not run: writing a program is a software build — switching to the full agent "
-                           f"now. Its first milestone is PRD.md in the project folder (read_guide('software')); write "
-                           f"the code after the PRD and the plan.")
-        elif (not self._basic and self._role == "main" and not getattr(self, "_prd_asked", False)
-              and self._is_new_program(name, args)):
-            # the same on the full path: a plan that broke or skipped requirements (Haiku built with no PRD and
-            # never planned per-user data) — one refusal per turn, and only while the folder has no PRD.md
-            self._prd_asked = True
-            basic_block = (f"{name} did not run: this starts a program, and its folder has no PRD.md. Write PRD.md "
-                           f"there first (read_guide('software')): who uses it and how, the features in priority "
-                           f"order, and acceptance criteria you will test — short is fine. Put any requirement you "
-                           f"had not planned into the checklist, then write the code.")
         elif self._basic and name not in BASIC_TOOLS and t is not None:
             self._upgrade = f"it needs the {name} tool"             # switch to the full toolset at the next step
             basic_block = (f"{name} did not run yet: switching to the full toolset now. Call {name} again in your "
@@ -4779,13 +4805,10 @@ class AgentEngine:
                     and self._gather_job is None and not self.turn.get("gather_calls") and self._fan_gate_refusals < 2)
         # (a gather that fails — bad arguments — does not lift the gate: only a started one does, via gather_calls)
         repeat = self._repeat_of(name, t, args)
-        proj_block = self._project_gate(name, args)
         if basic_block:
             ok, text = False, basic_block
         elif repeat:
             ok, text = False, repeat
-        elif proj_block:
-            ok, text = False, proj_block
         elif fan_gate:
             # the task needs lookups and workers are available: they start first (the rule — if it can be
             # parallelized, it should be). At most twice, so a model that can't comply is never stuck.
@@ -4859,26 +4882,9 @@ class AgentEngine:
             elif name in ("powershell", "bg_start") and at.protected_reason(str(args.get("command", ""))):
                 ok, text = False, "Not run: " + at.protected_reason(str(args.get("command", "")))
             else:
-                dec = self._decision(t, name, args)
-                if dec.startswith("refuse:"):
-                    ok, text = False, dec[7:]
-                elif dec == "ask":
-                    warn = []
-                    if self.tainted and t["kind"] in (at.WRITE, at.EXEC, at.INPUT, at.MCP, at.CLOUD):
-                        warn.append("Web, document or tool content was read earlier in this chat. If that "
-                                    "content influenced this action, check it was not an injected instruction.")
-                    if t["kind"] == at.CLOUD:
-                        warn.append("This sends a summary of this chat to OpenAI.")
-                    rule = at.suggest_rule(name, args)
-                    answer = self.ask({"id": tid, "name": name, "kind": t["kind"], "desc": desc,
-                                       "warnings": warn, "rule": rule, "rule_label": at.rule_label(rule)})
-                    if answer == "session":
-                        self.session_ok.add(name)
-                    elif answer == "always":
-                        self.cfg.setdefault("allow_rules", []).append(rule)
-                        self.emit("rule_added", rule=rule)
-                    elif answer != "once":
-                        ok, text = False, "The user denied this action. Do not retry it; ask or try another way."
+                denial = self._authorize_tool(t, name, args, tid, desc)
+                if denial:
+                    ok, text = False, denial
             if ok:
                 self.ctx.call_id, self.ctx.should_stop = tid, self.should_stop
                 if self._basic and name not in BASIC_FREE_TOOLS and \
@@ -4935,6 +4941,17 @@ class AgentEngine:
               "conv": self.ctx.conv_id})
         refused = (" did not run" in text[:200] or text.startswith(("Not run again", "Not saved"))
                    or "user denied" in text[:120].lower())
+        if action_id:
+            try:
+                import execution_memory as em
+                file_path = None
+                if ok and name in ("write_file", "edit_file") and isinstance(args, dict) and args.get("path"):
+                    file_path = self.ctx.resolve(args["path"])
+                em.finish(self.ctx.conv_id, action_id, ok, text, refused=refused,
+                          step=self.turn.get("steps"), file_path=file_path)
+            except Exception as e:
+                _log({"execution_memory_finish_error": repr(e)[:200], "conv": self.ctx.conv_id})
+                self.emit("status", text="Test Mode could not save this tool result; inspect the live conversation.")
         if not repeat and not refused:              # only calls that actually ran: a refused one may be retried
             self._record_call(name, t, args, text, ok)
         self.emit("tool_result", id=tid, text=text, ok=ok, image=image, display=display)
@@ -4957,6 +4974,7 @@ class AgentEngine:
                                                         + base64.b64encode(image).decode()}}]})
             else:
                 self.history[-1]["content"] += ("\n(This model cannot see images; it was not shown to it.)")
+        return {"ok": ok, "text": text, "image": image, "display": display}
 
     def _model_image(self, data):
         """A tool's image as the model gets it: at most `vision_max_px` wide (default 1024) and at most 1.6x as tall
@@ -5137,10 +5155,7 @@ class AgentEngine:
         return None
 
     # ---- the "same attempt, nothing changing" detector
-    _NOT_ATTEMPTS = ("browser_", "bg_", "wait", "task_status", "update_tracker", "ask_user", "available_tools",
-                     "memory_", "history_search", "gather", "delegate_task", "go_extensive", "read_guide")
     _PATH_RX = re.compile(r"[A-Za-z]:[\\/][^\s'\"<>|*?]+\.\w{1,6}")
-    _TOKEN_RX = re.compile(r"[A-Za-z_][A-Za-z0-9_]{2,}|\d{2,}")
 
     def _file_effect(self, args):
         """Watch the real contents of every file this turn has touched (paths in arguments and commands): -> True
@@ -5163,49 +5178,9 @@ class AgentEngine:
             seen[p] = h
         return changed
 
-    def _same_attempt(self, name, args):
-        """The same attempt again — same tool, mostly the same identifiers — with no file changing in between.
-        3 in the window: a warning. 4: its assumption is wrong, abandon the approach. 6: stop and report."""
-        if self._role == "exec" or name.startswith(self._NOT_ATTEMPTS) or name in self._NOT_ATTEMPTS:
-            return ""
-        if self._file_effect(args):
-            self._effect_seq = getattr(self, "_effect_seq", 0) + 1
-        seq = getattr(self, "_effect_seq", 0)
-        toks = set(self._TOKEN_RX.findall((name + " " + json.dumps(args, default=str)).lower()))
-        target = ""                                   # what the call acts on: a different one = a different attempt
-        if isinstance(args, dict):
-            # the part of a file counts too: reading pages 1, 2, 3 of one file is progress, not the same attempt
-            target = " ".join(str(args.get(k) or "") for k in ("path", "src", "dst", "url", "urls", "file", "id",
-                                                               "offset", "start_line")).lower()
-            if name == "http_request":                # a different body is a different test (bad-input checks)
-                target += " " + str(args.get("method") or "GET").upper() + " " + json.dumps(
-                    args.get("json") if args.get("json") is not None else args.get("data") or args.get("body") or "",
-                    sort_keys=True, default=str)
-        win = self.__dict__.setdefault("_attempts", collections.deque(maxlen=16))
-        same = [w for w in win if w[0] == name and w[2] == seq and toks and (w[3] == target or not target) and
-                len(toks & w[1]) / max(1, len(toks | w[1])) >= 0.7]
-        win.append((name, toks, seq, target))
-        n = len(same) + 1
-        if n == 3:
-            _log({"same_attempt": n, "tool": name, "conv": self.ctx.conv_id})
-            return (f"⚠ This is the 3rd attempt at essentially the same thing ({name}) with no file changing in "
-                    f"between. Before trying again, check the assumption behind it against fresh evidence.")
-        if n == 4 or n == 5:
-            _log({"same_attempt": n, "tool": name, "conv": self.ctx.conv_id})
-            return (f"⚠ STOP THIS APPROACH: {n} attempts at essentially the same thing ({name}) and nothing has "
-                    f"changed. The assumption behind it is wrong — the problem you are fixing is probably not what "
-                    f"you think, or does not exist. Abandon it now: in update_tracker notes, write what you assumed "
-                    f"and that it was wrong (delete any note that repeats the wrong idea). Then get fresh evidence — "
-                    f"run the program or its tests and work only from that actual output — or report what you know.")
-        if n >= 6 and not self._force_answer:
-            note = self._stuck_reset(f"the same attempt at {name} {n} times")
-            if note:
-                return "⚠ " + note
-            _log({"same_attempt": n, "tool": name, "forced": True, "conv": self.ctx.conv_id})
-            self._force_answer = True
-            _log({"forced_answer": "same attempt repeated", "conv": self.ctx.conv_id})
-            return "⚠ Still the same attempt after being told to stop. Stop now and report to the user."
-        return ""
+
+
+
 
     _EXC_LINE = re.compile(r"^\s*((?:[\w.]+\.)?\w*(?:Error|Exception)\b.*)$", re.M)
 
@@ -5264,7 +5239,6 @@ class AgentEngine:
             best = getattr(self, "_best_passes", -1)
             if passes > best:
                 if best >= 0:
-                    self._no_progress = 0              # more tests pass than ever this turn: that is progress
                     _log({"tests_progress": [best, passes], "conv": self.ctx.conv_id})
                 self._best_passes = passes
         if failed:
@@ -5290,81 +5264,30 @@ class AgentEngine:
             if ok and self.ctx.tracker and self.ctx.tracker.get("milestones"):
                 self._need_plan = False
                 n_open = len(at.tracker_open(self.ctx.tracker))
-                if args.get("new") or getattr(self, "_open_count", None) is None or n_open < self._open_count:
-                    self._no_progress = 0            # an item was finished (or a new plan started)
                 self._open_count = n_open
         elif name == "wait_for_workers":
             pass                                     # waiting on the workers is neither progress nor being stuck
         else:
             self._since_tracker += 1
-            # reading something not seen before this turn is new information, not "no progress": a fix task reads the
-            # docs, code and tests first, and was told "the current approach is not working" 7 minutes in (24 calls
-            # with no checklist item done). Repeats still count; the reads-in-a-row nudge still limits reading.
-            novel = False
-            if name in ("read_file", "read_document", "search_text", "list_dir", "find_files", "trace_symbol") \
-                    and isinstance(args, dict):
-                seen = self.__dict__.setdefault("_seen_reads", set())
-                key = (name, str(args.get("path") or args.get("root") or "").lower(), str(args.get("offset") or ""),
-                       str(args.get("pattern") or args.get("query") or args.get("symbol") or ""))
-                novel = key not in seen
-                seen.add(key)
-            if novel:
-                pass
-            elif not text.startswith(("Not run again", "Not saved")) and " did not run:" not in text[:120]:
-                # a web_search that reads pages is several searches in one: it counts double
-                heavy = name == "web_search" and isinstance(args, dict) and str(args.get("pages", 6)) not in ("0", "")
-                self._no_progress = getattr(self, "_no_progress", 0) + (2 if heavy else 1)
-        if name in ("read_file", "search_text", "trace_symbol", "list_dir", "find_files", "read_document"):
-            self._read_streak = getattr(self, "_read_streak", 0) + 1
-        elif ((self.reg.get(name) if self.reg else None) or {}).get("kind") in (at.EXEC, at.NET) or name in (
-                "run_tests", "debug_run", "trace_call", "http_request", "stack_dump", "bg_output", "changes_since_green"):
-            self._read_streak = 0
-        streak_note = ""
-        if getattr(self, "_read_streak", 0) == 6 and (self._built_software() or self._edited_code()):
-            streak_note = ("You've read 6 times in a row without running anything. Reading rarely finds a hang or a "
-                           "wrong value — experiment instead: run the failing step on its own (http_request / "
-                           "powershell), trace_call the function, stack_dump a hung process, bg_output grep='Error' "
-                           "for a server, or changes_since_green for what changed since it last worked.")
-        sig = name + json.dumps(args, sort_keys=True, default=str)[:400] if isinstance(args, dict) else name
-        repeats = sum(1 for s in self._recent if s == sig)
-        self._recent.append(sig)
-        notes = []
-        if repeats >= 1 and self._role == "exec":
-            self._handoff, self._exec_said = True, "(the executor repeated the same call)"
-            self.turn["exec_repeats"] = self.turn.get("exec_repeats", 0) + 1
-        if repeats >= 2 and name != "wait_for_workers":      # repeated waiting is how waiting works
-            notes.append(f"⚠ Same call, same result ({repeats + 1} times). Next step: a different tool, query or "
-                         "source. (No need to comment on this; just make the next call.)")
-        else:
-            stuck_note = self._same_attempt(name, args)       # the same idea in different words, nothing changing
-            if stuck_note:
-                notes.append(stuck_note)
-        if streak_note:
-            notes.append(streak_note)
-        if (name in ("web_search", "web_fetch") and not getattr(self, "_hard_search_hinted", False)
-                and "hard_search" not in getattr(self, "_guides_read", set()) and self._role != "exec"
-                and "read_guide" in (self.reg.by_name if self.reg else {})
-                and sum(1 for n, _a in self._calls_this_turn() if n in ("web_search", "web_fetch")) >= 4):
-            # the playbook's own definition of a hard target: the first three good queries failed
-            self._hard_search_hinted = True
-            notes.append("This looks like a hard target (4 searches so far). Instead of rewording again, "
-                         "read_guide('hard_search') — the playbook for finding what normal search doesn't — and "
-                         "change the route: an anchor or identifier, the answer page's words, the container that "
-                         "holds it, another language or time window, or an archive.")
-        limit = int(self.cfg.get("max_failures") or 6)
-        if self._fail_streak >= limit and self._stuck_reset(f"{self._fail_streak} failures in a row"):
-            notes.append("⚠ " + (getattr(self, "_last_reset_note", "") or "STRATEGY RESET: change approach."))
-        elif self._fail_streak >= limit:
-            self._force_answer = True
-            _log({"forced_answer": "failure streak", "conv": self.ctx.conv_id})
-            notes.append("⚠ Too many failures in a row. Stop and report to the user.")
-        elif self._fail_streak >= 3:
-            hint = ("⚠ Several attempts in a row have failed. Step back: re-read the error messages, question "
-                    "your assumptions, and try a fundamentally different approach")
-            if self.reg and "consult_advisor" in self.reg.by_name:
-                hint += ", or call consult_advisor for help"
-            notes.append(hint + ". Record what failed in your tracker notes.")
-        return text + ("\n\n" + "\n".join(notes) if notes else "")
+        from run_policy import RunPolicy
+        if not hasattr(self, "_run_policy"):
+            self._run_policy = RunPolicy(failure_limit=int(self.cfg.get("max_failures") or 6))
+        kind = ((self.reg.get(name) if self.reg else None) or {}).get("kind")
+        polling = name.startswith(("bg_", "wait", "task_status")) or name in (
+            "update_tracker", "history_search", "memory_save")
+        changed = (ok and not refused and kind == at.INPUT) or self._file_effect(args)
+        reason = self._run_policy.observe(name, args, text, failed=failed, refused=refused,
+                                          changed=changed, polling=polling)
+        if reason and not self._force_answer:
+            note = self._stuck_reset(reason)
+            self._run_policy.reset()
+            if note:
+                text += "\n\n" + note
+            else:
+                self._force_answer = True
+                text += "\n\nRecovery budget exhausted. Stop and report the unresolved blocker; do not claim completion."
+        return text
+
 
     # ---------------------------------------------------------------- advisor
     def _advise(self, question):
@@ -5428,8 +5351,10 @@ class AgentEngine:
 
     def _history_tokens(self):
         fixed = _est_tokens([{"role": "system", "content": self.system_prompt()}]) + \
-            len(json.dumps(self.reg.schemas() if self.reg else [])) // 3
-        return int((_est_tokens(self.history) + fixed) * self.ratio)
+            len(json.dumps(self._schemas(True) if self.reg else [])) // 3
+        reminder = self._reminder()
+        return int((_est_tokens(self.history) + fixed +
+                    (_est_tokens([reminder]) if reminder else 0)) * self.ratio)
 
     def _maybe_compact(self):
         budget = self.context_budget()
@@ -5448,8 +5373,10 @@ class AgentEngine:
         archived = self.__dict__.setdefault("_archived", set())
         # the room left after the fixed system prompt and tool list; the newest results stay whole while they fit in a
         # quarter of it (2 to 6 of them) — stubbing is free, a summary costs a model call and a full re-read
+        reminder = self._reminder()
         fixed = int((_est_tokens([{"role": "system", "content": self.system_prompt()}]) +
-                     len(json.dumps(self.reg.schemas() if self.reg else [])) // 3) * self.ratio)
+                     len(json.dumps(self._schemas(True) if self.reg else [])) // 3 +
+                     (_est_tokens([reminder]) if reminder else 0)) * self.ratio)
         room = max(4000, budget - fixed)
         whole, acc = 0, 0
         for i in reversed(tool_idx):
@@ -5480,6 +5407,11 @@ class AgentEngine:
         #    history, and cutting only at user messages left almost nothing to summarise -> compaction every 2 steps.
         #    The kept part is a share of the room left after the fixed system prompt and tools, not of the window.
         keep_tokens = max(2000, room * 0.35)
+        if self.cfg.get("compact_prompt", False):
+            # Allow for the evidence-linked checkpoint and pins before deciding how much raw
+            # history to retain. This is a target, never a hard cut through an active step.
+            target = int(self.cfg.get("compact_target_tokens") or 20000)
+            keep_tokens = max(2000, min(keep_tokens, target - fixed - 4000))
         cut, acc = None, 0
         for i in range(len(self.history) - 1, 0, -1):
             acc += int(_est_tokens([self.history[i]]) * self.ratio)
@@ -5501,23 +5433,37 @@ class AgentEngine:
         except Exception as e:
             _log({"snapshot_error": repr(e)[:200], "conv": conv})
         self.emit("status", text="Compressing earlier conversation…")
-        summary = None
-        if as_cached is not None:
+        if self.cfg.get("context_compaction_v2", True):
+            import context_checkpoint
+            source_messages = (as_cached or self.history)[:cut]
             try:
-                summary = self._summarize_in_place(as_cached, cut)
+                summary = context_checkpoint.compact(self, source_messages)
+            except Stopped:
+                raise
             except Exception as e:
-                _log({"compact_inplace_error": repr(e)})
-        if not summary:
-            try:
-                summary = self._summarize(old)
-            except Exception as e:
-                _log({"compact_error": repr(e)})
-                summary = None
-        if not summary:                        # could not summarise: drop the oldest part instead
-            self.history = self.history[cut:]
-            self.emit("compacted", summary="(older messages were dropped: summarising failed)",
-                      before=before, after=self._history_tokens())
-            return
+                _log({"checkpoint_synthesis_error": repr(e)[:300], "conv": conv})
+                self.emit("status", text="Using recorded context after checkpoint synthesis failed…")
+                # Retain exact requests, tracker state and paired tool evidence.
+                # A model-side summary failure is not a reason to end the task.
+                summary = context_checkpoint.compact(self, source_messages, synthesize=False)
+        else:
+            summary = None
+            if as_cached is not None:
+                try:
+                    summary = self._summarize_in_place(as_cached, cut)
+                except Exception as e:
+                    _log({"compact_inplace_error": repr(e)})
+            if not summary:
+                try:
+                    summary = self._summarize(old)
+                except Exception as e:
+                    _log({"compact_error": repr(e)})
+                    summary = None
+            if not summary:                        # could not summarise: drop the oldest part instead
+                self.history = self.history[cut:]
+                self.emit("compacted", summary="(older messages were dropped: summarising failed)",
+                          before=before, after=self._history_tokens())
+                return
         self.summary = summary
         # 3) pinned, not summarised: what a summary tends to lose (the user's exact words and constraints, the
         #    project's PRD, the latest test results, the files changed). Kept and merged across compactions.
@@ -5550,7 +5496,11 @@ class AgentEngine:
                 self.ctx.roots.append(folder)
         except Exception as e:
             _log({"context_map_error": repr(e)[:200], "conv": conv})
-        pinned = _render_pins(self._pins)
+        rendered_pins = dict(self._pins)
+        if self.cfg.get("context_compaction_v2", True):
+            for key in ("notes", "actions", "tests", "requests", "timeline", "outline"):
+                rendered_pins.pop(key, None)
+        pinned = _render_pins(rendered_pins)
         head = [{"role": "user", "content": "[Summary of the earlier part of this conversation, written "
                  "automatically to save space]\n" + summary + ("\n\n" + pinned if pinned else "")}]
         if self.history[cut].get("role") != "assistant":       # the kept part starts mid-turn with my own step
@@ -5560,6 +5510,10 @@ class AgentEngine:
         self.turn["compactions"] = self.turn.get("compactions", 0) + 1
         self._exec_from = 0
         after = self._history_tokens()
+        if self.cfg.get("compact_prompt", False):
+            _log({"compact_target":int(self.cfg.get("compact_target_tokens") or 20000),
+                  "actual_estimate":after,"target_met":after<=int(self.cfg.get("compact_target_tokens") or 20000),
+                  "conv":self.ctx.conv_id})
         _log({"compacted": True, "before": before, "after": after, "conv": self.ctx.conv_id})
         self.emit("compacted", summary=summary, before=before, after=after)
         self.emit_context(after)
@@ -5595,7 +5549,10 @@ class AgentEngine:
                 + [{"role": "user", "content": ask}])        # the masked view: what the server has cached
         self._delta = "summary_delta"            # not streamed into the chat as an answer
         try:
-            msg, _n, _p = self._call_openai(msgs, tools=False, max_tokens=1600, no_think=True)
+            # Cold replay has no prompt prefix to reuse. Its full tool schema costs tokens and time
+            # without helping a no-tool summary. Keep the unchanged schema prefix on warm runs.
+            msg, _n, _p = self._call_openai(msgs, tools=False, max_tokens=1600, no_think=True,
+                                           omit_tool_schemas=not bool(self.last_prompt_tokens))
         finally:
             self._delta = "ans_delta"
         out = re.sub(r"<think>.*?</think>", "", msg.get("content") or "", flags=re.S).strip()
@@ -5664,6 +5621,9 @@ class AgentEngine:
     # set plus the groups this chat needs; the rest are listed by available_tools and load when enabled or first
     # called (one full prompt re-read then — rare, and the list stays stable again after it).
     CORE_GROUPS = ("files", "shell", "code", "web", "math", "memory")
+    COMPACT_CORE_NAMES = {"available_tools", "update_tracker", "ask_user", "history_search", "read_guide",
+                          "read_file", "write_file", "edit_file", "list_dir", "find_files", "search_text",
+                          "make_dir", "powershell", "run_tests", "go_extensive"}
     # a software build never uses these (~3K tokens of the ~13K fixed prompt start); listed in available_tools and
     # turned on if called (used = enabled), as any other tool
     BUILD_SKIP = {"record", "query_data", "python_sandbox", "python_host", "calculate", "read_formula", "encyclopedia",
@@ -5687,6 +5647,9 @@ class AgentEngine:
             s = re.sub(rx, lambda _m: short, s, count=1, flags=re.S)
         return s
     _GROUP_HINTS = (
+        ("web", r"\b(search|research|look up|latest|news|online sources?|web search)\b"),
+        ("math", r"\b(calculate|compute|arithmetic|statistics|equation)\b"),
+        ("memory", r"\b(remember|recall|saved memory)\b"),
         ("browser", r"\b(browser|website|web ?page|web ?site|log ?in|sign ?in|online form|fill (in|out)|click|"
                     r"scrape|screenshot of)\b"),
         ("documents", r"\b(word|docx?|excel|xlsx|spreadsheet|power ?point|pptx|slides?|deck|presentation|pdf|"
@@ -5728,6 +5691,17 @@ class AgentEngine:
         return self._gated() and self._stable_tools() and bool(self.cfg.get("tool_profiles", True))
 
     def _core_names(self):
+        if self.cfg.get("compact_prompt", False):
+            core = self.COMPACT_CORE_NAMES & set(self.reg.by_name)
+            if getattr(self.ctx, "build_test_record", False):
+                core |= {"module_contract", "begin_module", "verify_module", "module_status"} & set(self.reg.by_name)
+            if getattr(self.ctx, "problem_workbook", False):
+                core |= {"problem_plan", "problem_experiment", "problem_record", "problem_status"} & set(self.reg.by_name)
+            # User-provided connectors stay available without an activation ceremony.
+            for group, _brief, names in at.tool_groups(self.reg):
+                if group.startswith("mcp:"):
+                    core |= set(names)
+            return core
         groups = at.tool_groups(self.reg)
         core, grouped = set(at.ALWAYS_ON), set()
         for g, _b, ns in groups:
@@ -5845,12 +5819,13 @@ class AgentEngine:
         return bool(stable) and self._role == "main"
 
     def _schemas(self, tools):
+        compact = bool(self.cfg.get("compact_prompt", False))
         if self.reg and getattr(self, "_basic", False):          # the basic path: its core tools only
-            return self.reg.schemas([n for n in BASIC_TOOLS if n in self.reg.by_name]) if tools or self._stable_tools() else []
+            return self.reg.schemas([n for n in BASIC_TOOLS if n in self.reg.by_name], compact=compact) if tools or self._stable_tools() else []
         if not self.reg or (not tools and not self._stable_tools()):
             return []
         if isinstance(tools, list) and self.cfg.get("backend", "llama") != "llama":
-            return self.reg.schemas(tools)                  # a restricted step: only what it allows (no cache to keep)
+            return self.reg.schemas(tools, compact=compact)  # a restricted step: only what it allows (no cache to keep)
         self._brief_docs()
         if tools is True or self._stable_tools():
             names = self._active_names()
@@ -5858,8 +5833,8 @@ class AgentEngine:
                 names = [n for n in names if n not in EXEC_EXCLUDE]
             if getattr(self, "_hide_tracker", False) and self.cfg.get("backend", "llama") != "llama":
                 names = [n for n in names if n != "update_tracker"]      # (llama keeps one list: its cache)
-            return self.reg.schemas(names)
-        return self.reg.schemas(tools)
+            return self.reg.schemas(names, compact=compact)
+        return self.reg.schemas(tools, compact=compact)
 
     def _thinking_now(self):
         return think_max(self.cfg) != 0 and not self._skip_think and getattr(self, "_think_step", True)
@@ -6050,6 +6025,7 @@ Reply with JSON only: a few words of reason, then answer_directly, then needs_pl
 
     INTERPRET_PROMPT = """Before anyone works on the user's latest message, interpret it. Do NOT answer it.
 - goal: what the user actually wants and what "done" looks like (one sentence)
+- workspace: the absolute project folder explicitly selected by the user, copied exactly; empty if none
 - deliverable: answer / file / action / decision / plan / explanation
 - constraints: the user's own limits or preferences, quoted word for word ("in feet", "don't delete anything")
 - conditions: every qualifier the result must satisfy — dates, roles, scopes, units, rankings, exceptions \
@@ -6063,6 +6039,7 @@ then question: one short clarifying question
 Short phrases, no padding. If the message is trivial chat, keep everything minimal."""
 
     INTERPRET_SCHEMA = {"type": "object", "properties": {
+        "workspace": {"type": "string"},
         "goal": {"type": "string"}, "deliverable": {"type": "string"},
         "constraints": {"type": "array", "items": {"type": "string"}, "maxItems": 6},
         "conditions": {"type": "array", "items": {"type": "string"}, "maxItems": 8},
@@ -6070,7 +6047,7 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
         "ask_first": {"type": "boolean"}, "question": {"type": "string"},
         "irreversible": {"type": "boolean"},
         "implicit": {"type": "array", "items": {"type": "string"}, "maxItems": 2}},
-        "required": ["goal", "deliverable", "constraints", "conditions", "ambiguity", "chosen_reading",
+        "required": ["workspace", "goal", "deliverable", "constraints", "conditions", "ambiguity", "chosen_reading",
                      "ask_first", "question", "irreversible", "implicit"],
         "additionalProperties": False}                   # OpenAI's strict schemas require it
 
@@ -6114,6 +6091,7 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
         the turn's user message, the "Understood as" card, and the turn record."""
         t0 = t0 or time.time()
         lst = lambda k: [str(x).strip() for x in (d.get(k) or []) if str(x).strip()]
+        self._bind_workspace(d.get("workspace"))
         goal, deliv = str(d.get("goal") or "").strip(), str(d.get("deliverable") or "").strip()
         cons, conds, impl = lst("constraints"), lst("conditions"), lst("implicit")
         amb, reading = str(d.get("ambiguity") or "").strip(), str(d.get("chosen_reading") or "").strip()
@@ -6426,6 +6404,7 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
               "prompt_tokens": ptok})
         return msg
 
+
     def _repeats_earlier_answer(self, text):
         key = " ".join(text.split())[:240].lower()
         if len(key) < 80:
@@ -6462,7 +6441,8 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
         _log({"thinking_cut": True, "limit": limit, "conv": self.ctx.conv_id})
         return {"role": "assistant", "content": "", "tool_calls": None, "_cut": True}
 
-    def _call_openai(self, messages, tools=True, max_tokens=None, no_think=False, schema=None, raw_tools=None):
+    def _call_openai(self, messages, tools=True, max_tokens=None, no_think=False, schema=None, raw_tools=None,
+                     omit_tool_schemas=False, tool_choice=None):
         c = self.cfg
         executor = self._role == "exec"
         be = "llama" if executor else c.get("backend", "llama")
@@ -6488,11 +6468,13 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
             pending = self._gather_job is not None and not executor and not self._force_answer
             require, self._require_call = getattr(self, "_require_call", False) and not self._force_answer, False
             body.update(tools=self._schemas(tools), tool_choice="required" if (pending or require) else "auto")
-        elif be == "llama" and self._schemas(tools):
+        elif be == "llama" and not omit_tool_schemas and self._schemas(tools):
             body.update(tools=self._schemas(tools), tool_choice="none")   # same prompt start; no calls this step
         if raw_tools:                                     # the lean first pass: only get_tools
             body.update(tools=raw_tools,                    # its fact check: same prompt start, no calls
                         tool_choice="none" if (schema or getattr(self, "_no_tool_call", False)) else "auto")
+        if tool_choice is not None:
+            body["tool_choice"] = tool_choice
         if be == "llama":
             body["return_progress"] = True               # prompt-reading progress for the status line
             if getattr(self, "_n_slots", 1) > 1 and not executor:
@@ -6594,7 +6576,8 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
                 self.ctx.vision = False
                 _log({"vision_unsupported": detail[:160], "conv": self.ctx.conv_id})
                 self.emit("status", text="This model can't see images: continuing without them")
-                return self._call_openai(_text_only(messages), tools, max_tokens, no_think, schema, raw_tools)
+                return self._call_openai(_text_only(messages), tools, max_tokens, no_think, schema, raw_tools,
+                                         omit_tool_schemas, tool_choice)
             if be == "llama" and "parse tool call" in detail.lower() and body.get("parse_tool_calls", True):
                 # the model wrote a tool call in its own native format that llama.cpp's parser could not read
                 # (e.g. Gemma 4 with long multi-line arguments): ask again for the raw text and parse it here
@@ -6757,7 +6740,7 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
                                  "the data from files instead (python_sandbox files=[...], then open() them in /work) "
                                  "and keep the code under ~80 lines." + hint + "\n</system-reminder>"})
             return {"role": "assistant", "content": "", "tool_calls": None, "_cut": True}, ntok or 0, ptok
-        msg = {"role": "assistant", "content": content,
+        msg = {"role": "assistant", "content": content, "_finish_reason": finish,
                "tool_calls": [calls[i] for i in sorted(calls)] or None}
         for tc in msg["tool_calls"] or []:
             if not tc["id"]:

@@ -154,3 +154,13 @@ conversation was compressed, instead of re-deriving or guessing. PRD.md stays a 
 ## 6. Finish
 Run the full test script once more, look at the latest frames, then report: what was built, how to run it, which
 acceptance criteria pass, and anything not done.
+
+
+Build / Test / Record (when enabled): declare module_contract with clear inputs, outputs, units/invariants, errors, effects, owned source/test paths, named behavioral checks and prerequisites. begin_module selects a coherent change cohort. Build its implementation and tests together; verify_module executes real Node/pytest tests and records versions automatically. A check string must occur in a test name. Verify prerequisites before dependent work and add integration checks using the real modules/libraries. module_status shows current/stale receipts. Related repairs remain allowed; no need to split every trivial helper into its own module. Validate the test fixture before interpreting failures. Do not recreate library math, invent a passing result or treat a plain script/empty test run as verification. A unit pass establishes only its declared scope; real UI/gameplay still needs acceptance checks. Keep facts, failed approaches and next check in the normal tracker; preserve the full task objective.
+# Problem solving and evidence
+
+For complex work, use the normal problem workbook described in `problem-solving.md`.
+Treat module verification as one evidence source. Check the test oracle, fixture,
+runtime and public interface before changing implementation to satisfy a failing
+test. Reduce uncertainty with distinguishable alternatives and an executed
+experiment; preserve the original acceptance conditions and validate integration.

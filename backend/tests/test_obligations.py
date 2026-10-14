@@ -77,13 +77,15 @@ def test_the_same_outcome_again_is_a_stall():
     d, c, reg = _setup()
     reg.call("update_tracker", {"updates": [{"id": "1.1", "status": "done"}, {"id": "1.2", "status": "done"}]})
     cmd = "python -c \"import sys; print('error: --amount 1000 is not valid'); sys.exit(1)\""
-    for _ in range(obligations.STALL_BRIEF + 1):
+    for _ in range(9):
         reg.call("powershell", {"command": cmd})
     b = obligations.brief(c)
     assert "NO NEW EVIDENCE" in b and "--amount 1000" in b, b
-    for _ in range(obligations.STALL_ESCALATE - obligations.STALL_BRIEF):
+    for _ in range(6):
         reg.call("powershell", {"command": cmd})
-    assert "STUCK" in obligations.brief(c) and "ask_user" in obligations.brief(c)
+    b = obligations.brief(c)
+    assert "NO NEW EVIDENCE" in b and "--amount 1000" in b
+    assert "ask_user" not in b and "STUCK:" not in b  # recovery belongs to the engine policy
 
 
 def test_scratch_scripts_dont_stale_or_count_as_item_files():

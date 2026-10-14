@@ -50,11 +50,11 @@ export function latestPlan(msgs: Msg[]): Msg | null {
   return null
 }
 
-/** The most recent checklist in a conversation (from its last tracker card). */
+/** The task checklist, excluding module verification cards that share the tracker display. */
 export function latestChecklist(msgs: Msg[]): Display | null {
   for (let i = msgs.length - 1; i >= 0; i--) {
     const d = msgs[i].tool?.display
-    if (msgs[i].kind === "tool" && d?.type === "tracker") return d
+    if (msgs[i].kind === "tool" && msgs[i].tool?.name === "update_tracker" && d?.type === "tracker") return d
   }
   return null
 }

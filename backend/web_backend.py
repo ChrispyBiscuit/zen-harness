@@ -25,6 +25,9 @@ from aiohttp import WSMsgType, web
 
 sys.modules.setdefault("web_backend", sys.modules[__name__])   # run as a script: harness_api imports this same module
 
+import _zen_pending
+_zen_pending.apply_pending(os.path.dirname(os.path.abspath(__file__)))
+
 import agent
 import agent_host
 import agent_tools as at
@@ -66,6 +69,9 @@ class Store:
         except Exception:
             pass
         s["agent"] = {**copy.deepcopy(DEFAULT_AGENT), **(s.get("agent") or {})}
+        if not s["agent"].get("_compact_default_v1"):
+            s["agent"]["compact_prompt"] = True
+            s["agent"]["_compact_default_v1"] = True
         s["ui"] = {**DEFAULT_SETTINGS["ui"], **(s.get("ui") or {})}
         if not s["agent"].get("_v2"):                          # one-time upgrade for the new build
             if s["agent"].get("backend") == "llama" and int(s["agent"].get("num_ctx") or 0) < 131072:
@@ -280,6 +286,7 @@ class ConvWriter:
             sys.modules["harness_api"].on_event(self.conv, kind, d)
 
     def _event(self, kind, d):
+        prior_messages = len(self.msgs)
         if kind == "status":
             self.status = d.get("text", "")
             BUS.send({"t": "status", "conv": self.conv["id"], "text": self.status})
@@ -461,6 +468,11 @@ class ConvWriter:
             self.finish_live()
             self.final = "⚠ " + d.get("text", "")
             self.msgs.append({"role": "assistant", "content": self.final, "error": True})
+        # Timestamp every newly created model event at its source. This also
+        # covers plans, tool calls and streamed replies without relying on a
+        # browser clock or guessing times when old chats are loaded.
+        for message in self.msgs[prior_messages:]:
+            message.setdefault("t", time.time())
 
 
 class GpuMonitor:
@@ -570,6 +582,7 @@ class Host:
             have[0].cfg["permissions"] = cfg.get("permissions", "ask")
             return have[0]
         state = have[0].export_state() if have else conv.get("agent_state")
+        # The atomic lock journal wins over the delayed conversation save on restart.
         if have:
             try:
                 have[0].close()
@@ -584,6 +597,8 @@ class Host:
                            if m.get("content") and not m.get("kind") and m["role"] in ("user", "assistant")]
         self.engines[conv["id"]] = (eng, key)
         return eng
+
+
 
     def start_agent(self, conv, text, images=None, compact_only=False):
         r = self.runs.get(conv["id"])

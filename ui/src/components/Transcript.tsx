@@ -35,8 +35,18 @@ function UserMessage({ msg }: { msg: Msg }) {
       <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-panel rounded-br-chip bg-surface-2 px-4 py-2 text-chat">
         {msg.content}
       </div>
+      <TurnTime t={msg.t} />
     </div>
   )
+}
+
+function TurnTime({ t }: { t?: number }) {
+  if (!t) return null // exact times were not recorded for older assistant messages
+  const date = new Date(t * 1000)
+  return <time dateTime={date.toISOString()} title={date.toLocaleString()}
+    className="text-meta text-muted-foreground/80">
+    {date.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+  </time>
 }
 
 function Thinking({ text, live, k }: { text: string; live?: boolean; k: string }) {
@@ -300,6 +310,7 @@ const AssistantMessage = memo(function AssistantMessage({ msg, k, variant = "ans
         </div>
       ) : null}
       {!narration && msg.content && !msg.streaming ? <div className="-mt-1 flex"><SpeakButton k={k} text={msg.content} /></div> : null}
+      <TurnTime t={msg.t} />
       {!narration && !hideStats && msg.stats && !msg.streaming && (msg.stats.tool_calls || msg.stats.steps > 1) ? <Stats s={msg.stats} /> : null}
     </div>
   )

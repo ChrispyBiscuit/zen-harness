@@ -132,8 +132,15 @@ class Ctx:
         self.is_subagent = False
 
     def inside(self, p):
-        return any(os.path.splitdrive(r)[0].lower() == os.path.splitdrive(p)[0].lower()
-                   and os.path.commonpath([p, r]) == r for r in self.roots)
+        p = os.path.normcase(os.path.abspath(p))
+        for root in self.roots:
+            root = os.path.normcase(os.path.abspath(root))
+            try:
+                if os.path.commonpath([p, root]) == root:
+                    return True
+            except ValueError:  # different drives
+                continue
+        return False
 
     def resolve(self, path, must_exist=False):
         path = str(path or "").strip().strip('"')
@@ -144,8 +151,10 @@ class Ctx:
         p = os.path.abspath(os.path.expanduser(path))
         if not self.inside(p):
             raise ToolError(f"'{p}' is outside the folders the agent may use "
-                            f"({'; '.join(self.roots) or 'none set'}). Ask the user to add it in "
-                            f"Agent settings.")
+                            f"({'; '.join(self.roots) or 'none set'}). Do not invent or retype the root. "
+                            f"Working folder: {self.cwd or self.workspace or (self.roots[0] if self.roots else 'none')}. "
+                            "For files requested inside that folder, retry with a relative filename or '.' "
+                            "for the folder itself. A genuinely different destination needs explicit access.")
         if must_exist and not os.path.exists(p):
             raise ToolError(f"'{p}' does not exist")
         return p
@@ -1131,7 +1140,7 @@ def t_powershell(a, c):
                 why_stopped = APP_PORT_MSG.format(port=grabbed)
                 _kill_tree(proc)
                 killed_at = time.time()
-        if not done and why_stopped is None and watch and proc.poll() is None and watch.blocked():
+        if not done and why_stopped is None and watch and not getattr(c, "batch_mode", False) and proc.poll() is None and watch.blocked():
             # blocked, not working: hand it back now (with where everything is waiting) instead of at the timeout
             report = _blocked_report(proc, c, cwd, watch)
             try:
@@ -1589,6 +1598,8 @@ def _norm_milestones(ms):
             continue
         title = m.get("title") or m.get("milestone") or m.get("name") or m.get("step") or m.get("text") or ""
         subs = _norm_steps(m.get("subtasks") or m.get("steps") or m.get("tasks") or m.get("items") or [])
+        if not title and subs:
+            title = m.get("done_when") or subs[0]["step"]
         item = {"title": _clean(title)[:200], "status": _norm_status(m.get("status")), "subtasks": subs}
         dw = m.get("done_when") or m.get("check") or m.get("acceptance") or m.get("evidence")
         if dw:
@@ -1707,6 +1718,29 @@ def tracker_prompt(t):
             + (f"\nNotes (latest):\n{notes}" if notes else ""))
 
 
+def tracker_prompt_brief(t):
+    """Current work and settled decisions for a recurring prompt.
+
+    The full tracker remains available through update_tracker; completed checklist
+    rows need not be repeated on every inference.
+    """
+    if not t:
+        return ""
+    t = upgrade_tracker(t)
+    done, total = tracker_progress(t)
+    cur = tracker_current(t)
+    blocked = [(iid, text) for iid, text, status, _ms in tracker_items(t)
+               if status == "blocked"]
+    rows = [f"Goal: {t.get('goal') or '(not set)'}", f"Progress: {done}/{total} done"]
+    if cur:
+        rows.append(f"Current: {cur[0]} {cur[1]}")
+    rows.append(f"Next: {t.get('next') or '(not set)'}")
+    rows += [f"Blocked {iid}: {text}" for iid, text in blocked]
+    rows += [f"Settled decision: {d}" for d in t.get("decisions") or []]
+    rows.append("Full checklist and notes: update_tracker or saved tracker file.")
+    return "\n".join(rows)
+
+
 PROGRESS_FIELD = {"type": "string", "description": "optional checklist progress, e.g. '1.2 done, 1.3 started'"}
 PROGRESS_EXEMPT = {"update_tracker", "available_tools"}
 _PROGRESS_RX = re.compile(r"(\d+(?:\.\d+)?)\s*[:=-]?\s*(done|completed?|finished|in[ _-]?progress|started|start|doing|"
@@ -1740,6 +1774,60 @@ def _tick_on_green(c, passed, failed):
     except Exception:
         return ""
     return f"\n(Checklist: {cur[0]} \"{str(cur[1])[:70]}\" marked done — this run is its evidence.)"
+
+
+def _module_ledger(c):
+    import verification_ledger as vl
+    if not vl.enabled(c):raise ToolError("Build/test/record is not enabled for this session")
+    ledger=vl.for_ctx(c)
+    if ledger is None:raise ToolError("Set the project working folder before declaring modules")
+    c.verification_root=str(ledger.root)
+    return ledger
+
+
+def t_module_contract(a,c):
+    return _module_ledger(c).declare(a)
+
+
+def t_problem_plan(a, c):
+    import problem_workbook as pw
+    return pw.tool(a, c, "plan")
+
+
+def t_problem_experiment(a, c):
+    import problem_workbook as pw
+    return pw.tool(a, c, "experiment")
+
+
+def t_problem_record(a, c):
+    import problem_workbook as pw
+    return pw.tool(a, c, "record")
+
+
+def t_problem_status(a, c):
+    import problem_workbook as pw
+    return pw.tool(a, c, "status")
+
+
+def t_begin_module(a,c):
+    return _module_ledger(c).begin(a["id"])
+
+
+def t_verify_module(a,c):
+    return _module_ledger(c).verify(a["id"],c)
+
+
+def t_module_status(a,c):
+    ledger=_module_ledger(c)
+    with ledger.lock:
+        summary=ledger.summary()
+        if a.get("receipt"):
+            receipt=next((r for r in ledger.state["receipts"] if r["id"]==a["receipt"]),None)
+            if receipt is None:raise ToolError("Unknown receipt ID")
+            return json.dumps(receipt,ensure_ascii=False)
+    # Existing tracker renderer: readable evidence state, no competing task checklist.
+    c.display={"type":"tracker","goal":"Build / Test / Record", "done":sum(m["state"]=="verified" for m in summary["modules"]),"total":len(summary["modules"]), "milestones":[{"title":m["id"]+": "+m["purpose"],"status":"done" if m["state"]=="verified" else "in_progress", "subtasks":[{"step":"State: "+m["state"]+("; receipt "+m["receipt"] if m.get("receipt") else ""),"status":"done" if m["state"]=="verified" else "pending"}]} for m in summary["modules"]],"notes":["Only declared test scope is verified; integration/gameplay checks remain required."]}
+    return json.dumps(summary,ensure_ascii=False)
 
 
 def t_update_tracker(a, c):
@@ -1805,7 +1893,12 @@ def t_update_tracker(a, c):
             a = dict(a, updates=(ups0 if isinstance(ups0, list) else []) + extra)
             ms = None
     if ms is not None:
-        t["milestones"] = _norm_milestones(ms)
+        normalized = _norm_milestones(ms)
+        if not normalized:
+            raise ToolError('Checklist not saved: milestones contain no usable tasks. Send '
+                            'milestones=[{"title":"Fix the bug","subtasks":[{"step":"Run the tests"}]}]. '
+                            'The previous checklist is unchanged.')
+        t["milestones"] = normalized
         if fresh:
             for m in t["milestones"]:                 # nothing is done before the work starts
                 for sub in m.get("subtasks") or []:
@@ -1835,6 +1928,10 @@ def t_update_tracker(a, c):
     was = {iid: st for iid, _x, st, _m in tracker_items(t)}
     given = {str((u or {}).get("id", "")).strip().rstrip("."): (u or {}).get("evidence")
              for u in (ups if isinstance(ups, list) else []) if isinstance(u, dict)}
+    import verification_ledger as vl
+    ledger=vl.for_ctx(c)
+    if ledger is not None:
+        with ledger.lock:ledger.check_tracker(ups,t)
     for u in ups if isinstance(ups, list) else []:
         iid = str((u or {}).get("id", "")).strip().rstrip(".")
         st = _norm_status((u or {}).get("status"))
@@ -1851,6 +1948,10 @@ def t_update_tracker(a, c):
                 m["status"] = _derive(m)
         except (ValueError, IndexError):
             bad.append(iid)
+    if ledger is not None:
+        previous={iid:st for iid,_x,st,_m in tracker_items(c.tracker or {})}
+        transitions=[{"id":iid,"status":st} for iid,_x,st,_m in tracker_items(t) if previous.get(iid)!=st]
+        with ledger.lock:ledger.check_tracker(transitions,t)
     try:
         import obligations
         for iid, _x, st, _m in tracker_items(t):
@@ -1980,24 +2081,39 @@ def t_memory_delete(a, c):
 
 
 def t_history_search(a, c):
-    """This chat's archive: what compaction moved out of the context (tool results, code written, earlier steps)."""
+    """This chat's archive, including Test Mode's exact action inputs and results."""
     import history_archive as ha
     conv = getattr(c, "conv_id", None)
     eid = str(a.get("entry") or "").strip()
     if eid:
+        offset = max(0, int(a.get("offset") or 0))
+        size = int(a.get("page_size") or 4000)
+        if eid.upper().lstrip("#").startswith("A"):
+            import execution_memory as em
+            item = em.get(conv, eid)
+            if not item:
+                raise ToolError(f"no action {eid} in this chat")
+            full = (f"Arguments:\n{item['arguments']}\nResult:\n{item['result']}")
+            chunk, start, end, total = ha.page(full, offset, size)
+            return f"#{item['id']} {item['tool']} [{item.get('status', 'interrupted')}] chars {start}:{end}/{total}\n{chunk}" + (f"\nNext: history_search(entry='{eid}', offset={end})" if end < total else "")
         e = ha.get(conv, eid)
         if not e:
             raise ToolError(f"no archived entry {eid} in this chat")
-        return clip(f"#{e['id']} [{e['kind']}] {e['label']}\n{e['text']}")
+        chunk, start, end, total = ha.page(e["text"], offset, size)
+        return f"#{e['id']} [{e['kind']}] {e['label']} chars {start}:{end}/{total}\n{chunk}" + (f"\nNext: history_search(entry='{eid}', offset={end})" if end < total else "")
     q = str(a.get("query") or "").strip()
     if not q:
         n = len(ha.entries(conv))
         return f"{n} archived entries in this chat. Give a query (keywords) or entry='E12'."
     hits = ha.search(conv, q, int(a.get("limit") or 5))
-    if not hits:
+    import execution_memory as em
+    actions = em.search(conv, q, int(a.get("limit") or 5))
+    if not hits and not actions:
         return "No archived entries match. (Only what compaction moved out of the context is archived.)"
-    return "\n".join(f"#{e['id']} [{e['kind']}] {e['label']}\n   {snip}" for _s, e, snip in hits) + \
-        "\n(history_search entry='E…' returns an entry in full)"
+    return ("\n".join(f"#{e['id']} [{e['kind']}] {e['label']}\n   {snip}" for _s, e, snip in hits)
+            + ("\n" if hits and actions else "")
+            + "\n".join(f"#{r['id']} [{r['status']}] {r['tool']}\n   {r['excerpt']}" for r in actions)
+            + "\n(history_search entry='E…' or 'A…' returns an exact entry)")
 
 
 def t_memory_search(a, c):
@@ -2235,7 +2351,9 @@ def t_query_data(a, c):
                 sample = con.execute(f"SELECT * FROM {t} LIMIT 5").df().to_string(max_colwidth=40)
                 parts.append(f"table {t}: {n:,} rows\ncolumns: " + ", ".join(f"{r[0]} ({r[1]})" for r in cols)
                              + f"\nfirst rows:\n{sample}")
-            return clip("\n\n".join(parts))
+            return clip("\n\n".join(parts) + "\nSchema and preview only: the requested calculation has NOT run. "
+                        "Next call query_data with the same files mapping and sql selecting the actual column "
+                        "names above (for example SELECT SUM(units) FROM " + tables[0] + ").")
         df = con.execute(sql).df()
     except duckdb.Error as e:
         raise ToolError(f"SQL error: {str(e).splitlines()[0][:400]}" + (f" (tables: {', '.join(tables)})" if tables else ""))
@@ -2283,7 +2401,7 @@ TOOL_GROUPS = [
       "scroll", "type_text", "press_keys", "focus_window", "wait"]),
     ("advisor", "ask a stronger cloud model when stuck", ["consult_advisor"]),
 ]
-ALWAYS_ON = {"go_extensive", "available_tools", "update_tracker", "read_guide", "history_search", "ask_user"}
+ALWAYS_ON = {"problem_plan", "problem_experiment", "problem_record", "problem_status", "module_contract", "begin_module", "verify_module", "module_status", "go_extensive", "available_tools", "update_tracker", "read_guide", "history_search", "ask_user"}
 
 
 BRIEF_OVER = 450            # a description longer than this is sent as its first sentences + a pointer
@@ -4007,10 +4125,34 @@ BUILTIN = [
      _obj({"action": S, "index": I, "url": S}), t_browser_tabs),
     ("browser_screenshot", READ, "Screenshot of the browser page (you see it if vision is on).",
      _obj({"full_page": B}), t_browser_screenshot),
+    ("problem_plan", NOTE, "For complex work preserve the goal, acceptance conditions and constraints. Reduce the blocker to questions with alternative explanations and dependencies. Existing resolved questions cannot be silently rewritten. Integration questions name acceptance IDs; a plan is an interpretation, not proof.",
+     _obj({"goal":S,"constraints":{"type":"array","items":S},
+           "acceptance":{"type":"array","items":_obj({"id":S,"condition":S},["id","condition"])},
+           "questions":{"type":"array","items":_obj({"id":S,"question":S,"why":S,
+              "hypotheses":{"type":"array","items":S},"dependencies":{"type":"array","items":S},
+              "acceptance":{"type":"array","items":S}},["id","question","why","hypotheses","dependencies","acceptance"])}},
+          ["goal","constraints","acceptance","questions"]), t_problem_plan),
+    ("problem_experiment", NOTE, "Choose one open question and a discriminating normal tool call. Declare its actual tool arguments, relevant input file paths (including tests/config), at least two predicted outcomes/decisions and rationale. Execute it normally, then record its controller evidence. This grants no permissions and does not call the tool itself.",
+     _obj({"question":S,"tool":S,"arguments":{"type":"object","additionalProperties":True},
+           "inputs":{"type":"array","items":S},"predictions":{"type":"array","items":S},"rationale":S},
+          ["question","tool","arguments","inputs","predictions","rationale"]), t_problem_experiment),
+    ("problem_record", NOTE, "Interpret actual controller evidence: supports/refutes/inconclusive leaves the question open; resolve settles it conditionally on declared inputs. State the next experiment/integration step. reopen requires new contradictory evidence; accept links integration evidence to an acceptance ID. These are model assessments, not independent proof.",
+     _obj({"action":{"type":"string","enum":["supports","refutes","inconclusive","resolve","reopen","accept","cancel"]},
+           "target":S,"evidence":S,"interpretation":S,"next":S},["action","target","evidence","interpretation","next"]),t_problem_record),
+    ("problem_status", READ, "Retrieve the durable goal, top open questions, conditional conclusions, failed approaches and next experiment. question retrieves one full question; evidence retrieves exact stored tool output (offset pages characters); offset alone pages all questions five at a time.",
+     _obj({"question":S,"evidence":S,"offset":I,"experiment":B},[]),t_problem_status),
     ("browser_wait", READ, "Wait for the page: a number of seconds, or until some text appears.",
      _obj({"seconds": N, "text": S}), t_browser_wait),
     ("browser_links", READ, "List the links on the current page (optionally only those containing some text).",
      _obj({"contains": S}), t_browser_links),
+    ("module_contract", NOTE, "Declare one module/coherent change cohort before building: public input/output contract, errors/side effects, owned sources and behavioral tests. sources/tests are project-relative file paths or glob patterns, checks must occur in executed test names. dependencies are previously declared module IDs; tracker_ids link completion to current receipts. Redefining a contract invalidates its verification.",
+     _obj({"id":S,"purpose":S,"inputs":S,"outputs":S,"errors":S,"effects":S,
+           "sources":{"type":"array","items":S},"tests":{"type":"array","items":S},"checks":{"type":"array","items":S},
+           "dependencies":{"type":"array","items":S},"tracker_ids":{"type":"array","items":S},"framework":{"type":"string","enum":["node","pytest"]}},
+          ["id","purpose","inputs","outputs","errors","effects","sources","tests","checks","dependencies","tracker_ids","framework"]),t_module_contract),
+    ("begin_module", NOTE, "Begin the declared module. Switching from unfinished work or into a module with unverified prerequisites is blocked. Related implementation/tests can be edited together; inspection and setup remain available.",_obj({"id":S},["id"]),t_begin_module),
+    ("verify_module", EXEC, "Run declared behavioral tests using real Node/pytest and collect structured reports. Controller records exact source/test/config versions and prerequisites. Empty, skipped-only, plain-script Node runs or uncovered check names cannot verify a module. No experiment step cap.",_obj({"id":S},["id"]),t_verify_module),
+    ("module_status", READ, "Show module contracts, current verification and exact execution receipts. Reads fresh project state; changed code/tests/dependencies invalidate old results. Supply receipt to retrieve its full version-bound record.",_obj({"receipt":S},[]),t_module_status),
     ("update_tracker", NOTE, "Your task checklist (it keeps you on track). Create it FIRST for every "
      "request: 'goal'; 'design' = the decisions the result depends on (the hard parts and how you will handle "
      "each; for a fix, the possible causes and what tells them apart); and 'milestones' = the major phases, each "
@@ -4173,10 +4315,10 @@ BUILTIN = [
      "the start): a type of source that worked, a dead end to avoid, a check that caught an error. General, not "
      "task-specific: no names, paths or figures. Shown under the playbook next time such a task comes up.",
      _obj({"note": S, "pattern": S}, ["note"]), t_playbook_note),
-    ("history_search", READ, "Search THIS chat's archive: when the conversation was compacted, earlier tool results, "
+    ("history_search", READ, "Search THIS chat's archive and Test Mode action journal: earlier tool results, "
      "code you wrote and earlier steps were moved here in full (stubs in the context name them, e.g. #E12). Give "
      "keywords to find them, or entry='E12' for one entry in full. Use it before redoing work you did earlier.",
-     _obj({"query": S, "entry": S, "limit": I}), t_history_search),
+     _obj({"query": S, "entry": S, "limit": I, "offset": I, "page_size": I}), t_history_search),
     ("memory_search", READ, "Search long-term memory and past conversations by meaning and keywords (hybrid). "
      "scope: 'memories' (saved facts), 'chats' (earlier conversations, not this one) or 'all' (default). Use it "
      "when the user refers to something from before ('like last time', 'my usual', 'what did we decide about…') "
@@ -4431,7 +4573,7 @@ class Registry:
         self.enabled = enabled
         for name, kind, desc, params, fn in BUILTIN:
             if enabled is not None and name not in enabled and name not in (
-                    "update_tracker", "enable_screen_control", "calculate", "memory_save",
+                    "problem_plan", "problem_experiment", "problem_record", "problem_status", "module_contract", "begin_module", "verify_module", "module_status", "update_tracker", "enable_screen_control", "calculate", "memory_save",
                     "memory_search", "memory_update", "memory_delete", "artifact_create", "artifact_edit",
                     "artifact_read", "artifact_list", "python_sandbox", "python_host", "query_data",
                     "available_tools", "read_guide"):
@@ -4474,7 +4616,7 @@ class Registry:
 
     brief = False            # long descriptions sent in brief (the agent sets it from the brief_tool_docs setting)
 
-    def schemas(self, names=None):
+    def schemas(self, names=None, compact=False):
         out = []
         for t in self.by_name.values():
             if names is not None and t["name"] not in names:
@@ -4485,6 +4627,20 @@ class Registry:
             desc = t["description"][:900]
             if self.brief and t["name"] not in BRIEF_KEEP:
                 desc = brief_description(t["name"], desc)
+            if compact:
+                # Preserve parameter names, types, required fields, enums and defaults.
+                # The full prose remains retrievable via read_guide('tool:<name>').
+                if t["name"] not in {"module_contract", "verify_module", "update_tracker", "powershell", "available_tools"}:
+                    desc = brief_description(t["name"], desc, limit=220)
+                def shorten(value):
+                    if isinstance(value, list):
+                        return [shorten(v) for v in value]
+                    if not isinstance(value, dict):
+                        return value
+                    return {k: (brief_description(t["name"], v, limit=160) if k == "description"
+                                and isinstance(v, str) and len(v) > 160 else shorten(v))
+                            for k, v in value.items()}
+                params = shorten(params)
             out.append({"type": "function", "function": {"name": t["name"], "description": desc,
                                                          "parameters": params}})
         return out
@@ -4517,6 +4673,15 @@ class Registry:
         return self.by_name.get(self.canonical(name))
 
     def call(self, name, args):
+        import verification_ledger as vl
+        import problem_workbook as pw
+        canonical = self.canonical(name)
+        try:
+            return pw.invoke(self, canonical, args, lambda: vl.invoke(self, canonical, args))
+        except (vl.PolicyError, pw.PolicyError) as exc:
+            raise ToolError(str(exc)) from exc
+
+    def _call_unchecked(self, name, args):
         """-> (text, png_bytes|None). Raises ToolError for problems the model can fix."""
         name = self.canonical(name)
         if getattr(self.ctx, "web_off", False) and is_web_tool(name):
@@ -4536,7 +4701,12 @@ class Registry:
                 text, is_err = self.mcp.call(t["server"], t["tool"], args)
             except MCPError as e:
                 raise ToolError(str(e))
-            return clip(("[the tool reported an error]\n" if is_err else "") + text), None
+            full = ("[the tool reported an error]\n" if is_err else "") + text
+            import problem_workbook as pw
+            pw.capture(self.ctx, full, None)
+            capture = getattr(self.ctx, "capture_result", None)
+            if callable(capture): capture(full, None)
+            return clip(full), None
         appending = name == "write_file" and args.get("append") and args.get("path")
         if appending:          # an append doesn't show the agent the file: it stays "known" only if it already was
             try:
@@ -4599,6 +4769,11 @@ class Registry:
                         text = str(text) + tick
         except Exception:
             pass
+        capture = getattr(self.ctx, "capture_result", None)
+        if callable(capture):
+            capture(str(text), image)
+        import problem_workbook as pw
+        pw.capture(self.ctx, text, image)
         text = self._debug_aids(name, args, str(text))
         return self._keep_result(name, text), image
 
@@ -4634,7 +4809,7 @@ class Registry:
 
     # curated reference text the model asks for on purpose: a guide cut at MAX_RESULT lost its last sections
     # (software.md is 11 KB, hard_search_techniques.md 15 KB) and the tool catalog lost its last groups
-    RESULT_LIMITS = {"read_guide": 16000, "available_tools": 12000}
+    RESULT_LIMITS = {"read_guide": 16000, "available_tools": 12000, "get_batch_result": 20000}
 
     def _keep_result(self, name, text):
         """Long results of reading tools are saved whole to the chat's folder, so the model can hand them to code

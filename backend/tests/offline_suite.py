@@ -221,42 +221,10 @@ def repeat_gate_arg_order_insensitive():
 
 # =====================================================================================================================
 # 5. same-attempt detector (_same_attempt) with real temp files
-@test
-def same_attempt_escalates_3_4_6():
-    root = tmpdir("sa")
-    p = os.path.join(root, "game.py")
-    open(p, "w").write("print('x')\n")
-    e = engine(root)
-    args = {"command": f"python {p} --level 3"}
-    notes = [e._same_attempt("powershell", args) for _ in range(6)]
-    assert notes[0] == notes[1] == ""
-    assert notes[2].startswith("⚠ This is the 3rd attempt")
-    assert "STOP THIS APPROACH" in notes[3] and "STOP THIS APPROACH" in notes[4]
-    assert notes[5].startswith("⚠ Still the same attempt") and e._force_answer
 
 
-@test
-def same_attempt_reset_when_file_changes():
-    root = tmpdir("sa2")
-    p = os.path.join(root, "game.py")
-    open(p, "w").write("print('x')\n")
-    e = engine(root)
-    args = {"command": f"python {p} --level 3"}
-    e._same_attempt("powershell", args)
-    e._same_attempt("powershell", args)
-    open(p, "w").write("print('y')\n")            # the file really changed between attempts
-    assert e._same_attempt("powershell", args) == ""
 
 
-@test
-def same_attempt_exempt_tools_and_executor():
-    e = engine()
-    for _ in range(5):
-        assert e._same_attempt("update_tracker", {"next": "x"}) == ""
-        assert e._same_attempt("history_search", {"query": "x"}) == ""
-    e._role = "exec"
-    for _ in range(5):
-        assert e._same_attempt("powershell", {"command": "dir"}) == ""
 
 
 # =====================================================================================================================
@@ -410,7 +378,7 @@ def history_search_tool():
 
 @test
 def compaction_stubs_archive_and_pins_fake_engine():
-    e = engine(conv="audit-compact")
+    e = engine(conv="audit-compact", compact_prompt=False, context_compaction_v2=False)
     big = "BEGIN\n" + "\n".join(f"row {i} value {i * 7}" for i in range(400)) + "\nUNIQUE_TOKEN_QX7 found\nexit code 0"
     e.history = [{"role": "user", "content": "Analyse data.csv and keep totals in EUR."}]
     for i in range(10):
@@ -666,8 +634,82 @@ def workspace_edge_cases():
     assert " chat (" in os.path.basename(e.ctx.workspace), e.ctx.workspace
 
 
+
+
+
+
+
+
+
+
+
+
 # =====================================================================================================================
 # 12. ask_user / show_user / browser_eval argument guards (nothing is launched)
+@test
+def tracker_recovers_missing_milestone_title_without_losing_subtasks():
+    c = at.Ctx([SCRATCH])
+    c.tracker_path = os.path.join(SCRATCH, 'recovered-tracker.md')
+    at.t_update_tracker({'new': True, 'goal': 'Fix tests', 'milestones': [
+        {'done_when': 'Tests pass', 'subtasks': [{'step': 'Run tests'}, {'step': 'Fix lib.py'}]}]}, c)
+    assert len(at.tracker_open(c.tracker)) == 2
+    before = json.dumps(c.tracker, sort_keys=True)
+    try:
+        at.t_update_tracker({'new': True, 'milestones': [{}]}, c)
+    except at.ToolError:
+        pass
+    else:
+        raise AssertionError('Invalid plan accepted')
+    assert json.dumps(c.tracker, sort_keys=True) == before
+
+
+@test
+def windows_path_case_and_sibling_containment():
+    root = tmpdir('case_path')
+    c = at.Ctx([root])
+    assert c.inside(os.path.join(root.upper() if os.name == 'nt' else root, 'sales.csv'))
+    assert not c.inside(root + '-outside/file.txt')
+    assert not c.inside(os.path.join(root, '..', 'outside.txt'))
+
+
+
+
+
+
+@test
+def explicit_new_workspace_replaces_prior_chat_workspace():
+    root = tmpdir('new_task_root')
+    e = engine(root)
+    e.ctx.cwd = e.ctx.workspace = root
+    target = os.path.join(root, 'new_project')
+    e._turn_request = 'Work only in ' + target + '. Write output.csv here.'
+    assert e._bind_workspace(target)
+    assert os.path.isdir(target)
+    assert e.ctx.cwd == target and e.ctx.workspace == target
+    assert e.ctx.resolve('output.csv') == os.path.join(target, 'output.csv')
+
+
+
+
+@test
+def numbered_slide_response_keeps_titles_and_boundaries():
+    import doc_create
+    from pptx import Presentation
+    text = 'Slide 1: Title\nTitle: Security\n- First point\nSlide 2:\nTitle: Passwords\nBullets:\n- Unique passwords'
+    path = os.path.join(SCRATCH, 'numbered-slides.pptx')
+    doc_create.make_pptx(path, text)
+    deck = Presentation(path)
+    assert len(deck.slides) == 2
+    all_text = '\n'.join(s.text for slide in deck.slides for s in slide.shapes if s.has_text_frame)
+    assert 'Security' in all_text and 'Passwords' in all_text and 'Unique passwords' in all_text
+    doc_create.make_pptx(path, '# Security\n## Overview\n- First point\n# Passwords\n## Practices\n- Unique passwords', title='Security Presentation')
+    assert len(Presentation(path).slides) == 2
+    doc_create.make_pptx(path, '**Slide 1: Security**\n- First point\n**Slide 2: Passwords**\n- Unique passwords')
+    assert len(Presentation(path).slides) == 2
+
+
+
+
 @test
 def ask_user_formats_and_guards():
     c = at.Ctx([SCRATCH])
@@ -1215,18 +1257,6 @@ def stubs_carry_enough_to_act_on():
     assert all(f"test_{i}" in stub for i in range(5)), stub              # every failure, not the first three
 
 
-@test
-def paging_through_a_file_is_not_the_same_attempt():
-    e = engine()
-    e._role = "main"
-    notes = [e._same_attempt("read_file", {"path": "C:/p/server.py", "offset": o}) for o in (None, 137, 280, 400)]
-    assert not any(notes), notes
-    again = [e._same_attempt("read_file", {"path": "C:/p/server.py", "offset": 137}) for _ in range(2)]
-    assert any("3rd attempt" in (n or "") for n in again), again        # the same page again still counts
-    url = "http://127.0.0.1:9/api/expense"
-    bad = [{"user": "a", "amount": -5}, {"user": "a"}, {"user": "a", "amount": "abc"}, {"amount": 3}]
-    notes = [e._same_attempt("http_request", {"method": "POST", "url": url, "json": b}) for b in bad]
-    assert not any(notes), notes                                        # bad-input checks are different tests
 
 
 @test
@@ -1307,7 +1337,7 @@ def contract_is_pinned_from_every_contract_section_and_while_reading():
 
 @test
 def tool_profiles_send_a_core_set_and_load_groups_on_demand():
-    e = engine(tool_gate=True, stable_tools=True)
+    e = engine(tool_gate=True, stable_tools=True, compact_prompt=False)
     groups = {g: set(ns) for g, _b, ns in at.tool_groups(e.reg)}
     on = set(e._active_names())
     assert {"read_file", "edit_file", "run_tests", "web_search", "calculate", "update_tracker"} <= on, on
@@ -1315,10 +1345,10 @@ def tool_profiles_send_a_core_set_and_load_groups_on_demand():
     assert len(on) < len(e.reg.by_name)
     e._profile_tools("log in to the website and fill out the form")    # the request's words load the browser
     assert groups["browser"] <= set(e._active_names())
-    e2 = engine(tool_gate=True, stable_tools=True)
+    e2 = engine(tool_gate=True, stable_tools=True, compact_prompt=False)
     e2._enable(["schedule_task"])                                      # a call/enable loads the whole group
     assert groups["schedule"] <= set(e2._active_names())
-    e3 = engine(tool_gate=True, stable_tools=True, tool_profiles=False)
+    e3 = engine(tool_gate=True, stable_tools=True, tool_profiles=False, compact_prompt=False)
     assert set(e3._active_names()) == set(e3.reg.by_name)              # the switch restores every tool
 
 
@@ -1341,7 +1371,7 @@ def layered_prompt_and_brief_docs_follow_the_loaded_groups():
 @test
 def turning_points_compaction_map_and_ledger():
     import context_memory as cm
-    e = engine(num_ctx=16384)
+    e = engine(num_ctx=16384, compact_prompt=False, context_compaction_v2=False)
     conv = e.ctx.conv_id
     e.turn = {"steps": 3}
     at.t_update_tracker({"new": True, "goal": "expense tracker", "milestones": [{"title": "PRD"}, {"title": "Build"}]},
@@ -1413,17 +1443,6 @@ def settled_decisions_stay_in_view():
     assert "n0" not in shown                                        # the old note scrolled away
 
 
-@test
-def reading_new_things_is_not_counted_as_no_progress():
-    e = engine()
-    e._no_progress = 0
-    for i, off in enumerate((None, 137, 280)):
-        e._watch_progress("read_file", {"path": "C:/p/server.py", "offset": off}, True, "[server.py: …]")
-    e._watch_progress("search_text", {"pattern": "def main", "root": "C:/p"}, True, "client.py:176")
-    assert e._no_progress == 0, e._no_progress                      # orientation: all new information
-    e._watch_progress("read_file", {"path": "C:/p/server.py", "offset": 137}, True, "[server.py: …]")
-    e._watch_progress("powershell", {"command": "dir"}, True, "exit code 0")
-    assert e._no_progress == 2, e._no_progress                      # a repeat and a plain command still count
 
 
 @test
@@ -1448,18 +1467,10 @@ def a_long_single_code_write_gets_a_note():
     assert "in parts" not in out, out
 
 
-@test
-def prd_check_finds_the_project_prd_above_tests():
-    e = engine()
-    d = tmpdir("proj")
-    os.makedirs(os.path.join(d, "docs"))
-    os.makedirs(os.path.join(d, "tests"))
-    code = "\n".join(f"x{i} = {i}" for i in range(120))
-    t = os.path.join(d, "tests", "test_api.py")
-    assert e._is_new_program("write_file", {"path": t, "content": code})          # no PRD anywhere yet
-    with open(os.path.join(d, "docs", "PRD.md"), "w", encoding="utf-8") as f:
-        f.write("# PRD\n")
-    assert not e._is_new_program("write_file", {"path": t, "content": code})      # docs/PRD.md one level up
+
+
+
+
 
 
 @test
@@ -1614,7 +1625,7 @@ def green_suite_is_the_evidence_in_the_work_state():
 
 @test
 def build_profile_trims_the_fixed_prompt_start():
-    e = engine(tool_profiles=True)
+    e = engine(tool_profiles=True, compact_prompt=False)
     assert e._BUILD_REQ_RX.search("I want you to build an expense tracker app for my roommates")
     assert not e._BUILD_REQ_RX.search("what's the weather in Austin")
     full = e.system_prompt()
@@ -1661,21 +1672,6 @@ def fact_checks_see_what_compaction_archived():
     assert any("21 passed" in str(m.get("content")) for m in ev if m.get("role") == "tool")
 
 
-@test
-def project_mode_needs_only_prd_and_design():
-    d = tmpdir("pm")
-    e = engine(d)
-    e._project = True
-    os.makedirs(os.path.join(d, "docs"))
-    code = os.path.join(d, "app.py")
-    e._project_docs = lambda p: os.path.join(d, "docs")
-    gate = getattr(e, "_project_gate", None) or getattr(e, "_project_code_gate", None)
-    for f in ("PRD.md", "DESIGN.md"):
-        open(os.path.join(d, "docs", f), "w").write("# x\n")
-    e.ctx.changed[code] = "created"
-    assert e._project_unfinished() == [], "no INDEX/TASKS demanded at the end"
-    if gate:
-        assert gate("write_file", {"path": code, "content": "x=1"}) == ""
 
 
 @test

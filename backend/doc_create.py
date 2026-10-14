@@ -369,9 +369,19 @@ def _bullets(slide, x, y, w, h, items, t, size=20):
 
 def _md_slides(md):
     slides, cur = [], None
+    levels = [len(m.group(1)) for m in re.finditer(r'^\s*(#{1,3})\s', md, re.M)]
+    slide_level = min(levels) if levels else 1
     for ln in md.replace("\r\n", "\n").split("\n"):
         s = ln.strip()
-        if re.match(r"^#{1,3}\s", s):
+        numbered = re.match(r"^Slide\s+\d+\s*:\s*(.*)$", s.strip('*').strip(), re.I)
+        if numbered:
+            cur = {"layout": "bullets", "title": numbered.group(1).strip(), "bullets": [], "notes": ""}
+            slides.append(cur)
+        elif cur is not None and s.lower().startswith("title:"):
+            cur["title"] = s[6:].strip()
+        elif cur is not None and s.lower() == "bullets:":
+            continue
+        elif re.match(r"^#{" + str(slide_level) + r"}\s", s):
             cur = {"layout": "bullets", "title": s.lstrip("#").strip(), "bullets": [], "notes": ""}
             slides.append(cur)
         elif cur is not None and re.match(r"^[-*+]\s|^\d+[.)]\s", s):
@@ -379,7 +389,7 @@ def _md_slides(md):
         elif cur is not None and s.lower().startswith("notes:"):
             cur["notes"] = s[6:].strip()
         elif cur is not None and s:
-            cur["bullets"].append(s)
+            cur["bullets"].append(re.sub(r'^#{1,3}\s+', '', s))
     return slides
 
 
@@ -387,10 +397,12 @@ def make_pptx(path, content, title=None, theme_name=None):
     from pptx import Presentation
     from pptx.util import Emu, Inches, Pt
     data = content
+    markdown_outline = False
     if isinstance(content, str):
         try:
             data = json.loads(content)
         except ValueError:
+            markdown_outline = True
             data = {"slides": _md_slides(content)}
     if isinstance(data, list):
         data = {"slides": data}
@@ -401,7 +413,7 @@ def make_pptx(path, content, title=None, theme_name=None):
     t = theme(data.get("theme") or theme_name)
     hfont, bfont = t["fonts"]
     title = title or data.get("title")
-    if title and not any(s.get("layout") == "title" for s in slides):
+    if title and not markdown_outline and not any(s.get("layout") == "title" for s in slides):
         slides.insert(0, {"layout": "title", "title": title, "subtitle": data.get("subtitle", "")})
     prs = Presentation()
     prs.slide_width, prs.slide_height = Inches(13.333), Inches(7.5)
