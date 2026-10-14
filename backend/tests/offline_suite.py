@@ -309,7 +309,14 @@ def wants_thinking_routing():
     e.history = [{"role": "tool", "content": "⚠ loop"}]
     assert e._wants_thinking(True, 3) is True         # the app flagged a loop
     e._think_effort = "high"
-    assert e._wants_thinking(True, 3) is True
+    assert e._wants_thinking(True, 3) is True         # still the flagged step
+    e.history = [{"role": "tool", "content": "ok"}]
+    assert e._wants_thinking(True, 3) is False        # the agent's own 'high': routine steps act directly
+    e._fail_streak = 1
+    assert e._wants_thinking(True, 3) is True and e._step_budget(True, 3) >= agentic.EFFORT_THINK["medium"]
+    e._fail_streak = 0
+    e.cfg["effort"] = "high"
+    assert e._wants_thinking(True, 3) is True         # the user's High / Max: every step
     e.cfg["effort"] = "minimal"
     assert e._wants_thinking(True, 3) is False        # the user's cap wins
 

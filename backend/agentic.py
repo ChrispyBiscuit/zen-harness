@@ -5935,8 +5935,12 @@ class AgentEngine:
         if think_max(self.cfg) == 0:
             return False
         eff = self._effective_effort()
-        if eff == "high" or self.cfg.get("think_budget"):
-            return True
+        setting = str(self.cfg.get("effort") or "").lower()
+        if (eff == "high" and setting in ("max", "high")) or self.cfg.get("think_budget"):
+            return True                             # the user asked for thinking everywhere
+        # the agent's OWN 'high' (chosen once, at the start of a long project) no longer means every step: a Bonsai
+        # build thought on 246 of 297 calls, 70% of its output (5.2 h at 17 tok/s), mostly on routine reads and edits.
+        # It keeps the bigger budget on the steps below.
         if eff == "none":                           # quick work: act and answer directly
             return False
         if tools is not True:                       # building the checklist, check-ins, forced answers
