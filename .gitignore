@@ -67,6 +67,7 @@ backend/evals/**/runs/
 backend/evals/**/results/
 backend/evals/build/*.log
 backend/evals/**/*_results.json
+backend/tests/offline_suite_results.json
 
 # ---- OS / editors ----
 Thumbs.db

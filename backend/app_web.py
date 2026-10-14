@@ -197,6 +197,11 @@ def _custom_frame(view, agent_browser=None):
         def eventFilter(self, obj, ev):
             if ev.type() == QEvent.Type.WindowStateChange:
                 bridge.stateChanged.emit(bridge._state())
+            elif ev.type() == QEvent.Type.WindowActivate:
+                # back in front (e.g. after another app was full-screen over it): make the web view draw again in
+                # case Chromium dropped its last frame while it was covered
+                target = view.focusProxy() or view
+                target.update()
             return False
 
     class BrowserBridge(QObject):
@@ -354,6 +359,14 @@ def main():
         import qt_browser
         devtools_port = qt_browser.free_port()
         os.environ["QTWEBENGINE_REMOTE_DEBUGGING"] = f"127.0.0.1:{devtools_port}"
+    # Chromium on Windows stops drawing a window it thinks is hidden (another app full-screen in front of it) and did
+    # not always start again on switching back: the whole window stayed black until a refresh. Must be set before Qt
+    # starts its WebEngine.
+    flags = os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
+    for f in ("--disable-features=CalculateNativeWinOcclusion", "--disable-backgrounding-occluded-windows"):
+        if f not in flags:
+            flags = (flags + " " + f).strip()
+    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = flags
     from PySide6.QtCore import QUrl
     from PySide6.QtGui import QIcon
     from PySide6.QtWebEngineCore import QWebEngineSettings

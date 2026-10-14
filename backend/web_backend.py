@@ -478,20 +478,40 @@ class ConvWriter:
 class GpuMonitor:
     """Samples nvidia-smi once a second (GPU %, VRAM) and pushes it to the UI."""
 
+    GPU_GRACE_S = 15            # a failed sample keeps the last good reading this long before the meters go away
+
     def __init__(self):
         self.last = {}
+        self._good_gpu, self._good_t = None, 0.0
+
+    @staticmethod
+    def _num(x):
+        try:
+            return float(x)
+        except (TypeError, ValueError):             # "[N/A]", "[Not Supported]", "" under load or on some GPUs
+            return None
 
     def sample(self):
+        now = time.time()
         try:
             out = subprocess.run(["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw",
                                   "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=5,
                                  creationflags=0x08000000).stdout.strip().splitlines()[0]
-            util, used, total, temp, power = [x.strip() for x in out.split(",")]
-            self.last = {"gpu": int(float(util)), "vram_used": int(float(used)), "vram_total": int(float(total)),
-                         "temp": int(float(temp)) if temp.replace(".", "").isdigit() else None,
-                         "power": float(power) if power.replace(".", "").isdigit() else None, "ts": time.time()}
+            util, used, total, temp, power = [self._num(x.strip()) for x in out.split(",")]
+            if used is None or not total:
+                raise ValueError("no memory reading")
+            prev = self._good_gpu or {}
+            gpu = {"gpu": int(util) if util is not None else prev.get("gpu"), "vram_used": int(used),
+                   "vram_total": int(total), "temp": int(temp) if temp is not None else None, "power": power}
+            self._good_gpu, self._good_t = gpu, now
+            self.last = dict(gpu, ts=now)
         except Exception:
-            self.last = {"error": "nvidia-smi unavailable", "ts": time.time()}
+            # one slow or failed nvidia-smi call (common while the GPU is busy) used to blank the GPU and VRAM meters
+            # for a second, so the status bar flickered: keep showing the last good reading for a while instead
+            if self._good_gpu is not None and now - self._good_t < self.GPU_GRACE_S:
+                self.last = dict(self._good_gpu, ts=now)
+            else:
+                self.last = {"error": "nvidia-smi unavailable", "ts": now}
         try:                                          # CPU % (since the last sample) and system RAM (MB), for the top bar
             import psutil
             vm = psutil.virtual_memory()
