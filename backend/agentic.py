@@ -2777,7 +2777,12 @@ class AgentEngine:
             s += SUBAGENT_NOTE
         if self.cfg.get("plan_mode"):
             s += PLAN_MODE_NOTE
-        mem = at.read_memory()
+        # read once per turn: a memory_save mid-turn would otherwise change the prompt's opening and force the
+        # server to re-read the whole conversation (45-57K tokens, 70-120 s on an 8 GB laptop); the model that just
+        # saved the fact already has it in its history, and the next turn's prompt shows it
+        if getattr(self, "_mem_snapshot", None) is None:
+            self._mem_snapshot = at.read_memory() or ""
+        mem = self._mem_snapshot
         if mem:
             s += "\n\nLong-term memory (saved facts; ids are for memory_update / memory_delete):\n" + mem
         ins = self._instructions()
@@ -2997,7 +3002,10 @@ class AgentEngine:
             return msgs
         n_tool = sum(1 for m in msgs if m.get("role") == "tool")
         total = _est_tokens(msgs) * self.ratio
-        if n_tool - st["at"] >= self.MASK_EVERY and total > self.MASK_FROM:
+        # close to the compaction point a batch is two full re-reads for one: compaction rewrites the prompt minutes
+        # later anyway (a Bonsai run masked at 15:31 and 15:53 — ~110 s re-reads each — then compacted at 16:03)
+        near_compaction = total > self.context_budget() * 0.75
+        if n_tool - st["at"] >= self.MASK_EVERY and total > self.MASK_FROM and not near_compaction:
             # a batch rewrites the middle of the prompt, which the server must then re-read (all of it, on a hybrid
             # model like Ternary Bonsai 2): only worth it when it frees a real amount — one batch stubbed a single
             # result for a 125 s re-read. Otherwise wait and let more pile up. One batch condenses everything stale
@@ -3248,6 +3256,74 @@ class AgentEngine:
             root = os.path.dirname(files[0])
         out = [f"WORK STATE (rebuilt by the app from the real files, tests and processes just now — trust it over "
                f"older copies above). Project folder: {root}"]
+        # the file-derived parts (line counts, code map, tests map, contract, ports) are rebuilt only when a tool has
+        # run or a file changed: _reminder() is called several times per step (payload, token counts, the UI meter)
+        try:
+            sig = (root, len(self.history), self.turn.get("steps"),
+                   tuple((p, os.stat(p).st_mtime_ns, os.stat(p).st_size) for p in files))
+        except OSError:
+            sig = None
+        cached = getattr(self, "_ws_cache", None)
+        if sig is not None and cached and cached[0] == sig:
+            files_part, code_map_block, running = cached[1]
+        else:
+            files_part, code_map_block, running = self._work_state_files(root, files)
+            self._ws_cache = (sig, (files_part, code_map_block, running))
+        out += files_part
+        lt = h.get("last_tests")
+        if lt:
+            line = f"Tests: last run {lt['t']} — {lt['passed']} passed, {lt['failed']} failed ({lt['cmd']})"
+            if h.get("green") is not None:
+                line += (f"; best so far {'(' + h['green_partial'] + ')' if h.get('green_partial') else 'all passing'} at "
+                         f"{h.get('green_t')}, {h.get('green_edits', 0)} code edit(s) since (changes_since_green)")
+            out.append(line)
+            if lt.get("failed") and h.get("same_fail", 0) >= 2:
+                # a failure that survived two fixes is rarely where it shows: trace it instead of editing again
+                out.append(f"TRACE, DON'T GUESS: the same test(s) failed {h['same_fail'] + 1} runs in a row, so the "
+                           f"cause is probably not where the failure shows. List the layers the failing call crosses "
+                           f"(test → client → server process/thread → storage/OS), check what each one actually did "
+                           f"('Elsewhere during this run' under the test result, bg_output, debug_run with a probe), "
+                           f"and find the first layer that did something unexpected — then edit that.")
+            if lt.get("passed") and not lt.get("failed") and h.get("green") is not None and not h.get("green_edits"):
+                # bonsai8 spent 70 min re-proving a green build: a smoke script, hand probes, a new feature to test a
+                # month filter, and re-runs after a compaction hid the earlier results
+                # what is already done is retired here, not left as an open instruction (a model kept re-doing
+                # the live run because this line never said it had happened)
+                obs = ((h.get("obl") or {}).get("obs") or [])
+                live = next((o for o in reversed(obs) if o.get("ok") and o.get("tool") != "run_tests"
+                             and str(o.get("t", "")) >= str(lt.get("t", ""))), None)
+                readme = os.path.isfile(os.path.join(root, "README.md"))
+                left = ([] if live else ["ONE live run of the real app if the request asks for it (start it, use it "
+                                         "once the way a user would, stop)"]) + ([] if readme else ["the README"]) + \
+                    ["the final answer"]
+                out.append(f"VERIFIED: the suite passed at {lt['t']} and no app code changed since — that run is "
+                           f"the evidence the code works; cite it."
+                           + (f" Live run DONE at {live['t']} ({live['line'][:100]})." if live else "")
+                           + (" README.md exists." if readme else "")
+                           + f" Left: {', then '.join(left)}. Nothing else: no new scripts, probes or re-runs.")
+        if running:
+            out.append(running)
+        cmap = (getattr(self, "_pins", None) or {}).get("map")
+        if cmap:
+            out.append(f"Context map (turning points + everything condensed, with ids): {cmap} — read it before "
+                       f"re-deriving something; history_search(entry='E12') restores an item.")
+        text = "\n".join(out)
+        if code_map_block:                               # the map fills the remaining room, cut at whole lines
+            room = 3990 - len(text)
+            lines, used = [], 0
+            for ln in code_map_block.split("\n"):
+                if used + len(ln) + 1 > room:
+                    break
+                lines.append(ln)
+                used += len(ln) + 1
+            if len(lines) > 1:
+                text += "\n" + "\n".join(lines)
+        return text[:4000]
+
+    def _work_state_files(self, root, files):
+        """The costly parts of the work state -> (lines for the files/tests/contract, the code map block, the
+        'Running: …' line): they read every file in play, rank the project's call graph and ask Windows for ports."""
+        out = []
         code_map_block = ""
         try:
             import repomap
@@ -3285,37 +3361,7 @@ class AgentEngine:
         contract = self._contract_lines(root)
         if contract:
             out.append(contract)
-        lt = h.get("last_tests")
-        if lt:
-            line = f"Tests: last run {lt['t']} — {lt['passed']} passed, {lt['failed']} failed ({lt['cmd']})"
-            if h.get("green") is not None:
-                line += (f"; best so far {'(' + h['green_partial'] + ')' if h.get('green_partial') else 'all passing'} at "
-                         f"{h.get('green_t')}, {h.get('green_edits', 0)} code edit(s) since (changes_since_green)")
-            out.append(line)
-            if lt.get("failed") and h.get("same_fail", 0) >= 2:
-                # a failure that survived two fixes is rarely where it shows: trace it instead of editing again
-                out.append(f"TRACE, DON'T GUESS: the same test(s) failed {h['same_fail'] + 1} runs in a row, so the "
-                           f"cause is probably not where the failure shows. List the layers the failing call crosses "
-                           f"(test → client → server process/thread → storage/OS), check what each one actually did "
-                           f"('Elsewhere during this run' under the test result, bg_output, debug_run with a probe), "
-                           f"and find the first layer that did something unexpected — then edit that.")
-            if lt.get("passed") and not lt.get("failed") and h.get("green") is not None and not h.get("green_edits"):
-                # bonsai8 spent 70 min re-proving a green build: a smoke script, hand probes, a new feature to test a
-                # month filter, and re-runs after a compaction hid the earlier results
-                # what is already done is retired here, not left as an open instruction (a model kept re-doing
-                # the live run because this line never said it had happened)
-                obs = ((h.get("obl") or {}).get("obs") or [])
-                live = next((o for o in reversed(obs) if o.get("ok") and o.get("tool") != "run_tests"
-                             and str(o.get("t", "")) >= str(lt.get("t", ""))), None)
-                readme = os.path.isfile(os.path.join(root, "README.md"))
-                left = ([] if live else ["ONE live run of the real app if the request asks for it (start it, use it "
-                                         "once the way a user would, stop)"]) + ([] if readme else ["the README"]) + \
-                    ["the final answer"]
-                out.append(f"VERIFIED: the suite passed at {lt['t']} and no app code changed since — that run is "
-                           f"the evidence the code works; cite it."
-                           + (f" Live run DONE at {live['t']} ({live['line'][:100]})." if live else "")
-                           + (" README.md exists." if readme else "")
-                           + f" Left: {', then '.join(left)}. Nothing else: no new scripts, probes or re-runs.")
+        running = ""
         try:
             import bg_tasks
             run = []
@@ -3324,25 +3370,10 @@ class AgentEngine:
                     ports = at.listening(i["pid"]) if i.get("pid") else []
                     run.append(f"{i['id']} '{i['name']}' " + (("listening on " + ", ".join(ports)) if ports else "not listening"))
             if run:
-                out.append("Running: " + "; ".join(run))
+                running = "Running: " + "; ".join(run)
         except Exception:
             pass
-        cmap = (getattr(self, "_pins", None) or {}).get("map")
-        if cmap:
-            out.append(f"Context map (turning points + everything condensed, with ids): {cmap} — read it before "
-                       f"re-deriving something; history_search(entry='E12') restores an item.")
-        text = "\n".join(out)
-        if code_map_block:                               # the map fills the remaining room, cut at whole lines
-            room = 3990 - len(text)
-            lines, used = [], 0
-            for ln in code_map_block.split("\n"):
-                if used + len(ln) + 1 > room:
-                    break
-                lines.append(ln)
-                used += len(ln) + 1
-            if len(lines) > 1:
-                text += "\n" + "\n".join(lines)
-        return text[:4000]
+        return out, code_map_block, running
 
     def _exec_history(self):
         """The executor's smaller window: the recent part of the history (its start moves forward in big
@@ -4070,6 +4101,7 @@ class AgentEngine:
         self._batch_calls = {}
         self._batch_evidence = []
         self._batch_grants = {}
+        self._mem_snapshot = None                        # memory is read once per turn (see system_prompt)
         from run_policy import RunPolicy
         self._run_policy = RunPolicy(failure_limit=int(self.cfg.get("max_failures") or 6))
         self._debugging = False
@@ -5703,7 +5735,7 @@ class AgentEngine:
                     core |= set(names)
             return core
         groups = at.tool_groups(self.reg)
-        core, grouped = set(at.ALWAYS_ON), set()
+        core, grouped = self._always_on(), set()
         for g, _b, ns in groups:
             grouped |= set(ns)
             if g in self.CORE_GROUPS or g.startswith("mcp:"):        # the user's own MCP tools always stay
@@ -5731,7 +5763,21 @@ class AgentEngine:
                 return list(self.reg.by_name)                 # the old behaviour: every tool on every step
             on = self._core_names() | self.enabled_tools
             return [n for n in self.reg.by_name if n in on]
-        return [n for n in self.reg.by_name if n in at.ALWAYS_ON or n in self.enabled_tools]
+        always = self._always_on()
+        return [n for n in self.reg.by_name if n in always or n in self.enabled_tools]
+
+    _WORKBOOK_TOOLS = frozenset({"problem_plan", "problem_experiment", "problem_record", "problem_status"})
+    _MODULE_TOOLS = frozenset({"module_contract", "begin_module", "verify_module", "module_status"})
+
+    def _always_on(self):
+        """ALWAYS_ON minus the workbook / module-ledger tools when those features are off (8 schemas sent for
+        nothing on every request otherwise)."""
+        out = set(at.ALWAYS_ON)
+        if not getattr(self.ctx, "problem_workbook", False):
+            out -= self._WORKBOOK_TOOLS
+        if not getattr(self.ctx, "build_test_record", False):
+            out -= self._MODULE_TOOLS
+        return out
 
     def _enable(self, names):
         """Turn on tools by tool or group name. -> (enabled now, unknown names)."""
@@ -6420,10 +6466,19 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
         """Stop generating when a made-up tool call is complete, or the reply loops on itself."""
         if len(content) % 40 > 8 and not content.endswith(">"):
             return False                                   # check only now and then
-        offered = [x["function"]["name"] for x in self._schemas(tools)] if (tools and self.reg) else \
-            (["update_tracker"] if self._delta == "plan_delta" else [])
-        if offered and "<" in content and parse_pseudo_calls(content, offered):
-            return True
+        if "<" in content:
+            # the offered names are fixed for one model call: build the schemas once, not on every few chunks
+            key = (tuple(tools) if isinstance(tools, list) else tools, self._delta, self.turn.get("steps"),
+                   len(self.history))
+            cached = getattr(self, "_cut_offered", None)
+            if cached and cached[0] == key:
+                offered = cached[1]
+            else:
+                offered = [x["function"]["name"] for x in self._schemas(tools)] if (tools and self.reg) else \
+                    (["update_tracker"] if self._delta == "plan_delta" else [])
+                self._cut_offered = (key, offered)
+            if offered and parse_pseudo_calls(content, offered):
+                return True
         if repetition_loop(content):
             self.emit("status", text="The model started repeating itself — cutting the reply")
             _log({"repetition_cut": True, "conv": self.ctx.conv_id})

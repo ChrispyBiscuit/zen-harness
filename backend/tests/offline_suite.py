@@ -1585,7 +1585,7 @@ def thinking_off_keeps_the_prompt_opening_when_the_template_moves_it():
 
 @test
 def masking_waits_until_a_batch_frees_enough():
-    e = engine()
+    e = engine(num_ctx=524288)                                      # far from compaction: only the freed amount decides
     msgs = [{"role": "system", "content": "s" * 140000}]          # a big prompt: ~40K tokens
 
     def call(i, path, content):
@@ -1604,6 +1604,26 @@ def masking_waits_until_a_batch_frees_enough():
         call(i, f"C:/p/g{i}.py", "w" * 300)
     view = e._masked_view(msgs)
     assert any(m.get("content") != o.get("content") for m, o in zip(view, msgs)), "a worthwhile batch applies"
+
+
+@test
+def masking_skips_a_batch_close_to_compaction():
+    # the same worthwhile batch, but the prompt is already near the compaction point: compaction rewrites the prompt
+    # shortly anyway, so masking now would only add a second full re-read (Bonsai: masked at 15:31 and 15:53, ~110 s
+    # each, then compacted at 16:03)
+    e = engine(num_ctx=61440)
+    msgs = [{"role": "system", "content": "s" * 100000}]
+
+    def call(i, path, content):
+        msgs.append({"role": "assistant", "content": "", "tool_calls": [tc("read_file", {"path": path}, f"c{i}")]})
+        msgs.append({"role": "tool", "tool_call_id": f"c{i}", "content": content})
+
+    for i in range(0, 8):                                           # superseded reads: ~25K tokens to free
+        call(i, "C:/p/big.py", "z" * 12000)
+    for i in range(8, 30):
+        call(i, f"C:/p/g{i}.py", "w" * 300)
+    assert agentic._est_tokens(msgs) * e.ratio > e.context_budget() * 0.75
+    assert e._masked_view(msgs) == msgs, "no masking batch right before compaction"
 
 
 @test
