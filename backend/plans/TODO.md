@@ -2,6 +2,30 @@
 
 Items the user has queued for later. Newest first.
 
+## After the Bonsai9 re-bench (queued 2026-10-12; build only once the delta vs bonsai8 is measured)
+Goal: real-time agent work on 8 GB cards — fewer steps, fewer tokens out, fewer prompt re-reads. Keep everything
+generic (never tuned to the expense tracker).
+A. Stop the end-of-run verification spiral (bonsai8 spent 1h+ after 21/21 green: a 192-line smoke script, hand
+   probes, a new --date feature to meet its own done-when, then debugging that):
+   1. A green full suite = the evidence: the reminder says what's left (what tests can't cover, README, report), no
+      new verification layers. 2. A new standalone test/smoke script while the suite is green -> "add it as a test".
+   3. Planning rule: each done-when must be checkable by the tests you write, without new features.
+B. Fewer steps (from bonsai8's step breakdown):
+   4. Thinking time per edit (avg 2.8 min; the auto debug budget raise) — decide from gen.jsonl think tokens.
+   5. Checklist bookkeeping: 5 separate turns (~8 min) — tick items from evidence (tests for that milestone pass).
+   6. Scale project-mode paperwork to task size (6 docs + research ~13 min for a level-4 task).
+   7. Show more of a web fetch inline (3 extra reads paging saved results).
+C. Context efficiency (~1.8-2x useful context; confirm slice sizes from the ledger first):
+   8. One copy of each file in context (older write args / reads / edits -> one-line stubs once a newer exists).
+   9. Halve the fixed prefix (~12.5K system+tools): phase-aware tool loading (plan/build/debug), shorter docs.
+   10. Stub old narration (keep the last 5-6 assistant messages whole). 11. read-one-function-by-name tool.
+D. Verify tonight's cache fixes in the re-bench: NO_THINK_BUDGET=32 really stops Bonsai's thinking (gen.jsonl);
+   count remaining full re-reads (server log). Lower the budget if no-think steps still think long.
+E. Routing idea: Bonsai plans/debugs, Qwen3.5 9B (61.8 tok/s with MTP) runs routine steps.
+F. Then the growth benchmark (evals/build/growth/run_growth.py, 15 sessions) and the compaction quiz on real snapshots.
+Also still open: auto-updater branch review, alpha.4 installer, tester feedback artifact, budget sweep +
+hesitation-penalty A/B, lighter-K-cache GPU-room measurement (section below).
+
 ## Document and media generation (queued 2026-10-10; after the harness tests and improvements)
 The harness templates for slides/PowerPoint, spreadsheets, PDFs and other documents are weak, and media generation
 needs work too. Plan:
@@ -28,7 +52,7 @@ Builds on the text factcheck.build_evidence already collects; the near-copy dete
 - Measure first from battery logs (edit misses, quote/figure redrafts, repeated artifact edits); add copy-heavy tasks.
 
 ## Queued in the harness work (2026-10-10)
-- After the gpt-5-nano battery: add a Groq backend (OpenAI-compatible, key in %USERPROFILE%\.groq_key — the user
+- After the gpt-5-nano battery: add a Groq backend (OpenAI-compatible, key in C:\Users\cvill\.groq_key — the user
   creates it) and run the same 200 tasks on Llama 3.1 8B with rate-limit waits; three-way comparison 9B / nano / 8B.
 - Then: test against Claude Haiku 4.5 (decide: the harness with an Anthropic backend, or a bare Claude session in
   the browser as an unharnessed reference).
@@ -69,7 +93,7 @@ tool-usage stats per task type from agent_log.jsonl to define the profiles; A/B 
 10-task battery sample (score, time, tool-call errors) with and without.
 
 ## Bonsai 2 27B: more context by trimming GPU overhead (queued 2026-10-11 — after the bonsai1 expense-tracker benchmark)
-Profile ternary-bonsai-2-27b (PrismML llama.cpp, %USERPROFILE%\llama.cpp-prism) runs q8_0 K / q4_0 V at 60K in ~7.8 GB.
+Profile ternary-bonsai-2-27b (PrismML llama.cpp, C:\Users\cvill\llama.cpp-prism) runs q8_0 K / q4_0 V at 60K in ~7.8 GB.
 Same-type quantized KV (q8/q8, q4/q4) outputs "////" on long prompts in this build; mixed types work.
 Try: smaller compute buffers (-ub 128 / 256, -b), fewer ctx checkpoints, check CUDA context size; measure the largest
 -c that loads with VRAM < ~7.9 GB and no WDDM shared spill, then a 17K-token prompt for correctness and tok/s.
