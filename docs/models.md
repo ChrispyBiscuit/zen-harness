@@ -4,21 +4,51 @@ Zazen runs models in the **GGUF** format (the llama.cpp format; most open models
 Hugging Face). Models live in your models folder: `%LOCALAPPDATA%\ZenHarness\models` (Settings → Models →
 **Open models folder**).
 
-## Which model should I use?
+## The model Zazen is built around
 
-Pick the largest model that **fits your graphics memory (VRAM)** — a model that spills into system RAM gets much
-slower.
+Zazen ships set up for one model, **Ternary Bonsai 2 27B** by [PrismML](https://huggingface.co/prism-ml): a 27B model
+stored at under 2 bits per weight, which keeps about 98% of the full model's benchmark score in 5.9 GB. The agent's
+prompts, checks and memory settings were tuned on it. First-run setup downloads it (see
+[Getting started](getting-started.md#first-run)).
 
-| Your GPU | Good choice | File size | Notes |
+It comes in two files holding the same weights, so they give the same answers:
+
+| File | Size | Used on | Why |
 |---|---|---|---|
-| No NVIDIA GPU | a 4B model at 4-bit | ~2.5 GB | works on CPU; expect a few words per second |
-| 6–8 GB VRAM | a 9B model at 4-bit (IQ4_XS / Q4_K_M) | ~5 GB | fast (50+ words/s on an RTX 3070); the default recommendation |
-| 8 GB VRAM + 32 GB RAM | a ~30B "A3B" mixture-of-experts model at 3–4 bit | 9–17 GB | smarter; part of it runs from RAM, so slower |
-| 16 GB VRAM | 14B–27B at 4-bit, or 30B-A3B fully on the GPU | 9–17 GB | |
-| 24 GB+ VRAM | 27B–32B dense at 4-bit | 16–20 GB | best local quality |
+| `PTQ1_0` | 5.9 GB | cards with 8–10 GB | the smallest packing: fits an 8 GB card with room for context |
+| `PQ2_0` | 7.2 GB | cards with 11 GB or more | reads prompts about twice as fast (PrismML's measurements) |
 
-"4-bit", "IQ4_XS", "Q4_K_M" are compression levels (quantization): smaller files, slightly lower quality. 4-bit is the
-usual sweet spot; below 3-bit quality drops noticeably, especially for tool use.
+Both need PrismML's fork of llama.cpp; the app downloads the right build for your card.
+
+## Hardware: automatic settings
+
+**Settings → Hardware** shows what the app found and the plan it made. On each start it picks:
+
+- **The runtime** for your graphics card: NVIDIA → CUDA, then Vulkan; AMD → HIP, then Vulkan; Intel Arc → Vulkan,
+  then SYCL. If a runtime can't see the card, the next one is used.
+- **The card**: the largest dedicated one. A laptop's integrated graphics is never used for the model.
+- **The model file, context and cache**, by video memory:
+
+| Video memory | File | Context | Cache (keys / values) | Image reading |
+|---|---|---|---|---|
+| 8–10 GB | PTQ1_0 | up to 64K | 8-bit / 4-bit | CPU |
+| 11–13 GB | PQ2_0 | up to 96K | 8-bit / 8-bit | GPU when it fits |
+| 14–16 GB | PQ2_0 | up to 128K | 8-bit / 8-bit | GPU |
+
+The context is then fitted to the memory actually free, so the model always stays entirely on the graphics card.
+With 16 GB of system RAM, the prompt cache kept in RAM is limited to 3 GB.
+
+**Changing it by hand:** every field in Settings → Hardware (runtime, card, model file, context, both cache halves,
+image reading) can be set yourself, and a value you set always wins. Turn off **Choose settings for this hardware
+automatically** to use the model's profile exactly as written.
+
+More context means fewer summaries of older steps on long tasks, but each step gets slower as the context fills (on
+an 8 GB RTX 3070: about 33 tokens a second near empty, about 14 at 58K).
+
+## Other models
+
+Any GGUF model can still be added and used (below). The built-in harness settings are tuned for Bonsai 2 27B, so
+other models may need their own adjustments.
 
 ## Adding a model
 
@@ -47,17 +77,11 @@ If it works, **Save** the profile and optionally **Use as default**.
 - **Vision**: an `mmproj-*.gguf` file next to the model enables image input.
 - **Speed-up draft model**: a matching `mtp-<model>.gguf` file enables speculative decoding (faster generation).
 
-### Bigger graphics cards: automatic sizing
-The built-in profiles are tuned for an 8 GB card. On a card with more memory (12, 16, 24 GB…) the app uses the extra
-automatically when it loads a model, and says so in the status line:
-- **Most models**: a full-precision cache first (better quality) if it still holds the tuned context, otherwise more
-  context with the tuned cache — up to 128K tokens or the model's own limit.
-- **Mixture-of-experts models** (e.g. Qwen3.6 35B-A3B): more of the model's experts go on the GPU instead of system
-  RAM, which is faster.
-
-Calculated from the model files (not yet measured on such cards): a 12 GB card gets Bonsai 2 27B at 84K with a full-precision cache and the 35B
-with every expert on the GPU; 16 GB gets Bonsai at 128K. Your own profiles are left as you set them. To turn it off
-set `ctx_auto` to `false` (agent settings); `ctx_auto_max` changes the 128K cap.
+### Bigger graphics cards
+For models other than Bonsai, the built-in profiles are tuned for an 8 GB card. On a card with more memory the app
+uses the extra when it loads one: a full-precision cache, more context (up to 128K or the model's own limit), or
+more of a mixture-of-experts model's experts on the GPU. It says so in the status line. Set `ctx_auto` to `false`
+(agent settings) to turn it off.
 
 ### Models that need their own llama.cpp build
 Some models only run on a fork of llama.cpp (for example Ternary Bonsai 2 needs PrismML's build for its 1-bit

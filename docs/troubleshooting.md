@@ -16,10 +16,14 @@ Something else is using port 8765. Close other copies of Zazen, or change the po
 - **Out of memory / "bad allocation"** — the model plus its context is too big. In Settings → Models choose a smaller
   context (e.g. 32K), a lighter KV cache (`q8_0`), or a smaller model/quantization. Mixture-of-experts models: raise
   **CPU expert layers**.
-- **Very slow (1–5 words/s) on an NVIDIA GPU** — the model spilled out of video memory. Use a smaller context or
+- **Very slow (1–5 words/s) on a graphics card** — the model spilled out of video memory. Use a smaller context or
   model. Close other GPU-heavy programs (games, browsers with many video tabs).
-- **No NVIDIA GPU** — models run on the CPU; use a small (≤ 4B) model.
-- **Old NVIDIA driver** — update it from nvidia.com (CUDA 12 support is needed).
+- **"The GPU runtime for this PC isn't installed yet"** — run setup: Settings → Hardware → **Set up for this PC**.
+- **Setup says no runtime can use your card** — update the graphics driver (NVIDIA: CUDA 12 support; AMD: Adrenalin;
+  Intel: Arc driver), then **Detect again**. You can also pick **Vulkan** in Settings → Hardware → Runtime: it works
+  on every vendor.
+- **The wrong graphics card is used** — choose it in Settings → Hardware → Graphics card.
+- **No graphics card with 8 GB or more** — the model runs on the CPU, very slowly. It is not a supported setup.
 - **Your PC freezes with a large model** — system RAM ran out. Large mixture-of-experts models need 32 GB RAM to be
   comfortable; on 16 GB, use a smaller model or context.
 
