@@ -12,6 +12,7 @@
     --font-mono: 'Geist Mono Variable', 'Cascadia Mono', Consolas, monospace;
     /* --- Zen Harness design tokens (polish v2, Phase 1) --- */
     /* elevation: bg-surface-0..3, border-line-1..3, shadow-elev-2/3 */
+    --color-ground: var(--ground);
     --color-surface-0: var(--surface-0);
     --color-surface-1: var(--surface-1);
     --color-surface-2: var(--surface-2);
@@ -135,10 +136,15 @@
 
 .dark {
     /* elevation: 0 app · 1 panels and cards · 2 raised (popovers, hover, active card) · 3 modal */
-    --surface-0: oklch(0.165 0.004 265);
-    --surface-1: oklch(0.195 0.005 265);
-    --surface-2: oklch(0.228 0.006 265);
+    /* depth (polish v3): panels float on a darker ground; each raised surface is lit from above (--hi) and the
+       panels cast a soft contact + ambient shadow (--lift). Light comes from lightness steps, never glow. */
+    --ground: oklch(0.157 0.003 265);   /* just under the panels (0.168), and less blue: at L 0.14 it read as black */
+    --surface-0: oklch(0.168 0.004 265);
+    --surface-1: oklch(0.198 0.005 265);
+    --surface-2: oklch(0.23 0.006 265);
     --surface-3: oklch(0.25 0.007 265);
+    --hi: inset 0 1px 0 oklch(1 0 0 / 4.5%);
+    --lift: 0 1px 2px rgb(0 0 0 / 0.28), 0 8px 24px -14px rgb(0 0 0 / 0.5);
     --line-1: oklch(1 0 0 / 7%);
     --line-2: oklch(1 0 0 / 10%);
     --line-3: oklch(1 0 0 / 13%);
@@ -174,7 +180,7 @@
     --chart-3: oklch(0.439 0 0);
     --chart-4: oklch(0.371 0 0);
     --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.145 0.004 265);
+    --sidebar: var(--ground);
     --sidebar-foreground: oklch(0.9 0.004 265);
     --sidebar-primary: oklch(0.93 0.004 265);
     --sidebar-primary-foreground: oklch(0.2 0.005 265);
@@ -262,6 +268,10 @@
 @utility bg-brand { background-image: linear-gradient(100deg, var(--brand-a), var(--brand-b)); }
 @utility ring-brand { box-shadow: 0 0 0 1px color-mix(in oklab, var(--brand-a) 55%, transparent),
   0 0 18px -6px color-mix(in oklab, var(--brand-b) 60%, transparent); }
+/* a raised surface (cards, bubbles): lit top edge and a hairline contact shadow */
+@utility surface-raised { box-shadow: var(--hi), 0 1px 2px rgb(0 0 0 / 0.22); }
+/* the chat panel: the faintest wash of the ink at the top, where the eye starts */
+@utility chat-wash { background-image: radial-gradient(70% 36% at 50% 0%, oklch(0.93 0.008 85 / 2.5%), transparent 72%); }
 /* state tones: data-tone="info|success|warning|destructive|muted" (lib/tone.ts), then colour with these */
 [data-tone="info"] { --tone: var(--info); }
 [data-tone="success"] { --tone: var(--success); }
@@ -342,6 +352,21 @@
 
 /* Native controls (select popups, scrollbars, date pickers) follow the dark theme */
 html.dark { color-scheme: dark; }
+/* a whisper of film grain over the whole window: it keeps the dark gradients from banding. Fixed, so it is painted
+   once and never with scrolling content. */
+#root::after { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 2000; opacity: 0.025; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+
+/* a chat that is running: a soft band of light sweeps across its sidebar row now and then (Sidebar ThreadRow), in
+   place of a spinner. Transform only, on a pseudo-element; reduced motion: a still, faint sheen instead. */
+@keyframes zen-shine { 0% { transform: translateX(-100%); } 55%, 100% { transform: translateX(100%); } }
+.zen-shine { position: relative; overflow: hidden; isolation: isolate; }
+.zen-shine::after { content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+  background: linear-gradient(100deg, transparent 25%, oklch(1 0 0 / 6%) 45%, oklch(0.93 0.008 85 / 9%) 50%, oklch(1 0 0 / 6%) 55%, transparent 75%);
+  transform: translateX(-100%); animation: zen-shine 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .zen-shine::after { animation: none; transform: none; background: linear-gradient(90deg, oklch(1 0 0 / 5%), transparent 70%); }
+}
 /* scrolling inside a panel, dialog or menu never scrolls what is behind it */
 .dockview-theme-app .dv-content-container, [data-slot="dialog-content"], [data-slot="popover-content"],
 [data-slot="dropdown-menu-content"], [data-slot="select-content"] { overscroll-behavior: contain; }

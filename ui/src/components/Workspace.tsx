@@ -25,7 +25,7 @@ function ChatPanel() {
   const current = useApp((s) => s.current)
   const conv = useApp((s) => (s.current ? s.convs[s.current] : null))
   return (
-    <div className="zen-panel-in flex h-full min-w-0 flex-col bg-background">
+    <div className="zen-panel-in chat-wash flex h-full min-w-0 flex-col bg-background">
       {current && conv ? <Transcript conv={conv} /> : current ? <div className="flex-1" /> : <Empty />}
       {conv && <WorkerTiles conv={conv} />}
       <Composer />

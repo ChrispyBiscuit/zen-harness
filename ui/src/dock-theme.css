@@ -48,7 +48,7 @@
   --dv-tab-group-line-opacity: 0.6;
   /* matched to the app's palette (index.css tokens) */
   --dv-group-view-background-color: var(--background);
-  --dv-tabs-and-actions-container-background-color: var(--surface);
+  --dv-tabs-and-actions-container-background-color: var(--background);
   --dv-activegroup-visiblepanel-tab-background-color: var(--background);
   --dv-activegroup-hiddenpanel-tab-background-color: transparent;
   --dv-inactivegroup-visiblepanel-tab-background-color: var(--background);
@@ -81,7 +81,10 @@
   --dv-tabs-container-scrollbar-color: oklch(1 0 0 / 14%);
 }
 
-.dockview-theme-app .dv-groupview { border-radius: var(--radius-panel); overflow: hidden; border: 1px solid var(--line-1); }
+.dockview-theme-app .dv-groupview { border-radius: var(--radius-panel); overflow: hidden; border: 1px solid var(--line-1);
+  box-shadow: var(--hi), var(--lift); }
+/* panels float on the ground: let their shadow fall outside the split views that hold them */
+.dockview-theme-app :is(.dv-split-view-container, .dv-view-container, .dv-view) { overflow: visible; }
 .dockview-theme-app .dv-tab { font-family: var(--font-sans); padding: 0 10px; }
 .dockview-theme-app .dv-tab.dv-active-tab { font-weight: 500; }
 .dockview-theme-app .dv-tabs-and-actions-container { border-bottom: 1px solid var(--border); }

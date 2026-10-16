@@ -1,0 +1,2 @@
+/* depth only: no new hue, the warm ink is the accent */
+:root.dark { --n-h: 265; --n-c: 0.006; --acc: oklch(0.93 0.008 85); --acc-on: oklch(0.2 0.01 85); --wash: 4%; }

@@ -34,7 +34,7 @@ function UserMessage({ msg }: { msg: Msg }) {
       {msg.attachments?.length ? (
         <div className="flex max-w-[85%] flex-wrap justify-end gap-1.5">{msg.attachments.map((a) => <AttachmentChip key={a.path} a={a} />)}</div>
       ) : null}
-      <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-panel rounded-br-chip bg-surface-2 px-4 py-2 text-chat">
+      <div className="max-w-[85%] whitespace-pre-wrap break-words surface-raised rounded-panel rounded-br-chip bg-surface-2 px-4 py-2 text-chat">
         {msg.content}
       </div>
       <TurnTime t={msg.t} />
@@ -95,7 +95,7 @@ function FactCheckCard({ msg, k }: { msg: Msg; k: string }) {
   const bad = items.filter((i) => !i.ok)
   const allOk = bad.length === 0
   return (
-    <div className="overflow-hidden rounded-card border border-line-1 bg-surface-1">
+    <div className="overflow-hidden surface-raised rounded-card border border-line-1 bg-surface-1">
       <button onClick={() => toggle(k)} className="flex w-full items-center gap-2 min-h-9 px-(--card-px) py-(--card-py) transition-ui hover:bg-surface-2 active:bg-surface-3 text-left text-caption">
         <ShieldCheck className={cn("size-4 shrink-0", allOk ? "text-success" : "text-warning")} />
         <span className="font-medium">Fact check{m.round > 1 ? " (recheck)" : ""}</span>
@@ -138,7 +138,7 @@ function InterpretationCard({ msg, k }: { msg: Msg; k: string }) {
     ...(list(m.implicit).length ? [["Also likely wanted", list(m.implicit).join(" · ")] as [string, string]] : []),
   ]
   return (
-    <div className="overflow-hidden rounded-card border border-line-1 bg-surface-1">
+    <div className="overflow-hidden surface-raised rounded-card border border-line-1 bg-surface-1">
       <button onClick={() => toggle(k)} className="flex w-full items-center gap-2 min-h-9 px-(--card-px) py-(--card-py) transition-ui hover:bg-surface-2 active:bg-surface-3 text-left text-ui">
         <ScanSearch className="size-4 shrink-0 text-muted-foreground" />
         <span className="shrink-0 font-medium">Understood as</span>
@@ -168,7 +168,7 @@ function PlanCard({ msg, k }: { msg: Msg; k: string }) {
   const show = !!open                                // collapsed until clicked, also while being written
   const tail = msg.streaming ? (msg.content || "").trim().split("\n").filter(Boolean).pop() || "" : ""
   return (
-    <div className="overflow-hidden rounded-card border border-line-1 bg-surface-1">
+    <div className="overflow-hidden surface-raised rounded-card border border-line-1 bg-surface-1">
       <button onClick={() => toggle(k)} className="flex w-full items-center gap-2 min-h-9 px-(--card-px) py-(--card-py) transition-ui hover:bg-surface-2 active:bg-surface-3 text-left text-ui">
         <Compass className={cn("size-4", msg.streaming ? "animate-pulse text-info" : "text-muted-foreground")} />
         <span className={cn("font-medium", msg.streaming && "shimmer-text")}><Decode text={msg.streaming ? "Planning the approach" : "Approach"} /></span>
@@ -375,7 +375,7 @@ function Item({ msg, conv, index, variant, hideStats }: {
     case "playbook":
       return (
         <button onClick={() => useApp.getState().set({ settingsOpen: true, settingsTab: "memory" } as any)}
-          className="flex w-full items-center gap-2 rounded-card border border-line-1 bg-surface-1 min-h-9 px-(--card-px) py-(--card-py) transition-ui hover:bg-surface-2 active:bg-surface-3 text-left text-caption">
+          className="flex w-full items-center gap-2 surface-raised rounded-card border border-line-1 bg-surface-1 min-h-9 px-(--card-px) py-(--card-py) transition-ui hover:bg-surface-2 active:bg-surface-3 text-left text-caption">
           <BookOpen className="size-4 shrink-0 text-muted-foreground" />
           <span className="truncate"><span className="text-muted-foreground">Playbook:</span> {msg.content}
             {(msg as any).also?.length ? <span className="text-muted-foreground"> + {(msg as any).also.join(", ")}</span> : null}</span>
