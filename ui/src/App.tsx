@@ -20,6 +20,7 @@ import { MeterBar } from "@/components/MeterBar"
 import { CodeIndexChip } from "@/components/CodeIndex"
 import { Decode } from "@/components/Decode"
 import { RefractFilter } from "@/components/Lens"
+import { InkRing } from "@/components/Logo"
 import { levelTone, type Tone } from "@/lib/tone"
 import { applyDensity, storedDensity, type Density } from "@/lib/density"
 import { applyTextFx, storedTextFx, TEXT_FX, type TextFx } from "@/lib/textfx"
@@ -330,7 +331,14 @@ export default function App() {
   if (!ready) return (
     <div className="flex h-full flex-col bg-background">
       <WindowFrame />
-      <div className="grid flex-1 place-items-center text-ui text-muted-foreground">Starting…</div>
+      {/* the same card as the desktop launch splash (backend/splash.py), for a reload or a browser tab */}
+      <div className="grid flex-1 place-items-center">
+        <div role="status" aria-live="polite" className="flex flex-col items-center gap-4">
+          <InkRing className="size-12" />
+          <span className="mono text-ui font-semibold uppercase tracking-[0.18em] text-foreground">Zen</span>
+          <span className="text-caption text-faint">Connecting…</span>
+        </div>
+      </div>
     </div>
   )
   return (

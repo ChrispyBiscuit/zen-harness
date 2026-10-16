@@ -76,6 +76,7 @@ export const useApp = create<State>((set, get) => ({
     const s = await api.state()
     set({ settings: s.settings, threads: s.threads, models: s.models, openai: s.openai,
           openaiModels: (s as any).openai_models || [], ready: true })
+    document.documentElement.dataset.zenReady = "1"     // the desktop window shows itself (and drops its splash) on this
     connect()
   },
 

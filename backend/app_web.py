@@ -1,18 +1,34 @@
-"""Desktop window for the web UI: starts web_backend in a thread and shows it in a Qt WebEngine view.
+"""Desktop window for the web UI: a launch splash at once, the agent server (web_backend) in its own process, the UI in
+a Qt WebEngine view shown as soon as it has loaded.
 
   pythonw app_web.py           (or double-click "Local Agent.bat")
   python app_web.py --browser  serve and open in your normal browser instead
 """
+import json
 import os
 import socket
 import sys
 import threading
+import time
 import webbrowser
 
-import web_backend
+import paths
 
-PORT = web_backend.PORT
+# The window must not import web_backend (the whole agent: ~3 s): the server runs in its own process, and the
+# window only needs its port. Same rule as web_backend: LWS_PORT, else Settings → Headless, else 8765.
+def _port():
+    if os.environ.get("LWS_PORT"):
+        return int(os.environ["LWS_PORT"])
+    try:
+        with open(os.path.join(paths.data_dir(), "settings.json"), encoding="utf-8") as f:
+            return int((json.load(f).get("headless") or {}).get("port") or 8765)
+    except Exception:
+        return 8765
+
+
+PORT = _port()
 URL = f"http://127.0.0.1:{PORT}"
+DIST = os.environ.get("LWS_DIST") or paths.resource("web_dist")
 
 
 def port_in_use(port):
@@ -342,16 +358,19 @@ def _install_notifier(app, view):
 def main():
     if "--server" in sys.argv:                # the server process the window starts
         _crash_log("app_server.log")
+        import web_backend
         web_backend.serve_headless()
         return
     if "--browser" in sys.argv:               # serve in this process and open the normal browser
+        import web_backend
         if not port_in_use(PORT) or _stale_server_replaced():
             threading.Thread(target=web_backend.serve, daemon=True).start()
         webbrowser.open(URL)
         threading.Event().wait()              # keep serving until Ctrl+C
         return
     _crash_log("app_window.log")
-    start_backend()
+    t0 = time.perf_counter()
+    trace = (lambda what: print(f"[startup] {time.perf_counter() - t0:6.2f}s {what}", flush=True))         if os.environ.get("ZEN_STARTUP_TRACE") else (lambda what: None)
     # the agent's browser lives in this window (qt_browser.py); Qt's DevTools port must be set before Qt starts.
     # LWS_NATIVE_BROWSER=0 keeps the old separate Edge.
     native = os.environ.get("LWS_NATIVE_BROWSER", "1") != "0"
@@ -367,10 +386,8 @@ def main():
         if f not in flags:
             flags = (flags + " " + f).strip()
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = flags
-    from PySide6.QtCore import QUrl
+    from PySide6.QtCore import QTimer, QUrl
     from PySide6.QtGui import QIcon
-    from PySide6.QtWebEngineCore import QWebEngineSettings
-    from PySide6.QtWebEngineWidgets import QWebEngineView
     from PySide6.QtWidgets import QApplication
     try:                                      # own taskbar entry/icon instead of python's
         import ctypes
@@ -384,6 +401,24 @@ def main():
                 if os.path.exists(p)), "")
     if ico:
         app.setWindowIcon(QIcon(ico))
+
+    # the splash first, before anything slow: it paints within half a second of the click (splash.py)
+    import splash as zen_splash
+    sp = zen_splash.Splash(os.path.join(assets, "zen_harness.png"), os.path.join(DIST, "favicon.svg"))
+    sp.show()
+    app.processEvents()
+    trace("splash shown")
+
+    # the agent server starts in parallel (its own process; a few seconds the first time)
+    boot = {"up": False}
+
+    def start_server():
+        start_backend()
+        boot["up"] = True
+    threading.Thread(target=start_server, daemon=True).start()
+
+    from PySide6.QtWebEngineCore import QWebEngineSettings
+    from PySide6.QtWebEngineWidgets import QWebEngineView
     view = QWebEngineView()
     _external_links(view)                     # before anything else uses view.page()
     s = view.settings()
@@ -393,7 +428,7 @@ def main():
     if hasattr(QWebEngineSettings.WebAttribute, "PlaybackRequiresUserGesture"):   # read-aloud starts on its own
         s.setAttribute(QWebEngineSettings.WebAttribute.PlaybackRequiresUserGesture, False)
     view.setWindowTitle("Zen")
-    icon = os.path.join(web_backend.DIST, "favicon.svg")
+    icon = os.path.join(DIST, "favicon.svg")
     if os.path.exists(icon):
         view.setWindowIcon(QIcon(icon))
     view.resize(1400, 900)
@@ -401,22 +436,65 @@ def main():
     agent_browser = None
     if native:
         try:
-            agent_browser = qt_browser.AgentBrowser(view, __import__("paths").data_dir())
-            qt_browser.register_with_server(URL, qt_browser.start_relay(agent_browser, devtools_port))
+            agent_browser = qt_browser.AgentBrowser(view, paths.data_dir())
+            qt_browser.register_with_server(URL, qt_browser.start_relay(agent_browser, devtools_port))   # retries
         except Exception as e:                # the agent falls back to Edge
             print("native agent browser failed:", repr(e))
             agent_browser = None
     _custom_frame(view, agent_browser)
-    view.load(QUrl(URL))
-    view.show()
-    _round_corners(view)
+    sp.milestone("window")
+    trace("window built")
+
+    # server listening -> load the UI; UI loaded -> wait until it has its settings and chats -> show it, splash out
+    phase = {"loading": False, "shown": False}
+
+    def show_app():
+        if phase["shown"]:
+            return
+        phase["shown"] = True
+        sp.milestone("ready")
+        trace("app ready")
+        view.show()
+        _round_corners(view)
+        view.raise_()
+        view.activateWindow()
+        sp.save_times()
+        QTimer.singleShot(60, sp.finish)
+        poll.stop()
+
+    def on_ready(ok):
+        if ok:
+            show_app()
+
+    def tick():
+        if not phase["loading"] and boot["up"]:
+            phase["loading"] = True
+            sp.milestone("server")
+            trace("server listening")
+            view.load(QUrl(URL))
+        elif phase["loading"] and not phase["shown"]:
+            # the UI sets data-zen-ready once it has its settings and chats (an older UI: its main view has rendered)
+            view.page().runJavaScript("document.documentElement.dataset.zenReady === '1' || !!document.querySelector('main')",
+                                      0, on_ready)
+        if time.perf_counter() - t0 > 90:     # never hide the app behind a splash: show whatever there is
+            show_app()
+
+    def on_loaded(ok):
+        sp.milestone("ui")
+        trace(f"interface loaded ({'ok' if ok else 'failed'})")
+        if not ok:
+            show_app()                        # let the page's own error/retry show
+
+    view.loadFinished.connect(on_loaded)
+    poll = QTimer()
+    poll.timeout.connect(tick)
+    poll.start(100)
     _install_notifier(app, view)
     code = app.exec()
     if agent_browser is not None:
         qt_browser.unregister(URL)
     try:                                      # window closed: stop the server (runs, browser, llama.cpp) like
-        import json                           # before — unless another window is still connected to it
-        import urllib.request
+        import urllib.request                 # before — unless another window is still connected to it
         req = urllib.request.Request(URL + "/api/shutdown", data=json.dumps({"force": True, "if_last": True}).encode(),
                                      headers={"Content-Type": "application/json"})
         urllib.request.urlopen(req, timeout=10)
