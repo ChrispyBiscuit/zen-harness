@@ -51,26 +51,15 @@ function lightMap() {
 const MAP = typeof document !== "undefined" ? bandMap() : ""
 const LIGHT = typeof document !== "undefined" ? lightMap() : ""
 
-// The motion is a ball tossed in the air, sideways: thrown in from off the left edge, it slows as it rises to the top
-// of its arc (about three quarters across), hangs there for an instant, and falls back off the left edge, speeding up.
-// A parabola, x(t) = start + height * 4u(1 - u) over the 3 s throw, sampled once at start-up into the SMIL keyframes
-// (linear between 50 ms samples); then 2 s off the row. The colour split follows the speed: widest as the band
-// leaves and lands, nearly gone at the top of the arc.
-const START = -0.32, APEX = 0.74
-const CYCLE = 5, ACTIVE = 3, STEP = 0.05
-function tossPath() {
-  const xs: number[] = [], speed: number[] = []
-  for (let t = 0; t <= CYCLE + 1e-9; t += STEP) {
-    const u = Math.min(1, t / ACTIVE)
-    xs.push(t <= ACTIVE ? START + (APEX - START) * 4 * u * (1 - u) : START)
-    speed.push(t <= ACTIVE ? Math.abs(1 - 2 * u) : 0)           // |dx/dt|, normalised: 1 at the throw and the catch
-  }
-  xs[xs.length - 1] = START
-  const keyTimes = xs.map((_, i) => Math.min(1, (i * STEP) / CYCLE).toFixed(4)).join(";")
-  const fringe = (base: number, spread: number) => speed.map((v) => (base + spread * v).toFixed(4)).join(";")
-  return { x: xs.map((n) => n.toFixed(4)).join(";"), keyTimes, r: fringe(0.03, 0.012), b: fringe(0.024, -0.01) }
+// The motion is a slow scan: the band enters at the right edge and sweeps steadily to the left, off the row, in 3 s;
+// then nothing for 6 s, and again. A 9 s cycle (keyframes: start, end of the sweep, end of the rest).
+const START = -0.32, FROM = 1.02
+const CYCLE = 9, ACTIVE = 3
+function scanPath() {
+  const end = (ACTIVE / CYCLE).toFixed(4)
+  return { x: `${FROM};${START};${START}`, keyTimes: `0;${end};1`, r: "0.03;0.03;0.03", b: "0.024;0.024;0.024" }
 }
-const PATH = tossPath()
+const PATH = scanPath()
 const DUR = `${CYCLE}s`
 const W = 0.3         // the band's width, as a share of the row's width
 
@@ -83,7 +72,7 @@ export function RefractFilter() {
   return (
     <svg aria-hidden="true" width="0" height="0" style={{ position: "absolute", width: 0, height: 0, overflow: "hidden" }}>
       <filter id="zen-refract" x="0" y="0" width="1" height="1" primitiveUnits="objectBoundingBox" colorInterpolationFilters="sRGB">
-        <feImage href={MAP} x="-0.32" y="0" width={W} height="1" preserveAspectRatio="none" result="map"><Travel /></feImage>
+        <feImage href={MAP} x={FROM} y="0" width={W} height="1" preserveAspectRatio="none" result="map"><Travel /></feImage>
         {/* outside the moving band the map is empty: fill it with neutral grey (no displacement) */}
         <feFlood floodColor="rgb(128,128,128)" result="grey" />
         <feComposite in="map" in2="grey" operator="over" result="field" />
@@ -101,7 +90,7 @@ export function RefractFilter() {
         <feBlend in="r" in2="g" mode="screen" result="rg" />
         <feBlend in="rg" in2="b" mode="screen" result="rgb" />
         {/* a faint lift of light, travelling with the bend */}
-        <feImage href={LIGHT} x="-0.32" y="0" width={W} height="1" preserveAspectRatio="none" result="light"><Travel /></feImage>
+        <feImage href={LIGHT} x={FROM} y="0" width={W} height="1" preserveAspectRatio="none" result="light"><Travel /></feImage>
         <feComposite in="light" in2="rgb" operator="atop" />
       </filter>
     </svg>
