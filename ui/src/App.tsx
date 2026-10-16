@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils"
 import { MeterBar } from "@/components/MeterBar"
 import { CodeIndexChip } from "@/components/CodeIndex"
 import { UpdateChip } from "@/components/UpdateChip"
+import { ConsentCenter } from "@/components/ConsentDialog"
 import { Decode } from "@/components/Decode"
 import { RefractFilter } from "@/components/Lens"
 import { InkRing } from "@/components/Logo"
@@ -364,6 +365,7 @@ export default function App() {
       <SettingsDialog />
       <HelpDialog />
       <WelcomeDialog />
+      <ConsentCenter />
       <Clip />
       <Toaster theme="dark" position="bottom-right" richColors closeButton />
     </TooltipProvider>

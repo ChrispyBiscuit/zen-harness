@@ -58,6 +58,35 @@ def test_check_stage_apply_then_rollback(env):
     assert updater.status()["available"] and updater.status()["rolled_back"]["reason"] == "asked"
 
 
+def test_install_reports_its_steps_and_not_now_is_remembered(env):
+    """The steps the progress modal shows: what ran is done, what this update didn't need (no UI, no new packages)
+    is skipped. 'Not now' is stored for that version; automatic updates are on unless switched off."""
+    origin, app, first = env
+    (origin / "backend" / "app.py").write_text("V = 4\n")
+    git(origin, "commit", "-q", "-am", "fourth")
+    st = updater.check()
+    assert st["auto"] is True and st["progress"] is None
+    updater.decline(st["latest"])
+    assert updater.status()["declined"] == st["latest"]
+    updater.progress_begin()
+    updater.fetch_for_install(st["latest"])
+    updater.stage(st["latest"])
+    updater.apply(st["latest"])
+    updater.progress_end(True)
+    steps = {s["key"]: s["state"] for s in updater.status()["progress"]["steps"]}
+    assert steps == {"download": "done", "deps": "skipped", "build": "skipped", "python": "skipped",
+                     "test": "done", "install": "done"}
+    assert (app / "app.py").read_text() == "V = 4\n" and (app / "conversations.json").read_text() == "{\"mine\": 1}"
+
+
+def test_automatic_updates_can_be_switched_off(env, monkeypatch):
+    data = Path(os.environ["LWS_DATA_DIR"])
+    s = json.loads((data / "settings.json").read_text())
+    s["update"]["auto_check"] = False
+    (data / "settings.json").write_text(json.dumps(s))
+    assert updater.settings()["auto_check"] is False and updater.status()["auto"] is False
+
+
 def test_apply_refuses_a_version_that_is_not_staged(env):
     origin, app, first = env
     (origin / "backend" / "app.py").write_text("V = 3\n")

@@ -1392,7 +1392,7 @@ async def api_settings(req):
     b = await req.json()
     with STORE.lock:
         for k, v in b.items():
-            if k in ("agent", "ui", "headless"):
+            if k in ("agent", "ui", "headless", "update"):
                 STORE.settings[k] = {**(STORE.settings.get(k) or {}), **v}
             else:
                 STORE.settings[k] = v
@@ -1896,6 +1896,8 @@ def make_app():
     import models_api                          # Settings → Models: inspect, profile, test-load, download
     help_api.install(app)
     models_api.install(app)
+    import downloads                           # every download the app makes on its own asks first
+    downloads.install(app)
     import update_api                          # updates from git (updater.py): check, install, roll back
 
     def _save_before_restart():
