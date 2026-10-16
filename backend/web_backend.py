@@ -300,6 +300,18 @@ class ConvWriter:
             BUS.send({**self.conv["ctx"], "t": "ctx", "conv": self.conv["id"]})
         elif kind == "ans_delta":
             self._live()["content"] += d.get("text", "")
+        elif kind == "think_retro":        # answer text already shown turned out to be thinking (a stray </think>)
+            m, t = self._live(), d.get("text", "")
+            if t and m["content"].endswith(t):
+                m["content"] = m["content"][:-len(t)]
+                m["thinking"] += t
+                _bump(m)
+        elif kind == "think_unretro":      # "thinking" that never closed was the answer after all
+            m, t = self._live(), d.get("text", "")
+            if t and m["thinking"].endswith(t):
+                m["thinking"] = m["thinking"][:-len(t)]
+            m["content"] += t
+            _bump(m)
         elif kind == "workers":            # fan-out workers' live state: the tiles above the composer
             self.conv["workers"] = {"model": d.get("model", ""), "items": d.get("workers") or [], "ts": time.time()}
             BUS.send({**self.conv["workers"], "t": "workers", "conv": self.conv["id"]})    # "t" is the message type

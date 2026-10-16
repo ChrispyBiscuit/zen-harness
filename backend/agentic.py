@@ -6906,6 +6906,13 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
         cut_now = False                  # _should_cut said stop: leave BOTH loops (it used to fire again every ~40 chars)
         finish = None                    # the server's stop reason: "length" = cut off at the output limit
         gen_n, gen_tm = {"think": 0, "text": 0, "call": 0}, {}     # where this step's time went (gen.jsonl)
+        # Think tags inside the text stream. Some models (Ternary Bonsai 27B…) get their opening <think> from the chat
+        # template, so the server can't tell their thinking from their answer: both arrive as content, split by a
+        # bare </think>. Once a model has done that, its next replies count as thinking until the tag; a stray
+        # </think> moves what was already shown into the thinking block (think_retro); a reply that never closes
+        # its thinking was the answer after all (think_unretro). An explicit <think>…</think> works the same way.
+        tag = {"in": bool(getattr(self, "_think_prefill", False)) and not no_think, "pend": "", "routed": "",
+               "shown": ""}
         with resp:
             for raw in resp:
                 if self.should_stop():
@@ -6957,25 +6964,29 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
                 for ch in ev.get("choices") or []:
                     d = ch.get("delta") or {}
                     finish = ch.get("finish_reason") or finish
-                    r = d.get("reasoning_content") or d.get("reasoning")
-                    if reading and (r or d.get("content") or d.get("tool_calls")):
+                    r, c_in = self._split_think_tags(d, tag, delta, held)
+                    if tag.pop("_held_reset", False):
+                        held = [] if held is not None else held
+                        content = ""
+                    if reading and (r or c_in or d.get("tool_calls")):
                         reading = False                      # first output: the read is over
                         self.emit("status", text="Working…")
                     if r:
                         think = True
                         self.emit("think_delta", text=r)
-                    if d.get("content"):
+                    if c_in:
                         if think:
                             think = False
                             self.emit("think_end")
-                        content += d["content"]
+                        content += c_in
+                        tag["shown"] += c_in
                         if held is not None:
-                            held.append(d["content"])
+                            held.append(c_in)
                             if len(content) >= 90 or ("\n\n" in content and len(content) >= 30):
                                 self.emit(delta, text="".join(held))      # clearly an answer: release and stream
                                 held = None
                         else:
-                            self.emit(delta, text=d["content"])
+                            self.emit(delta, text=c_in)
                         if self._should_cut(content, tools):
                             cut_now = True
                             break
@@ -7016,6 +7027,27 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
                         break
                 if too_long or cut_now:
                     break
+        if tag["pend"]:                               # a held-back fragment that never became a tag
+            frag, tag["pend"] = tag["pend"], ""
+            if tag["in"]:
+                tag["routed"] += frag
+                self.emit("think_delta", text=frag)
+            else:
+                content += frag
+                if held is not None:
+                    held.append(frag)
+                else:
+                    self.emit(delta, text=frag)
+        if tag["in"] and tag["routed"].strip() and not calls and not content.strip() and not cut:
+            # it never closed its thinking: that text was the answer (e.g. a no-think reply) — give it back
+            content = tag["routed"]
+            if think:
+                think = False
+                self.emit("think_end")
+            if delta == "ans_delta":
+                self.emit("think_unretro", text=tag["routed"])
+            else:
+                self.emit(delta, text=tag["routed"])
         if think:
             self.emit("think_end")
         self._record_gen(t_start, gen_n, gen_tm, finish, calls, cut or cut_now or bool(too_long))
@@ -7051,6 +7083,60 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
             if not tc["id"]:
                 tc["id"] = f"call_{abs(hash(json.dumps(tc))) % 10**9}"
         return msg, ntok or len(content) // 4, ptok
+
+    def _split_think_tags(self, d, tag, delta, held):
+        """One streamed delta -> (thinking text, answer text), handling think tags inside the text (see the note in
+        _call_openai). Emits think_retro when a stray </think> shows that text already streamed as the answer was
+        thinking; sets tag["_held_reset"] when the caller must drop its held / accumulated answer text."""
+        END, START = "</think>", "<think>"
+        r = d.get("reasoning_content") or d.get("reasoning") or ""
+        c = d.get("content") or ""
+        if r and END in r:                       # the reasoning channel carries the end tag itself
+            r, _, after = r.partition(END)
+            c = after.lstrip("\n") + c
+        if not c and not tag["pend"]:
+            return r, ""
+        s, tag["pend"] = tag["pend"] + c, ""
+        think_out, ans_out = "", ""
+        while s:
+            if tag["in"]:
+                i = s.find(END)
+                if i < 0:
+                    keep = next((k for k in range(min(len(END) - 1, len(s)), 0, -1) if END.startswith(s[-k:])), 0)
+                    think_out += s[:len(s) - keep]
+                    tag["pend"] = s[len(s) - keep:]
+                    break
+                think_out += s[:i]
+                s = s[i + len(END):].lstrip("\n")
+                tag["in"] = False
+                continue
+            i_end, i_start = s.find(END), s.find(START)
+            if i_start >= 0 and (i_end < 0 or i_start < i_end):    # an explicit <think> opens thinking
+                ans_out += s[:i_start]
+                s = s[i_start + len(START):]
+                tag["in"] = True
+                continue
+            if i_end >= 0:                                           # a stray </think>: all before it was thinking
+                # text already streamed as the answer moves over (think_retro); text still held back was never shown
+                before = (tag["shown"] if held is not None else "") + ans_out + s[:i_end]
+                if tag["shown"]:
+                    if held is None and delta == "ans_delta":
+                        self.emit("think_retro", text=tag["shown"])
+                    tag["_held_reset"] = True
+                think_out = before if not think_out else think_out + before
+                tag["shown"], ans_out = "", ""
+                self._think_prefill = True               # this model's template opens its thinking: expect it again
+                _log({"orphan_think_end": True, "conv": self.ctx.conv_id})
+                s = s[i_end + len(END):].lstrip("\n")
+                continue
+            keep = next((k for k in range(min(len(END) - 1, len(s)), 0, -1)
+                         if END.startswith(s[-k:]) or START.startswith(s[-k:])), 0)
+            ans_out += s[:len(s) - keep]
+            tag["pend"] = s[len(s) - keep:]
+            break
+        if think_out:
+            tag["routed"] += think_out
+        return (r + think_out), ans_out
 
     def _truncated_call(self, calls, drafts, ntok, ptok):
         """The reply hit the output-token limit while writing a tool call: its arguments are incomplete, so the call
