@@ -63,3 +63,27 @@ def test_index_rebuilds_when_a_file_changes():
         f.write("\n\ndef wind_speed(city):\n    return 12\n")
     _text, chosen = cp.focus_pack(root, "wind_speed for a city", 200, embed=None)
     assert "wind_speed" in {u["symbol"] for u in chosen}
+
+
+def test_long_definitions_split_into_smaller_windows_with_a_head():
+    body = "\n".join(f"    x{i} = {i}" for i in range(100))
+    units = cp.file_units("big.py", "def big():\n" + body + "\n", max_lines=40)
+    windows = [u for u in units if u["symbol"] == "big"]
+    assert len(windows) == 3 and windows[0]["head"] and not any(w["head"] for w in windows[1:])
+    assert all(w["end"] - w["start"] + 1 <= 40 for w in windows)
+
+
+def test_link_boost_brings_in_what_a_top_hit_calls():
+    root = tempfile.mkdtemp()
+    files = {"checkout.py": "from tax import compute_tax\n\n\ndef handle_checkout(cart):\n"
+                            "    subtotal = sum(cart)\n    return subtotal + compute_tax(subtotal)\n",
+             "tax.py": "RATE = 0.08\n\n\ndef compute_tax(amount):\n    return round(amount * RATE, 2)\n",
+             "misc.py": "def banner():\n    return 'welcome'\n"}
+    for n, t in files.items():
+        with open(os.path.join(root, n), "w", encoding="utf-8") as f:
+            f.write(t)
+    q = "the checkout handler sums the cart"
+    _t, off = cp.focus_pack(root, q, 400, embed=None, link_seeds=0)
+    _t, on = cp.focus_pack(root, q, 400, embed=None, link_seeds=5, link_boost=0.01)
+    assert "compute_tax" not in {u["symbol"] for u in off}
+    assert "compute_tax" in {u["symbol"] for u in on}

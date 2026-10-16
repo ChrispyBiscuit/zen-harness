@@ -20,7 +20,7 @@ import time
 from collections import Counter, defaultdict
 
 CHARS_PER_TOKEN = 3.5
-MAX_UNIT_LINES = 120
+MAX_UNIT_LINES = 40            # measured: 40-line windows for long definitions beat 120 (20 vs 16 of 50 at 8K)
 _WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _lock = threading.Lock()
 _CACHE = {}          # root -> {"sig": ..., "units": [...], "bm25": BM25, "vecs": array|None}
@@ -73,9 +73,12 @@ def _js_spans(text):
     return spans
 
 
-def file_units(rel, text):
+def file_units(rel, text, max_lines=None):
     """Function/class-level slices of one file: each line belongs to its innermost definition; code outside any
-    definition is grouped in blocks of up to 60 lines; anything over MAX_UNIT_LINES is split with a 20-line overlap."""
+    definition is grouped in blocks of up to 60 lines; anything over max_lines is split into windows that overlap by
+    a sixth. The first window of each definition is its "head" (signature + start)."""
+    max_lines = int(max_lines or MAX_UNIT_LINES)
+    overlap = max(4, max_lines // 6)
     lines = text.splitlines()
     ext = os.path.splitext(rel)[1].lower()
     try:
@@ -93,14 +96,14 @@ def file_units(rel, text):
             j += 1
         k = i
         while k <= j:
-            e = min(j, k + MAX_UNIT_LINES - 1)
+            e = min(j, k + max_lines - 1)
             body = "\n".join(lines[k - 1:e])
             if body.strip():
-                out.append({"file": rel, "symbol": sym, "start": k, "end": e, "text": body,
+                out.append({"file": rel, "symbol": sym, "start": k, "end": e, "text": body, "head": k == i,
                             "tokens": tokens(body) + tokens(f"### {rel}:{k}-{e}")})
             if e == j:
                 break
-            k = e - 19
+            k = e - overlap + 1
         i = j + 1
     return out
 
@@ -149,7 +152,28 @@ def _default_embed(texts, query=False):
         return None
 
 
-def _index(root, files, embed):
+_EMB_CACHE = {}      # sha1 of the embedded text -> vector: unchanged slices are never embedded twice
+
+
+def _embed_cached(embed, texts):
+    import hashlib
+    import numpy as np
+    keys = [hashlib.sha1(t.encode("utf-8", "replace")).hexdigest() for t in texts]
+    todo = [i for i, k in enumerate(keys) if k not in _EMB_CACHE]
+    if todo:
+        vecs = embed([texts[i] for i in todo])
+        if vecs is None:
+            return None
+        for i, v in zip(todo, vecs):
+            _EMB_CACHE[keys[i]] = v
+    return np.stack([_EMB_CACHE[k] for k in keys]) if keys else None
+
+
+def _short(symbol):
+    return (symbol or "").split("#")[0].split(".")[-1]
+
+
+def _index(root, files, embed, max_lines=None):
     """Units + BM25 + embeddings for `files` under root, rebuilt only when a file changed (mtime/size)."""
     sig = []
     for rel in files:
@@ -159,7 +183,7 @@ def _index(root, files, embed):
         except OSError:
             pass
     sig = tuple(sig)
-    key = (os.path.normcase(os.path.abspath(root)), bool(embed))
+    key = (os.path.normcase(os.path.abspath(root)), bool(embed), int(max_lines or MAX_UNIT_LINES))
     with _lock:
         hit = _CACHE.get(key)
         if hit and hit["sig"] == sig:
@@ -168,17 +192,52 @@ def _index(root, files, embed):
         for rel, *_ in sig:
             try:
                 with open(os.path.join(root, rel), encoding="utf-8", errors="replace") as f:
-                    units += file_units(rel, f.read())
+                    units += file_units(rel, f.read(), max_lines)
             except OSError:
                 continue
         bm = BM25([terms(f"{u['file']} {u['symbol'] or ''} {u['text']}") for u in units])
-        vecs = embed([f"{u['file']} {u['symbol'] or ''}\n{u['text'][:2000]}" for u in units]) if embed and units else None
-        entry = {"sig": sig, "units": units, "bm25": bm, "vecs": vecs, "built": time.time()}
+        vecs = (_embed_cached(embed, [f"{u['file']} {u['symbol'] or ''}\n{u['text'][:2000]}" for u in units])
+                if embed and units else None)
+        defs = defaultdict(list)                 # short definition name -> unit ids (every window of it)
+        for i, u in enumerate(units):
+            if u["symbol"]:
+                defs[_short(u["symbol"])].append(i)
+        entry = {"sig": sig, "units": units, "bm25": bm, "vecs": vecs, "defs": defs, "built": time.time()}
         _CACHE[key] = entry
         return entry
 
 
-def rank(ix, query, embed):
+LINK_SEEDS = 0        # off: following the top hits' call links did not help (measure_focus.py); 5 to try it
+LINK_BOOST = 0.005    # added to a linked slice's RRF score (rank 0 ~ 0.033, rank 50 ~ 0.018 with two rankers)
+
+
+def _link_boost(ix, order, score, seeds, boost):
+    """Most pieces the plain ranking missed were one call away from a top hit (benchmark: 47 of 68). Boost what the
+    top `seeds` slices call (definitions named in their text; a callee's head window fully, its other windows by half)
+    and what calls them (`name(` in another slice), skipping short and widely shared names."""
+    units, defs = ix["units"], ix["defs"]
+    for s in order[:seeds]:
+        u = units[s]
+        own = _short(u["symbol"])
+        for w in set(_WORD.findall(u["text"])):
+            if w == own or len(w) < 4 or w not in defs:
+                continue
+            ids = defs[w]
+            if len({units[i]["file"] for i in ids}) > 3:
+                continue
+            for i in ids:
+                if i != s:
+                    score[i] += boost * (1.0 if units[i].get("head") else 0.5)
+        if own and len(own) >= 4:
+            rx = re.compile(r"(?<![\w$])" + re.escape(own) + r"\s*\(")
+            for i, v in enumerate(units):
+                if i != s and _short(v["symbol"]) != own and rx.search(v["text"]):
+                    score[i] += boost * 0.5
+
+
+def rank(ix, query, embed, link_seeds=None, link_boost=None):
+    link_seeds = LINK_SEEDS if link_seeds is None else link_seeds
+    link_boost = LINK_BOOST if link_boost is None else link_boost
     b = ix["bm25"].scores(terms(query))
     by_bm = [i for i in sorted(range(len(b)), key=lambda i: -b[i]) if b[i] > 0][:200]
     rankings = [by_bm]
@@ -191,7 +250,11 @@ def rank(ix, query, embed):
     for r in rankings:
         for pos, i in enumerate(r):
             score[i] += 1.0 / (61 + pos)
-    return sorted(score, key=lambda i: -score[i])
+    order = sorted(score, key=lambda i: -score[i])
+    if link_seeds and link_boost:
+        _link_boost(ix, order, score, link_seeds, link_boost)
+        order = sorted(score, key=lambda i: -score[i])
+    return order
 
 
 # --------------------------------------------------------------------------------------------- the pack
@@ -200,16 +263,18 @@ def code_files(root, limit=4000):
     return [rel for rel, _p, _st in repomap._walk(os.path.abspath(root), code_only=True, max_files=limit)]
 
 
-def focus_pack(root, query, budget_tokens=4000, files=None, embed=_default_embed):
+def focus_pack(root, query, budget_tokens=4000, files=None, embed=_default_embed, max_lines=None, link_seeds=None,
+               link_boost=None):
     """-> (text, chosen units). The function-level slices of the code under `root` that best match `query` (a goal, a
     question or an error trace), filled to `budget_tokens`, shown grouped by file in line order with line numbers.
-    embed=None: keyword ranking only (no embedding model)."""
+    embed=None: keyword ranking only (no embedding model). max_lines: the slice size for long definitions;
+    link_seeds / link_boost: how many top hits have their call links followed, and how strongly (0 = off)."""
     files = list(files) if files is not None else code_files(root)
-    ix = _index(root, files, embed)
+    ix = _index(root, files, embed, max_lines)
     if not ix["units"]:
         return "", []
     chosen, used = [], tokens("[Focus pack]") + 20
-    for i in rank(ix, query, embed):
+    for i in rank(ix, query, embed, link_seeds, link_boost):
         u = ix["units"][i]
         if used + u["tokens"] <= budget_tokens:
             chosen.append(u)

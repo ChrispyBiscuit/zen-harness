@@ -45,3 +45,26 @@ FPS 6/15 whole files vs 10/15 hybrid chunks.
 4. Not measured: a code-specific embedding model (jina-embeddings-v2-base-code took 45+ min and ~2 GB of RAM to
    index the backend on this CPU — dropped; worth retrying only on the GPU in an idle-time batch), query rewriting by
    the model, and LLM reranking.
+
+## Round 2: smaller slices and link-following (`measure_focus.py`, `focus_results.json`)
+`context_pack.focus_pack` itself, on the same 50 questions. Slices = the window size for long definitions; links =
+boost what the top hits call and what calls them (seeds, boost added to the RRF score).
+
+| Slices | Links | 2K all / pieces | 4K all / pieces | 8K all / pieces | Zen 8K all |
+|---|---|---|---|---|---|
+| 120 | off | 3/50 / 35% | 9/50 / 54% | 16/50 / 68% | 3/20 |
+| 120 | 5, 0.005 | 3/50 / 42% | 6/50 / 53% | 15/50 / 70% | 2/20 |
+| 120 | 5, 0.02 | 3/50 / 28% | 6/50 / 39% | 15/50 / 62% | 2/20 |
+| **40** | **off** | **4/50 / 40%** | 7/50 / 53% | **20/50 / 68%** | 3/20 |
+| 40 | 3, 0.01 | 3/50 / 38% | 8/50 / 52% | 18/50 / 70% | 4/20 |
+| 40 | 5, 0.005 | 4/50 / 41% | **9/50 / 56%** | 17/50 / 68% | 3/20 |
+| 40 | 5, 0.02 | 3/50 / 25% | 6/50 / 41% | 15/50 / 64% | 2/20 |
+
+- **40-line windows help a little** (+4 questions at 8K, all on the small projects) and are now the default.
+- **Link-following does not help; a strong boost hurts.** A miss analysis found 47 of the 68 pieces the best packer
+  missed were one call away from a packed piece, but every top hit calls many definitions and a flat boost lifts all
+  of them: the right neighbour is reachable, not selectable. Left in the code, off by default (LINK_SEEDS = 0).
+- **Zen's backend stays at 2-4 of 20** (about 60% of pieces): ~5 pieces per question from ~570K tokens.
+- Next candidates need a signal that says which neighbour matters for this question: rank linked definitions by their
+  own match to the question instead of a flat boost (offline, cheap), or a second round where the model reads the
+  first pack and names what is missing (needs the model; most promising for the large codebase).
