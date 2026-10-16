@@ -2476,8 +2476,7 @@ class AgentEngine:
                      f"of the 2021 census'); if web and Wikipedia disagree, say so.\n{ref}\n</system-reminder>")
         shape = answer_shapes.hint(user_text)     # a shape question answered here gets the same nudge
         if shape:
-            last += (f"\n\n{REMINDER_TAG}\n{shape} If it needs facts or pictures from the web, call get_tools."
-                     "\n</system-reminder>")
+            last += f"\n\n{REMINDER_TAG}\n{shape}\n</system-reminder>"
         msgs = [{"role": "system", "content": system}] + convo[-12:] + [{"role": "user", "content": last}]
         self.emit("status", text="Thinking…")
         self._delta = "ans_delta"
@@ -3184,11 +3183,15 @@ class AgentEngine:
         except Exception:
             pass
         try:                                 # the shape that suits this question (answer_shapes.hint)
-            q = next((m.get("content") for m in reversed(self.history) if m.get("role") == "user"
-                      and isinstance(m.get("content"), str) and not m["content"].startswith(REMINDER_TAG)), "")
-            shape = answer_shapes.hint(re.split(r"\n\n<system-reminder>|\n\n\(Reference", q or "")[0])
-            if shape:
-                parts.append("For the final answer: " + shape[0].lower() + shape[1:])
+            # only once research has started, and worded as a format for what is found: said from the first step
+            # as "the final answer needs a table of…", the 27B kept searching to fill every cell (battery: 3 of 4
+            # shape questions ran into the 10-minute stop)
+            if (self.turn or {}).get("tool_calls", 0) >= 1:
+                q = next((m.get("content") for m in reversed(self.history) if m.get("role") == "user"
+                          and isinstance(m.get("content"), str) and not m["content"].startswith(REMINDER_TAG)), "")
+                shape = answer_shapes.final_hint(re.split(r"\n\n<system-reminder>|\n\n\(Reference", q or "")[0])
+                if shape:
+                    parts.append(shape)
         except Exception:
             pass
         if not parts:

@@ -123,6 +123,10 @@ def test_hint_picks_the_block_for_the_question():
         assert answer_shapes.kind(q) == want, (q, answer_shapes.kind(q))
     assert answer_shapes.hint("hi") == ""
     assert "```map" in answer_shapes.hint("Where is the Louvre?")
+    assert "get_tools" in answer_shapes.hint("What does a Shiba Inu look like?")
+    assert "get_tools" not in answer_shapes.hint("Where is the Louvre?")
+    fh = answer_shapes.final_hint("Compare the iPhone 16 and Pixel 9 on battery")
+    assert "table" in fh and "Don't search more" in fh
     assert answer_shapes.kind("x" * 700 + " where is it") == ""        # long tasks are not lookups
 
 

@@ -67,14 +67,14 @@ _RULES = [
 _RX = [(k, re.compile(p, re.I)) for k, p in _RULES]
 
 _NUDGE = {
-    "chart": "a ```chart block (the figures from your sources) after a one-line answer, if there are 4+ numbers",
-    "map": "a ```map block with each place (name and city, or lat/lon) after a one-line answer",
-    "facts": "a ```facts block (the key figures from your sources) after a one-line answer",
+    "chart": "a ```chart block of the figures, after a one-line answer",
+    "map": "a ```map block of the places (name and city each), after a one-line answer",
+    "facts": "a ```facts block of the key facts, after a one-line answer",
     "timeline": "a ```timeline block of the dated events",
-    "table": "a Markdown table, one row per item and one column per attribute",
-    "cards": "a ```cards block, one card per option with the same attributes, then your pick in one line",
+    "table": "a Markdown table, one row per item",
+    "cards": "a ```cards block, one card per option, then your pick in one line",
     "mermaid": "a ```mermaid diagram of the steps",
-    "image": "a picture of it: ![caption](image URL) from a page you read (search for it first)",
+    "image": "a picture of it: ![caption](image URL) from a page you read",
 }
 
 
@@ -90,6 +90,22 @@ def kind(question):
 
 
 def hint(question):
-    """One line for the app's note beside the question, or ''."""
+    """One line for the lean step's note beside the question, or ''. Only a picture needs the web here; for the
+    rest it is how to lay out what it already answers (a "needs facts from the web" here sent a GDP question to
+    the full agent, which then looped for 10 minutes)."""
     k = kind(question)
-    return f"This question reads best with {_NUDGE[k]} (block format in your instructions)." if k else ""
+    if not k:
+        return ""
+    if k == "image":
+        return "This question reads best with a picture of the subject: call get_tools to find one on the web."
+    return f"If you answer here, this reads best as {_NUDGE[k]} (block format in your instructions)."
+
+
+def final_hint(question):
+    """The full agent's note once research has started: a layout for what it found, never a list of things to
+    find. Said as "the final answer needs a table of…", the 27B kept searching to fill every cell."""
+    k = kind(question)
+    if not k:
+        return ""
+    return (f"When you write the final answer, lay out what you found as {_NUDGE[k]}. Don't search more to fill it: "
+            "leave out (or mark —) anything you don't have.")
