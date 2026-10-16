@@ -52,3 +52,11 @@ def test_the_stream_estimate_alone_never_marks_a_model_slow():
     assert not e._slow() and e.context_budget() == 61440 - e.REPLY_RESERVE
     e._last_tps, e._tps_exact = 29.6, True   # llama.cpp's own figure
     assert not e._slow()
+
+
+def test_the_summary_is_a_terse_fixed_template():
+    import agentic
+    p = agentic.SUMMARY_PROMPT
+    for head in ("GOAL:", "ESTABLISHED:", "RULED OUT:", "DECISIONS:", "NOW:"):
+        assert head in p
+    assert "300 words" in p and "root cause" in p and agentic.SUMMARY_MAX_TOKENS <= 800

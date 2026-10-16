@@ -281,16 +281,22 @@ def clean_plan(text):
                r"[^\n.]{0,80}[.:!]\s*)+", "", t, flags=re.I)
     return t.strip()
 
-SUMMARY_PROMPT = """Summarize the conversation so far for an agent that will continue the work \
-without seeing the original messages. Build it on the turning points the app recorded (listed below, if any): they \
-are facts. Use these headings:
-1. Goal and constraints: the user's requests, quoting exact requirements.
-2. Current understanding: how the problem and the solution work, as you now see them — the concepts, the design, \
-what turned out to matter.
-3. Turning points: what was tried, what was learned, what was ruled out and why — with the exact names, paths, \
-commands, error texts and line numbers involved.
-4. Current state and next step: what you were in the middle of, the last result, what comes next.
-Be specific and factual; at most 500 words. Do not add anything that is not in the conversation."""
+# A fixed template of what only the model can carry forward. The app keeps the checklist, test results, changed files
+# and gate state itself (pinned beside the summary), so those aren't restated. Terse slots instead of a narrative: a 27B
+# rediscovered the same root cause four times after the old 500-word "current understanding / turning points" summary,
+# and every summary word costs a slow model generation time (plans: compaction for slow models).
+SUMMARY_PROMPT = """Write the working notes an agent needs to continue this task without the original messages. \
+Use exactly these five headings and keep only what is still true and useful; no story of how you got here. \
+The turning points the app recorded (listed below, if any) are facts.
+GOAL: the user's requests and exact requirements, quoted where they are specific.
+ESTABLISHED: verified facts the work depends on — the root cause of the current problem with file and line, how \
+the pieces fit (names, paths, ports, data formats), what is done and proven by a run.
+RULED OUT: approaches that failed or were disproved, one line each with why, so they are not tried again.
+DECISIONS: choices made and still in force, one line each.
+NOW: what you were in the middle of, the last result, and the exact next action.
+At most 300 words in total; write "none" under a heading with nothing. Do not add anything that is not in the \
+conversation."""
+SUMMARY_MAX_TOKENS = 700           # ~300 words with headings and paths; was 1200 for a 500-word summary
 
 
 _OUTCOME_RX = re.compile(r"exit code|\bPASS\b|\bFAIL|passed|failed|error|Error|Traceback|saved at|full text:|"
@@ -5858,7 +5864,7 @@ class AgentEngine:
         try:
             # Cold replay has no prompt prefix to reuse. Its full tool schema costs tokens and time
             # without helping a no-tool summary. Keep the unchanged schema prefix on warm runs.
-            msg, _n, _p = self._call_openai(msgs, tools=False, max_tokens=1600, no_think=True,
+            msg, _n, _p = self._call_openai(msgs, tools=False, max_tokens=SUMMARY_MAX_TOKENS, no_think=True,
                                            omit_tool_schemas=not bool(self.last_prompt_tokens))
         finally:
             self._delta = "ans_delta"
@@ -5888,7 +5894,7 @@ class AgentEngine:
             text = text[:limit // 3] + "\n…\n" + text[-(limit * 2 // 3):]
         return self._plain(
             [{"role": "system", "content": "You write precise summaries of an AI agent's work."},
-             {"role": "user", "content": f"{SUMMARY_PROMPT}\n\nCONVERSATION:\n{text}"}], 1200).strip()
+             {"role": "user", "content": f"{SUMMARY_PROMPT}\n\nCONVERSATION:\n{text}"}], SUMMARY_MAX_TOKENS).strip()
 
     def _pack_ask(self, prompt):
         """focus_pack's second round: one short side request (no thinking, no tool list, not shown in the chat) in
