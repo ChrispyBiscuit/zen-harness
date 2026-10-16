@@ -137,15 +137,25 @@ def failing_names(text):
     return sorted(set(re.findall(r"^FAILED\s+(\S+)", str(text or ""), re.M)))
 
 
-def regression(prev, cur):
-    """prev/cur: {'passed','failed','failing'} -> a note when fewer tests pass and a test newly fails, else ''."""
+def regression(prev, cur, written=None):
+    """prev/cur: {'passed','failed','failing'}; written: files changed since the previous run -> a note when fewer
+    tests pass and either a test newly fails or files were written in between, else ''. With the files named and the
+    way back (undo_file): a 9B rewrote its test file into 0/25 passing (a missing import: no newly failing NAMES, so
+    no note) and kept rewriting it instead of going back."""
     if not prev or not cur or cur.get("passed", 0) >= prev.get("passed", 0):
         return ""
     new = [n for n in cur.get("failing") or [] if n not in (prev.get("failing") or [])]
-    if not new:
+    written = [w for w in (written or []) if w]
+    if not new and not written:
         return ""
-    return (f"\nRegression: {', '.join(new[:4])} now fail{'s' if len(new) == 1 else ''} — {prev['passed']} tests passed "
-            f"before, {cur['passed']} now. Something you just changed broke it: changes_since_green shows what.")
+    what = (f"{', '.join(new[:4])} now fail{'s' if len(new) == 1 else ''} — " if new else "")
+    out = f"\nRegression: {what}{prev['passed']} tests passed before, {cur['passed']} now."
+    if written:
+        out += (f" Changed since that run: {', '.join(written[:6])}. If one of those changes made it worse, "
+                f"undo_file(path) puts the earlier version back; otherwise fix what the first failure says.")
+    else:
+        out += " Something you just changed broke it: changes_since_green shows what."
+    return out
 
 
 def tests_map(root, limit=12):

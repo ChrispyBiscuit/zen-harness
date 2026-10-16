@@ -23,6 +23,16 @@ CODE = {".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".py", ".cs", ".cpp", ".c"
 
 class PolicyError(ValueError): pass
 
+# files a program or its tests write while running (its data, not its code): a command creating one doesn't need a
+# module to own it. Manifests (package.json, …) are code, not data.
+RUNTIME_DATA = {".json", ".yaml", ".yml", ".toml", ".csv", ".jsonl"}
+
+
+def is_runtime_data(rel):
+    name=rel.rsplit("/",1)[-1]
+    return name not in MANIFESTS and os.path.splitext(name)[1].lower() in RUNTIME_DATA
+
+
 def sha(path): return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 def enabled(ctx): return bool(getattr(ctx,"build_test_record",False))
@@ -37,6 +47,7 @@ def for_ctx(ctx):
 class Ledger:
     def __init__(self, root, storage):
         self.adopted=None
+        self.adopted_by_command=[]
         self.refused_rel=None
         self.root=Path(root).resolve()
         key=hashlib.sha256(os.path.normcase(str(self.root)).encode()).hexdigest()[:24]
@@ -51,6 +62,7 @@ class Ledger:
             self.state=json.loads(self.path.read_text(encoding="utf-8"))
             if self.state.get("version")!=1 or self.state.get("root")!=str(self.root): raise PolicyError("Invalid verification ledger; preserve and reconcile it")
         else:self.state={"version":1,"root":str(self.root),"modules":{},"active":None,"receipts":[],"unowned":[]}
+        self.state["unowned"]=[p for p in self.state.get("unowned") or [] if not is_runtime_data(p)]
         return self.state
 
     def save(self):
@@ -233,12 +245,24 @@ class Ledger:
                 if any(self.state["modules"][d]["state"]!="verified" for d in self.state["modules"][active]["dependencies"]):raise PolicyError("Build gate: prerequisite verification changed; reverify before dependent edits")
         return self.inventory()
 
-    def record_changes(self,before):
+    def record_changes(self,before,kind="write"):
+        """Files changed by a call. A new file no module owns becomes 'unowned' (it blocks begin_module and checklist
+        completion until a module claims it) — except when a COMMAND made it: runtime data a program or its tests
+        write (expenses.json) is ignored, and code a command creates (a downloaded library, scaffolding) joins the
+        active module. Downloaded three.js files and an npm package.json blocked whole builds as 'unowned'."""
         after=self.inventory();changed={p for p in before.keys()|after.keys() if before.get(p)!=after.get(p)}
         for p in changed:(self.state.get("drafts") or {}).pop(p,None)
-        for p in changed:
+        made=kind not in ("write",None)
+        for p in sorted(changed):
             owners=self.owners(p)
-            if not owners and p in after:self.state["unowned"]=sorted(set(self.state["unowned"]+[p]))
+            if not owners and p in after:
+                if made and is_runtime_data(p):
+                    continue
+                if made and self.state.get("active"):
+                    self.adopt(self.state["active"],p)
+                    self.adopted_by_command.append(p)
+                    continue
+                self.state["unowned"]=sorted(set(self.state["unowned"]+[p]))
             for mid in owners:self.state["modules"][mid]["state"]="needs_verification"
         self.save();self.refresh()
         return changed
@@ -369,13 +393,21 @@ def invoke(registry,name,args):
                 raise PolicyError(str(exc)+" Your "+name+" for "+rel+" is kept: when a module that owns it begins "
                                   "(begin_module), it is written then automatically, so there is no need to write it again.") from exc
             raise
+        ledger.adopted_by_command=[]
+        out=None
         try:
             out=registry._call_unchecked(name,args)
             if ledger.adopted and isinstance(out,tuple) and out and isinstance(out[0],str):
                 rel,mid,key=ledger.adopted          # results are (text, image)
                 out=(out[0]+"\n(Build gate: "+rel+" was added to module '"+mid+"' "+key+"; verify_module('"+mid+"') covers it.)",)+tuple(out[1:])
-            return out
-        finally:ledger.record_changes(before)
+        finally:ledger.record_changes(before,kind)
+        made=ledger.adopted_by_command
+        if made and isinstance(out,tuple) and out and isinstance(out[0],str):
+            mid=ledger.state.get("active")
+            out=(out[0]+"\n(Build gate: "+", ".join(made[:8])+(" and "+str(len(made)-8)+" more" if len(made)>8 else "")
+                 +" made by this command "+("was" if len(made)==1 else "were")+" added to module '"+str(mid)
+                 +"'; verify_module('"+str(mid)+"') covers "+("it" if len(made)==1 else "them")+".)",)+tuple(out[1:])
+        return out
 
 
 def ctx_summary(ctx):

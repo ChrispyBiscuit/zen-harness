@@ -552,6 +552,8 @@ def _seen_current(c, p):
     return k is not None and k == _fstamp(p)
 
 
+REWRITE_LIMIT = 2                 # whole-file rewrites of one file allowed between test improvements
+REWRITE_MIN_LINES = 40            # smaller files may be rewritten freely (cheap, and often the clearest change)
 KEPT_SHOW_CHARS = 9000            # an unread-overwrite refusal shows the file up to this size (then it counts as read)
 
 
@@ -607,6 +609,25 @@ def t_write_file(a, c):
             raise ToolError(f"this would replace {old_n} lines of {os.path.basename(p)} with {new_n} — most of the "
                             f"file would be deleted. To add a section use append=true; to change part of it use "
                             f"edit_file. If replacing it really is intended, send exactly the same write_file again.")
+    churn = ""
+    if existed and not a.get("append") and len(old.splitlines()) >= REWRITE_MIN_LINES:
+        # whole-file rewrites of the same file with no test progress in between: a 9B rewrote its test file five
+        # times in 6 minutes (each fixed one thing and broke another) and never touched the code under test
+        counts = _hist(c).setdefault("rewrites", {})
+        n = counts.get(key, 0)
+        if n >= REWRITE_LIMIT and not a.get("confirm_rewrite"):
+            kept[key] = content
+            raise ToolError(f"Not written: this would be full rewrite number {n + 1} of {os.path.basename(p)} since your "
+                            f"tests last improved. Rewriting the whole file again tends to fix one thing and break "
+                            f"another. Change only the part that is wrong with edit_file (line numbers as read_file "
+                            f"shows them), or undo_file to go back to a version that worked. (Your content is kept: "
+                            f"if a full rewrite really is the fix, explain why in one sentence and send "
+                            f"write_file(path, use_kept=true, confirm_rewrite=true).)")
+        if not a.get("confirm_rewrite"):
+            counts[key] = n + 1
+        if n + 1 == REWRITE_LIMIT:
+            churn = (f"\nNote: that was full rewrite {n + 1} of {os.path.basename(p)} since your tests last improved; "
+                     f"another one will be refused until they do. Change parts of it with edit_file.")
     bk = _backup(p)
     os.makedirs(os.path.dirname(p), exist_ok=True)
     with open(p, "w", encoding="utf-8", newline="") as f:
@@ -628,6 +649,7 @@ def t_write_file(a, c):
         # syntax error); the next file of this size is better written and checked in parts
         big_note = ("\nNote: that was a long file in one write. Run it or its tests now, and write the next big file in "
                     "parts (one feature or test group, then append=true), checking each part.")
+    big_note += churn
     old_n = len(old.splitlines())
     if existed and not a.get("append") and old_n >= 120 and max(add, rem) <= old_n * 0.35:
         # most of the file came back unchanged: the whole thing was re-typed for a local change (a 236-line test file
@@ -4367,7 +4389,7 @@ BUILTIN = [
     ("write_file", WRITE, "Create a new text file, or overwrite one with the full new content "
      "(append=true adds to the end). Folders are created as needed. For small changes to an "
      "existing file use edit_file instead.",
-     _obj({"path": S, "content": S, "append": B, "use_kept": B}, ["path"]), t_write_file),
+     _obj({"path": S, "content": S, "append": B, "use_kept": B, "confirm_rewrite": B}, ["path"]), t_write_file),
     ("edit_file", WRITE, "Change part of an existing file. By line numbers (easiest: no need to copy the old "
      "text): start_line + end_line + new replaces those lines, with numbers as read_file or focus_pack showed them "
      "(expect = the first line's current text, optional check); insert_after=N inserts new after line N (0 = top). "
@@ -5079,7 +5101,10 @@ class Registry:
                            "cmd": str(args.get("command") or args.get("path") or name)[:80],
                            "failing": ci.failing_names(text)}
                     _hist(self.ctx)["last_tests"] = cur
-                    text = str(text) + ci.regression(prev, cur)
+                    text = str(text) + ci.regression(prev, cur, _hist(self.ctx).get("written_since_run"))
+                    _hist(self.ctx)["written_since_run"] = []
+                    if p_ > ((prev or {}).get("passed") or 0) or (p_ and not f_):
+                        _hist(self.ctx)["rewrites"] = {}      # tests improved: rewrites are allowed again
                     try:
                         import obligations
                         obligations.on_tests(self.ctx, prev, cur)
@@ -5112,6 +5137,9 @@ class Registry:
                 return dbg.clip_ht(dbg.enrich(text, getattr(self.ctx, "cwd", None)))
             if name in ("write_file", "edit_file") and not text.startswith("Error"):
                 p = self.ctx.resolve(args.get("path"))
+                since = _hist(self.ctx).setdefault("written_since_run", [])
+                if os.path.basename(p) not in since:
+                    since.append(os.path.basename(p))      # named in a regression note after the next test run
                 d = getattr(self.ctx, "display", None) or {}
                 bk = d.get("backup") if d.get("type") == "diff" and d.get("path") == p else None
                 out = text + dbg.lint_file(p, before=bk)        # with the backup: only problems NEW in this change

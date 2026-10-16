@@ -290,3 +290,29 @@ def test_adding_the_file_to_the_active_contract_lets_the_write_through(ledger):
  l.declare(contract('client',sources=['client.js'],tests=['client.test.js'],tracker_ids=[]));l.begin('client')
  l.declare(contract('client',sources=['client.js','logic.cjs'],tests=['client.test.js'],tracker_ids=[]))
  l.preflight('edit_file',{'path':str(l.root/'logic.cjs')},'write')   # the route the refusal names
+
+
+def test_files_a_command_makes_are_adopted_or_ignored(ledger):
+ # three.js downloads and an npm package.json blocked builds as 'unowned'; a program's expenses.json would too
+ l=ledger;l.declare(contract());l.begin('math')
+ before=l.inventory()
+ (l.root/'lib').mkdir();(l.root/'lib'/'three.js').write_text('x');(l.root/'expenses.json').write_text('[]')
+ (l.root/'package.json').write_text('{}')
+ l.record_changes(before,'exec')
+ m=l.state['modules']['math']
+ assert 'lib/three.js' in m['sources'] and 'package.json' in m['sources']    # code a command made: adopted
+ assert 'expenses.json' not in m['sources'] and l.state['unowned']==[]       # runtime data: ignored
+ assert sorted(l.adopted_by_command)==['lib/three.js','package.json']
+
+
+def test_without_an_active_module_command_code_is_unowned_but_data_is_not(ledger):
+ l=ledger;before=l.inventory()
+ (l.root/'gen.py').write_text('x');(l.root/'out.json').write_text('{}')
+ l.record_changes(before,'exec')
+ assert l.state['unowned']==['gen.py']
+
+
+def test_old_ledgers_drop_runtime_data_from_unowned(ledger):
+ l=ledger;l.state['unowned']=['expenses.json','app.py'];l.save()
+ l2=Ledger(l.root,l.folder.parent)
+ assert l2.state['unowned']==['app.py']
