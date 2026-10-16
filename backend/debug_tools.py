@@ -488,6 +488,33 @@ def flight_note(c, failed, clean=False):
     return note
 
 
+_JS_TEST_RX = re.compile(r"^(test[_-].+|.+[._-](test|spec))\.(m|c)?[jt]s$", re.I)
+_SKIP_DIRS = {"node_modules", ".git", "dist", "build", "venv", ".venv", "__pycache__", "coverage"}
+
+
+def _js_test_files(folder, limit=400):
+    """JavaScript/TypeScript test files under a folder: test_*.js, test-*.js, *.test.js, *_test.js, *.spec.js, and any
+    .js/.mjs/.cjs file inside a test/ or tests/ folder. Sorted; dependencies and build output skipped."""
+    out = []
+    for base, dirs, files in os.walk(folder):
+        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]
+        in_test_dir = os.path.basename(base).lower() in ("test", "tests", "__tests__")
+        for f in files:
+            if _JS_TEST_RX.match(f) or (in_test_dir and f.lower().endswith((".js", ".mjs", ".cjs"))):
+                out.append(os.path.join(base, f))
+                if len(out) >= limit:
+                    return sorted(out)
+    return sorted(out)
+
+
+def _has_py_tests(folder):
+    for base, dirs, files in os.walk(folder):
+        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]
+        if any(f.endswith(".py") and (f.startswith("test_") or f.endswith("_test.py")) for f in files):
+            return True
+    return False
+
+
 def run_tests(a, c, resolve, ToolError):
     """The run_tests tool: pytest for Python, node's test runner or npm test for JavaScript."""
     target = resolve(a.get("path"), True) if a.get("path") else (c.cwd or c.roots[0])
@@ -497,11 +524,16 @@ def run_tests(a, c, resolve, ToolError):
     import paths
     py = paths.python_cmd()
     pkg = os.path.join(folder, "package.json")
+    js_tests = _js_test_files(target) if os.path.isdir(target) else []
     if fw == "auto":
         if target.lower().endswith((".js", ".mjs", ".cjs", ".ts")):
             fw = "node"
         elif os.path.isfile(pkg) and '"test"' in open(pkg, encoding="utf-8", errors="replace").read():
             fw = "npm"
+        elif js_tests and not _has_py_tests(target):
+            # JavaScript tests and no npm test script: node --test, not pytest (a browser game's tests/test_*.js
+            # got pytest's "no tests were collected" on every run_tests, run 71a2ec62)
+            fw = "node"
         else:
             fw = "pytest"
     if fw == "pytest":
@@ -512,7 +544,14 @@ def run_tests(a, c, resolve, ToolError):
     elif fw == "node":
         if not shutil.which("node"):
             raise ToolError("node is not installed")
-        argv = ["node", "--test", target]
+        # a folder: name its test files. `node --test <folder>` fails on Node 22 (the folder is loaded as a module:
+        # "0 passed, 1 failed"), and Node's own discovery misses names like tests/test_waves.js
+        files = js_tests if os.path.isdir(target) else [target]
+        if os.path.isdir(target) and not files:
+            raise ToolError(f"no JavaScript test files found under {target} (looked for test_*.js, *.test.js, "
+                            f"*_test.js, *.spec.js, test-*.js and files in a test/ or tests/ folder). Write tests "
+                            f"there, or give run_tests the test file's path.")
+        argv = ["node", "--test", *files]
     elif fw == "npm":
         argv = [shutil.which("npm") or "npm", "test", "--silent"]
     else:

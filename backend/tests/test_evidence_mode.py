@@ -280,3 +280,21 @@ def test_simple_done_ticks_count_as_progress_and_a_batch_hint_appears(tmp_path):
     assert "done='1.2, 1.3, 1.4'" in text
     text2, _ = r.call("update_tracker", {"done": "1.2"})
     assert "tick them together" not in text2                   # once per chat
+
+
+def test_run_tests_finds_and_runs_javascript_tests_in_a_folder(tmp_path):
+    import shutil as _sh
+    if not _sh.which("node"):
+        pytest.skip("node not installed")
+    root = tmp_path / "game"
+    (root / "tests").mkdir(parents=True)
+    (root / "src").mkdir()
+    (root / "package.json").write_text('{"type": "module"}')
+    (root / "src" / "waves.js").write_text("export const count = (n) => n * 2;\n")
+    (root / "tests" / "test_waves.js").write_text(
+        "import test from 'node:test';\nimport assert from 'node:assert/strict';\n"
+        "import { count } from '../src/waves.js';\ntest('doubles', () => assert.equal(count(2), 4));\n")
+    c = at.Ctx([str(root)]); c.cwd = str(root)
+    r = at.Registry(c, enabled={"run_tests"})
+    text, _ = r.call("run_tests", {"path": str(root)})
+    assert text.startswith("tests: PASSED") and "1 passed" in text, text[:300]
