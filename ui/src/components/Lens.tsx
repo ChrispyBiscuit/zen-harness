@@ -51,9 +51,11 @@ function lightMap() {
 const MAP = typeof document !== "undefined" ? bandMap() : ""
 const LIGHT = typeof document !== "undefined" ? lightMap() : ""
 
-// one pass: in from the left, across, out to the right in 2.8 s; then a rest; 5 s a cycle
-const DUR = "5s"
-const X = { values: "-0.32;1.02;1.02", keyTimes: "0;0.56;1", keySplines: "0.45 0 0.3 1;0 0 1 1" }
+// a 6 s cycle: glide in from the left and ease to a stop three quarters across (2.3 s), hold (0.5 s), slide back out
+// to the left (2 s), rest off the row (1.2 s)
+const DUR = "6s"
+const X = { values: "-0.32;0.72;0.72;-0.32;-0.32", keyTimes: "0;0.38;0.46;0.8;1",
+  keySplines: "0.16 1 0.3 1;0 0 1 1;0.65 0 0.35 1;0 0 1 1" }
 const W = 0.3         // the band's width, as a share of the row's width
 
 function Travel() {
@@ -71,11 +73,11 @@ export function RefractFilter() {
         <feComposite in="map" in2="grey" operator="over" result="field" />
         {/* the same bulge at three strengths, one per channel: the fringe. The spread breathes as it travels. */}
         <feDisplacementMap in="SourceGraphic" in2="field" scale="0.03" xChannelSelector="R" yChannelSelector="G" result="dr">
-          <animate attributeName="scale" values="0.03;0.033;0.03;0.03" keyTimes="0;0.28;0.56;1" dur={DUR} repeatCount="indefinite" />
+          <animate attributeName="scale" values="0.03;0.033;0.03;0.03" keyTimes="0;0.19;0.46;1" dur={DUR} repeatCount="indefinite" />
         </feDisplacementMap>
         <feDisplacementMap in="SourceGraphic" in2="field" scale="0.027" xChannelSelector="R" yChannelSelector="G" result="dg" />
         <feDisplacementMap in="SourceGraphic" in2="field" scale="0.024" xChannelSelector="R" yChannelSelector="G" result="db">
-          <animate attributeName="scale" values="0.024;0.021;0.024;0.024" keyTimes="0;0.28;0.56;1" dur={DUR} repeatCount="indefinite" />
+          <animate attributeName="scale" values="0.024;0.021;0.024;0.024" keyTimes="0;0.19;0.46;1" dur={DUR} repeatCount="indefinite" />
         </feDisplacementMap>
         <feColorMatrix in="dr" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="r" />
         <feColorMatrix in="dg" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="g" />
