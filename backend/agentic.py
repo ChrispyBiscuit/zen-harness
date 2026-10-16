@@ -1720,6 +1720,11 @@ class AgentEngine:
                 dkv = str(c.get("spec_draft_kv") or "").strip()     # the drafter's own cache (f16 by default)
                 if dkv:
                     args += ["-ctkd", dkv, "-ctvd", dkv]
+            elif c.get("mtp_head") and not (fit.get("moe") or fit.get("partial")):
+                # the model file carries its own MTP head (Ternary Bonsai 2 9B PQ2_0-MTP): no separate drafter file.
+                # PrismML's recommended settings: depth 2, no minimum draft length or probability
+                args += ["--spec-type", "draft-mtp", "--spec-draft-n-max", str(int(c.get("spec_draft_max_mtp") or 2)),
+                         "--spec-draft-n-min", "0", "--spec-draft-p-min", "0"]
             elif spec and not ((fit.get("moe") or fit.get("partial")) and fit.get("mtp") and c.get("mtp", True)):
                 # n-gram speculation: guesses the next tokens from text already in the context (no draft model, no
                 # extra memory) — fast for copying: values and quotes from pages, URLs, paths, repeated JSON.
