@@ -16,7 +16,7 @@ import paths
 HOOK_DIR = paths.data("agent_bg", "pyhook")
 DUMP_DIR = os.path.join(tempfile.gettempdir(), "zen_stackdumps")
 
-HOOK = '''# Zen: lets the app ask this Python process where it is stuck (a stack dump on request). Harmless otherwise.
+HOOK = '''# Zazen: lets the app ask this Python process where it is stuck (a stack dump on request). Harmless otherwise.
 import os as _os
 _d = _os.environ.get("ZEN_DUMP_DIR")
 if _d:

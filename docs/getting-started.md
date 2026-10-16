@@ -1,6 +1,6 @@
 # Getting started
 
-Zen is an AI assistant that runs on your own PC. It uses open-weight language models through
+Zazen is an AI assistant that runs on your own PC. It uses open-weight language models through
 [llama.cpp](https://github.com/ggml-org/llama.cpp), so your chats and files stay on your computer unless you choose a
 cloud model or a tool that uses the internet (web search, web pages).
 
@@ -22,7 +22,7 @@ runs on the CPU instead.
    code-signed yet: click **More info → Run anyway**.
 2. The installer needs no administrator rights. It installs to `%LOCALAPPDATA%\Programs\Zen Harness` and adds a
    Start-menu entry (and a desktop shortcut if you ticked it).
-3. Launch **Zen**.
+3. Launch **Zazen**.
 
 ## First run
 
@@ -52,7 +52,7 @@ allowed folders). See [Using the agent](agent.md).
 
 ## Where things are
 
-- **Settings** — the gear icon. Models, permissions, memory, voice, apps that connect to Zen.
+- **Settings** — the gear icon. Models, permissions, memory, voice, apps that connect to Zazen.
 - **Help** — the `?` icon: these documents, the About box, and "Copy diagnostics" for bug reports.
 - **Your files** — chats, settings and memory are in `%LOCALAPPDATA%\ZenHarness` (see
   [Your data and privacy](data-and-privacy.md)). Uninstalling keeps them unless you tick "remove my data".

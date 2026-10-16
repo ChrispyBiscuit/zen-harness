@@ -9,7 +9,7 @@ First step for any problem: **Help → Copy diagnostics** — it copies versions
 - Logs: `%LOCALAPPDATA%\ZenHarness\logs\app_window.log` and `app_server.log`.
 
 ## "127.0.0.1 didn't send any data" / the app can't reach its server
-Something else is using port 8765. Close other copies of Zen, or change the port in Settings → Connect apps
+Something else is using port 8765. Close other copies of Zazen, or change the port in Settings → Connect apps
 (then restart). Programs the agent built should use other ports; the app stops any of them that grab its own ports.
 
 ## A model won't load

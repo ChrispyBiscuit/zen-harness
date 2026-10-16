@@ -1,6 +1,6 @@
 # Compact prompt target for long-running work
 
-This source-only change targets approximately 20,000 estimated tokens immediately after compaction on Zen's current 61,440-token Bonsai profile. It is not a hard truncation rule. A complete active tool-call/result pair or a required task fact may make a checkpoint larger.
+This source-only change targets approximately 20,000 estimated tokens immediately after compaction on Zazen's current 61,440-token Bonsai profile. It is not a hard truncation rule. A complete active tool-call/result pair or a required task fact may make a checkpoint larger.
 
 ## What changes
 
@@ -15,7 +15,7 @@ The new policy is staged **off** (`compact_prompt=false`). It appears under Agen
 
 ## Local evidence before deployment
 
-Saved FPS snapshot `compaction_2.json` was replayed offline with the same 61,440-token profile, no model inference and invalid synthesis responses to exercise the deterministic checkpoint fallback. The compact source prompt measured 19,853 tokens without the live tracker and 21,043 with the 28-item tracker and build policy. The live app was not modified. These are Zen's token estimates; the first deployed trial must compare them with llama.cpp's actual prompt-token counts.
+Saved FPS snapshot `compaction_2.json` was replayed offline with the same 61,440-token profile, no model inference and invalid synthesis responses to exercise the deterministic checkpoint fallback. The compact source prompt measured 19,853 tokens without the live tracker and 21,043 with the 28-item tracker and build policy. The live app was not modified. These are Zazen's token estimates; the first deployed trial must compare them with llama.cpp's actual prompt-token counts.
 
 Focused context, ledger and offline harness tests: 137 passed, 2 expected failures. The replay and tests establish prompt size, exact request retention, schema shape, tool discoverability and paired recent calls/results. They do not establish that Bonsai solves long tasks better.
 

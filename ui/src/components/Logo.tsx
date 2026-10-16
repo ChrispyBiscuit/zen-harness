@@ -2,7 +2,7 @@ import { useId } from "react"
 import { cn } from "@/lib/utils"
 import { ENSO, ENSO_BOLD, ENSO_BOLD_START, ENSO_START } from "./enso-paths"
 
-/** The Zen mark: an ensō, one brush stroke with an open gap at the top right, a loaded start and a
+/** The Zazen mark: an ensō, one brush stroke with an open gap at the top right, a loaded start and a
  *  dry-brush tail. Near-white ink; the brand accent is only a faint tint where the brush lands. `bold` is the
  *  simpler, heavier stroke that still reads at 16–20 px; `textured` adds a dry-paper edge for large sizes only. */
 export function LogoMark({ className, bold, textured }: { className?: string; bold?: boolean; textured?: boolean }) {
@@ -60,11 +60,11 @@ export function InkRing({ className }: { className?: string }) {
   )
 }
 
-/** The wordmark: ZEN, technical mono, wide tracking. */
+/** The wordmark: ZAZEN, technical mono, wide tracking. */
 export function Wordmark({ className }: { className?: string; compact?: boolean }) {
   return (
     <span className={cn("mono flex items-baseline select-none uppercase leading-none", className)}>
-      <span className="text-ui font-semibold tracking-[0.18em] text-foreground">Zen</span>
+      <span className="text-ui font-semibold tracking-[0.18em] text-foreground">Zazen</span>
     </span>
   )
 }

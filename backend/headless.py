@@ -1,4 +1,4 @@
-"""Zen Headless: Zen as a resident background service: the backend (UI, /api, /v1 REST, /mcp) with a tray icon and no
+"""Zazen Headless: Zazen as a resident background service: the backend (UI, /api, /v1 REST, /mcp) with a tray icon and no
 window. The desktop window attaches to it; closing the window leaves it running. Quit from the tray.
 
   pythonw headless.py          (the Startup shortcut runs this; see autostart.py)
@@ -87,11 +87,11 @@ class Service:
         menu = QMenu()
         self.a_status = QAction("Starting…", menu)
         self.a_status.setEnabled(False)
-        self.a_open = QAction("Open Zen", menu)
+        self.a_open = QAction("Open Zazen", menu)
         self.a_pause = QAction("Pause API runs", menu)
         self.a_token = QAction("Copy API token", menu)
         self.a_logs = QAction("Open logs", menu)
-        self.a_quit = QAction("Quit Zen Headless", menu)
+        self.a_quit = QAction("Quit Zazen Headless", menu)
         for a in (self.a_status, None, self.a_open, self.a_pause, self.a_token, self.a_logs, None, self.a_quit):
             menu.addSeparator() if a is None else menu.addAction(a)
         self.a_open.triggered.connect(self.open_ui)
@@ -133,7 +133,7 @@ class Service:
     def refresh(self):
         text = self.status_text()
         self.a_status.setText(text)
-        self.tray.setToolTip(f"Zen Headless\n{text}"[:120])
+        self.tray.setToolTip(f"Zazen Headless\n{text}"[:120])
         if self.state == "serving":
             import harness_api as api
             self.a_pause.setText("Resume API runs" if api.STATE["paused"] else "Pause API runs")
@@ -160,7 +160,7 @@ class Service:
     def copy_token(self):
         import harness_api as api
         self.app.clipboard().setText(api.ensure_token())
-        self.tray.showMessage("Zen Headless", "API token copied to the clipboard.")
+        self.tray.showMessage("Zazen Headless", "API token copied to the clipboard.")
 
     def open_logs(self):
         os.startfile(log_path())
@@ -213,7 +213,7 @@ def main():
     except Exception:
         pass
     app = QApplication(sys.argv)
-    app.setApplicationName("Zen Headless")
+    app.setApplicationName("Zazen Headless")
     app.setQuitOnLastWindowClosed(False)
     import web_backend as wb
     wb.RESIDENT = True

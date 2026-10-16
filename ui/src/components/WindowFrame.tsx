@@ -3,7 +3,7 @@ import { Copy, Minus, Square, X } from "lucide-react"
 import { LogoMark } from "./Logo"
 import { cn } from "@/lib/utils"
 
-/** The desktop window's chrome, drawn by the app in the Zen theme. app_web.py opens the page in a frameless Qt
+/** The desktop window's chrome, drawn by the app in the Zazen theme. app_web.py opens the page in a frameless Qt
  *  window and exposes `window.zenWindow` over QWebChannel; moving and resizing are handed to the OS, so Windows
  *  snap and Win+arrow keys still work. There is no separate title bar: the app's own top bar (and the sidebar's
  *  logo row) are the drag area, with WindowControls at the right end. In a normal browser all of this renders
@@ -110,10 +110,10 @@ export function ResizeEdges() {
 export function TitleBar({ children }: { children?: React.ReactNode }) {
   const drag = useWindowDrag()
   return (
-    <div onPointerDown={drag} role="banner" aria-label="Zen"
+    <div onPointerDown={drag} role="banner" aria-label="Zazen"
       className={cn("flex h-10 shrink-0 select-none items-center gap-2 border-b border-line-1 bg-ground pl-3", drag ? "pr-0" : "pr-2")}>
       <LogoMark bold className="size-4 shrink-0" />
-      <span className="label-tech shrink-0 text-faint">Zen</span>
+      <span className="label-tech shrink-0 text-faint">Zazen</span>
       {children ?? <div className="h-full flex-1" />}
       <WindowControls className="ml-1" />
     </div>

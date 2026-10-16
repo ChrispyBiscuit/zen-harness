@@ -1,6 +1,6 @@
 # Models
 
-Zen runs models in the **GGUF** format (the llama.cpp format; most open models are published in it on
+Zazen runs models in the **GGUF** format (the llama.cpp format; most open models are published in it on
 Hugging Face). Models live in your models folder: `%LOCALAPPDATA%\ZenHarness\models` (Settings → Models →
 **Open models folder**).
 

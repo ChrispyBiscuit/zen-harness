@@ -14,7 +14,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 def read(path, timeout=180):
     if getattr(sys, "frozen", False):           # pix2tex + PyTorch (4+ GB) are not part of the installed app
-        return {"error": "formula recognition is not included in this version of Zen"}
+        return {"error": "formula recognition is not included in this version of Zazen"}
     env = dict(os.environ, CUDA_VISIBLE_DEVICES="", PYTHONIOENCODING="utf-8")
     try:
         p = subprocess.run([sys.executable, os.path.join(HERE, "formula_ocr.py"), path], capture_output=True,

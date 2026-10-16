@@ -1,6 +1,6 @@
 # Batched tool execution (V1)
 
-Zen already supports multiple native tool calls in one assistant response. BTE retains that protocol. On the full tool path it validates and authorizes the entire group before dispatch, runs certified independent file reads concurrently, and serializes other operations. Read-only certification checks the actual builtin function, not just its advertised name. Every mutation is a global scheduling barrier.
+Zazen already supports multiple native tool calls in one assistant response. BTE retains that protocol. On the full tool path it validates and authorizes the entire group before dispatch, runs certified independent file reads concurrently, and serializes other operations. Read-only certification checks the actual builtin function, not just its advertised name. Every mutation is a global scheduling barrier.
 
 Basic and restricted phases keep their existing tool gates and execute normally, without speculative prefetch. Single calls keep their existing execution path. When BTE is disabled, the previous native dispatch/prefetch behavior is restored.
 
@@ -52,7 +52,7 @@ The aggregate contains batch/operation IDs, terminal states, measured elapsed ti
 
 Raw results are saved atomically under `<data>/agent_attachments/<conversation>/batches/`. Retention is bounded by count and bytes. `get_batch_result(batch_id, operation_id, offset=0, limit=8000)` returns a raw page, dependency metadata and any image from the operation. It works after compaction and a restart. Retrieval calls bypass automatic result batching, so explicitly requested pages are not repeatedly compacted. Storage failures are reported, and unavailable references are labelled rather than invented.
 
-For native multiple-call responses, the protocol still gets one response per original call ID. The first response carries the logical aggregate; remaining responses are empty acknowledgements. Declarative batches produce one parent response, while child cards and evidence continue through existing Zen infrastructure. The action ledger expands executed child calls at the parent position, preserving write/test ordering.
+For native multiple-call responses, the protocol still gets one response per original call ID. The first response carries the logical aggregate; remaining responses are empty acknowledgements. Declarative batches produce one parent response, while child cards and evidence continue through existing Zazen infrastructure. The action ledger expands executed child calls at the parent position, preserving write/test ordering.
 
 Batch telemetry records requested operation count, parallel operation count, terminal-state counts, measured execution elapsed milliseconds, raw output bytes and conservative result-token bounds. The normal agent loop already records model token/timing measurements; unavailable model metrics remain unavailable. No speedup is assumed from the existence of batching.
 

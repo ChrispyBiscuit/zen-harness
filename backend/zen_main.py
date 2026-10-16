@@ -49,7 +49,7 @@ def main():
         return
     if "--version" in args:
         import help_api
-        print(f"Zen {help_api.version()}")
+        print(f"Zazen {help_api.version()}")
         return
     if "--mcp-stdio" in args:
         import harness_mcp

@@ -1,4 +1,4 @@
-; Zen installer (Inno Setup 6). Built by packaging\build.ps1, which passes AppVersion, DistDir and OutDir.
+; Zazen installer (Inno Setup 6). Built by packaging\build.ps1, which passes AppVersion, DistDir and OutDir.
 ; Per-user install, no administrator rights. User data lives in %LOCALAPPDATA%\ZenHarness and survives
 ; uninstall unless the user chooses to remove it.
 
@@ -14,12 +14,12 @@
 
 [Setup]
 AppId={{6E0C5A4B-2D7F-4C1E-9B8A-5F3D2E1C7A90}
-AppName=Zen
+AppName=Zazen
 AppVersion={#AppVersion}
-AppVerName=Zen {#AppVersion}
-AppPublisher=Zen
+AppVerName=Zazen {#AppVersion}
+AppPublisher=Zazen
 DefaultDirName={localappdata}\Programs\Zen Harness
-DefaultGroupName=Zen
+DefaultGroupName=Zazen
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
@@ -45,27 +45,31 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Shortcuts:"
-Name: "autostart"; Description: "Run in the background at sign-in, so other apps can use Zen (API / MCP)"; GroupDescription: "Background service:"; Flags: unchecked
+Name: "autostart"; Description: "Run in the background at sign-in, so other apps can use Zazen (API / MCP)"; GroupDescription: "Background service:"; Flags: unchecked
 
 [Files]
 Source: "{#DistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\Zen"; Filename: "{app}\ZenHarness.exe"
-Name: "{group}\Uninstall Zen"; Filename: "{uninstallexe}"
-Name: "{userdesktop}\Zen"; Filename: "{app}\ZenHarness.exe"; Tasks: desktopicon
+Name: "{group}\Zazen"; Filename: "{app}\ZenHarness.exe"
+Name: "{group}\Uninstall Zazen"; Filename: "{uninstallexe}"
+Name: "{userdesktop}\Zazen"; Filename: "{app}\ZenHarness.exe"; Tasks: desktopicon
 ; same name the app's own Settings toggle uses (backend/autostart.py), so it shows as on
-Name: "{userstartup}\Zen Headless"; Filename: "{app}\ZenHarness.exe"; Parameters: "--headless"; WorkingDir: "{app}"; Tasks: autostart
+Name: "{userstartup}\Zazen Headless"; Filename: "{app}\ZenHarness.exe"; Parameters: "--headless"; WorkingDir: "{app}"; Tasks: autostart
 
 [InstallDelete]
-; shortcuts from before the rename (Zen Harness -> Zen); the install folder keeps its old name
+; shortcuts from before the renames (Zen Harness -> Zen -> Zazen); the install folder keeps its old name
+Type: files; Name: "{group}\Zen.lnk"
+Type: files; Name: "{group}\Uninstall Zen.lnk"
+Type: files; Name: "{userdesktop}\Zen.lnk"
+Type: files; Name: "{userstartup}\Zen Headless.lnk"
 Type: files; Name: "{group}\Zen Harness.lnk"
 Type: files; Name: "{group}\Uninstall Zen Harness.lnk"
 Type: files; Name: "{userdesktop}\Zen Harness.lnk"
 Type: files; Name: "{userstartup}\Zen Headless Harness.lnk"
 
 [Run]
-Filename: "{app}\ZenHarness.exe"; Description: "Start Zen now"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\ZenHarness.exe"; Description: "Start Zazen now"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 ; stop ONLY processes running from this installation (ZenHarness.exe, zenharness-cli.exe, its llama-server.exe).
@@ -73,6 +77,7 @@ Filename: "{app}\ZenHarness.exe"; Description: "Start Zen now"; Flags: nowait po
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -Command ""Get-Process | Where-Object {{ $_.Path -and $_.Path.StartsWith('{app}\', [StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force"""; Flags: runhidden; RunOnceId: "StopOwnProcesses"
 
 [UninstallDelete]
+Type: files; Name: "{userstartup}\Zazen Headless.lnk"
 Type: files; Name: "{userstartup}\Zen Headless.lnk"
 Type: files; Name: "{userstartup}\Zen Headless Harness.lnk"
 ; PrismML's llama.cpp build, unpacked by the installer when Ternary Bonsai is chosen (not a [Files] entry)

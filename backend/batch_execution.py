@@ -34,7 +34,7 @@ def settings(config):
 
 
 def validate_args(value, schema, path='args'):
-    """Validate the JSON-schema vocabulary used by Zen tools, without a new dependency."""
+    """Validate the JSON-schema vocabulary used by Zazen tools, without a new dependency."""
     if schema is True:return
     if schema is False:raise ValueError(f'{path}: forbidden by schema')
     if not isinstance(schema, dict):raise ValueError(f'{path}: invalid tool schema')

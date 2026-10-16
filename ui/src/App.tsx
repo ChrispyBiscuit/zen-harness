@@ -231,7 +231,7 @@ function TopBar() {
           <DropdownMenuItem onClick={() => set({ helpOpen: true, helpPage: "getting-started" } as any)}><BookOpen /> Help</DropdownMenuItem>
           <DropdownMenuItem onClick={() => set({ helpOpen: true, helpPage: "connect-apps" } as any)}><Plug /> Connect other apps</DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => set({ helpOpen: true, helpPage: "about" } as any)}><Info /> About Zen</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => set({ helpOpen: true, helpPage: "about" } as any)}><Info /> About Zazen</DropdownMenuItem>
           <DropdownMenuItem onClick={() => set({ helpOpen: true, helpPage: "licenses" } as any)}><Scale /> Licences</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -337,7 +337,7 @@ export default function App() {
       <div className="grid flex-1 place-items-center">
         <div role="status" aria-live="polite" className="flex flex-col items-center gap-4">
           <InkRing className="size-12" />
-          <span className="mono text-ui font-semibold uppercase tracking-[0.18em] text-foreground">Zen</span>
+          <span className="mono text-ui font-semibold uppercase tracking-[0.18em] text-foreground">Zazen</span>
           <span className="text-caption text-faint">Connecting…</span>
         </div>
       </div>
