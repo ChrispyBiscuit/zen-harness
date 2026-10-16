@@ -2384,6 +2384,15 @@ def t_update_tracker(a, c):
            + f"; next: {t.get('next') or '(not set)'}")
     if bad:
         msg += f". Unknown item ids (ignored): {', '.join(bad)} - ids look like '2' or '2.3'."
+    ticked = [u for u in (a.get("updates") or []) if isinstance(u, dict)
+              and str(u.get("status") or "").lower() in ("done", "complete", "completed", "finished")]
+    still_open = tracker_open(t) or []
+    if len(ticked) == 1 and len(still_open) >= 2 and not _hist(c).get("batch_tick_hint"):
+        # once per chat: a model catching up ticked 16 items one call at a time (run b178328a)
+        _hist(c)["batch_tick_hint"] = True
+        ids = ", ".join(str(i) for i, *_r in still_open[:3])
+        msg += (f". If several more items are already finished, tick them together in one call: done='{ids}' "
+                f"(any that aren't finished, leave out).")
     if not t["milestones"]:
         msg += ". The checklist has no milestones yet: add them, each with subtasks."
     elif not cur and t.get("next") and not re.search(r"\b(none|nothing|n/a|report|answer|done)\b", t["next"], re.I):

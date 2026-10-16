@@ -2201,6 +2201,13 @@ class AgentEngine:
             open_ids = {str(i) for i, *_r in at.tracker_open(self.ctx.tracker) or []}
         except Exception:
             return False
+        # the simple fields too (done='2.3, 2.4', blocked=…, skipped=…): run b178328a's ticks were all sent that way,
+        # read as 'nothing changed', and every second one was refused with "do the work for 2.3" for finished work
+        for key in ("done", "blocked", "skipped"):
+            v = args.get(key)
+            ids = v if isinstance(v, list) else re.split(r"[,\s;]+", str(v or ""))
+            if any(str(i).strip().rstrip(".") in open_ids for i in ids):
+                return True
         for u in args.get("updates") or []:
             if isinstance(u, dict) and str(u.get("id")) in open_ids and \
                     str(u.get("status") or "").lower() in ("done", "skipped", "blocked"):

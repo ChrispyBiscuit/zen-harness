@@ -263,3 +263,20 @@ def test_a_run_covers_the_conftest_pytest_loads_and_the_refusal_says_run_the_fol
     led.record_changes(before, "write", "c1")
     msg = led.evidence_message("2.2", led.pending("c1"))
     assert "Run the whole suite once" in msg and "run_tests(path=" in msg
+
+
+def test_simple_done_ticks_count_as_progress_and_a_batch_hint_appears(tmp_path):
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from offline_suite import engine
+    e = engine()
+    e.ctx.tracker = {"goal": "g", "milestones": [{"title": "Build", "status": "pending", "subtasks": [
+        {"step": "a", "status": "done"}, {"step": "b", "status": "pending"}, {"step": "c", "status": "pending"}]}]}
+    assert e._closes_open_items({"done": "1.2"})              # the simple field counts as closing an item
+    assert not e._closes_open_items({"done": "1.1"})          # already done: not progress
+    c = at.Ctx([str(tmp_path)]); c.cwd = str(tmp_path); c.tracker_path = str(tmp_path / "PROGRESS.md")
+    r = at.Registry(c, enabled={"update_tracker"})
+    r.call("update_tracker", {"checklist": "GOAL: g\n## Build\n- [ ] a\n- [ ] b\n- [ ] c\n- [ ] d"})
+    text, _ = r.call("update_tracker", {"done": "1.1"})
+    assert "done='1.2, 1.3, 1.4'" in text
+    text2, _ = r.call("update_tracker", {"done": "1.2"})
+    assert "tick them together" not in text2                   # once per chat
