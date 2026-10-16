@@ -5631,7 +5631,8 @@ class AgentEngine:
     # a model generating under SLOW_TPS tokens/s keeps a smaller working context: every token costs attention over the
     # whole history (a 27B fell from 32 tok/s at 7K to 15 at 50K), and small models lose their place in long contexts
     # (the 27B re-read files it could already see). Measured once per engine and then kept, so budgets don't flap.
-    SLOW_TPS, SLOW_COMPACT_AT, SLOW_COMPACT_TARGET = 20.0, 35000, 22000
+    # 42K / 26.4K: 20% above the first setting (35K / 22K), which compacted a 27B every 6-7 minutes (2026-10-16)
+    SLOW_TPS, SLOW_COMPACT_AT, SLOW_COMPACT_TARGET = 20.0, 42000, 26400
 
     def _summary_prompt(self):
         """compact_summary: 'terse' (the fixed five-slot template, default) or 'narrative' (before 2026-10-16)."""

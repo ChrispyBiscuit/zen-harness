@@ -61,6 +61,18 @@ costs a slow model generation time.
 **To restore the old behavior:** `"compact_summary": "narrative"`. The old prompt is kept in full as
 `SUMMARY_PROMPT_NARRATIVE` in agentic.py.
 
+### 5. Slow-model compaction 20% later (2026-10-16, after the first no-thinking run)
+
+**What changed:** the slow-model tier now compacts at 42K tokens instead of 35K, down to 26.4K instead of 22K.
+Models that aren't slow keep the normal point, near the end of the window (about 53K of 61K), which is already as
+high as it can go while leaving room for a reply.
+
+**Why:** run 2405352c was put on the slow tier by the old speed estimate, before the speed fix. It compacted five
+times in 30 minutes, every 6 to 7 minutes, and kept losing what it had found.
+
+**To restore the old behavior:** set `SLOW_COMPACT_AT` and `SLOW_COMPACT_TARGET` back to 35000 / 22000 in
+agentic.py, or turn the tier off with `"slow_compaction": false`.
+
 ## How to check for a regression
 
 - **Quick check:** `backend/evals/context/compaction_quiz.py` asks questions about a conversation after it is

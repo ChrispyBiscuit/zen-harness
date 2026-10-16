@@ -14,9 +14,9 @@ def test_slow_models_compact_earlier_and_deeper():
     e = engine(num_ctx=61440)
     assert e.context_budget() == 61440 - e.REPLY_RESERVE and e._compact_target() > 30000   # fast: as before
     e._last_tps, e._tps_exact = 15.0, True                                           # a 27B late in a build
-    assert e.context_budget() == 35000 and e._compact_target() == 22000
+    assert e.context_budget() == 42000 and e._compact_target() == 26400
     e._last_tps = 40.0                                           # sticky: one fast stretch doesn't flip it back
-    assert e.context_budget() == 35000
+    assert e.context_budget() == 42000
     small = engine(num_ctx=16384)
     small._last_tps, small._tps_exact = 10.0, True
     assert small.context_budget() == max(int(16384 * 0.75), 16384 - small.REPLY_RESERVE)   # already below 35K
