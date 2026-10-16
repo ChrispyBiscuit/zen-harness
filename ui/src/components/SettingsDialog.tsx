@@ -251,7 +251,7 @@ export function SettingsDialog() {
                     })}
                   </div>
                 </Field>
-                <Field label="Text effects" hint="How a reply looks while it streams in: glyphs decode into words with a chromatic split, and the line glitches now and then. Full is louder; Calm keeps the decode without the glitches; Off shows a plain cursor. Reduced-motion settings always calm it.">
+                <Field label="Text effects" hint="How a reply looks while it streams in: glyphs decode into words with a chromatic split, and each paragraph glitches once as it is finished. Full is louder; Calm keeps the decode without the glitch; Off shows a plain cursor. Reduced-motion settings always calm it.">
                   <div role="radiogroup" aria-label="Text effects" className="inline-flex rounded-lg border border-line-1 bg-surface-1 p-0.5">
                     {TEXT_FX.map((v) => {
                       const on = (draft.ui as any).text_fx === v || (!(draft.ui as any).text_fx && v === storedTextFx())

@@ -401,14 +401,8 @@ select optgroup { color: var(--muted-foreground); font-weight: 600; }
   font-family: var(--font-mono); font-size: 0.92em; user-select: none;
   text-shadow: calc(-1 * var(--ca-x)) 0 var(--ca-r), var(--ca-x) 0 var(--ca-c); }
 
-/* a burst: the tail splits into a red and a cyan copy, each sliced and offset (steps, so it reads as a glitch, not
-   a slide); the block being written jumps sideways with a wider split. Transform, clip-path and text-shadow on a few
-   dozen glyphs and one block for ~150 ms: small, isolated paint. */
-@keyframes zen-glitch-slice {
-  0% { clip-path: inset(10% 0 55% 0); translate: calc(-3 * var(--ca-x)) 0; }
-  50% { clip-path: inset(55% 0 10% 0); translate: calc(3 * var(--ca-x)) 0; }
-  100% { clip-path: inset(0 0 100% 0); translate: 0 0; }
-}
+/* a burst, once per passage as it is finished (Transcript useGlitch): the block jumps sideways with a wide red/cyan
+   split for ~150 ms, in steps so it reads as a glitch, not a slide. Transform and text-shadow on one block. */
 @keyframes zen-glitch-shift {
   0% { translate: calc(-2 * var(--ca-x)) 0;
     text-shadow: calc(-3 * var(--ca-x)) 0 var(--ca-r), calc(3 * var(--ca-x)) 0 var(--ca-c); }
@@ -416,12 +410,7 @@ select optgroup { color: var(--muted-foreground); font-weight: 600; }
     text-shadow: calc(3 * var(--ca-x)) 0 var(--ca-r), calc(-3 * var(--ca-x)) 0 var(--ca-c); }
   100% { translate: 0 0; text-shadow: none; }
 }
-.is-glitching .scramble::before, .is-glitching .scramble::after {
-  content: attr(data-text); position: absolute; inset: 0; pointer-events: none; text-shadow: none;
-  animation: zen-glitch-slice var(--glitch-dur, 150ms) steps(2, end) both; }
-.is-glitching .scramble::before { color: var(--ca-r); }
-.is-glitching .scramble::after { color: var(--ca-c); animation-delay: 30ms; }
-.is-glitching .prose-chat > :last-child { animation: zen-glitch-shift var(--glitch-dur, 150ms) steps(3, end) both; }
+.glitch-block { animation: zen-glitch-shift var(--glitch-dur, 150ms) steps(3, end) both; }
 /* a label decoding in (components/Decode.tsx) wears the same split; a tool card that just failed glitches once */
 .decoding { text-shadow: calc(-1 * var(--ca-x)) 0 var(--ca-r), var(--ca-x) 0 var(--ca-c); }
 :root[data-text-fx="off"] .decoding { text-shadow: none; }
