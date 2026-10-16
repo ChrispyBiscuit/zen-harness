@@ -350,11 +350,18 @@ class Workbook:
             self.save()
             return "Experiment declared. Execute the specified normal tool call, then problem_record its controller evidence ID."
 
-    def before(self, name, args):
+    def before(self, name, args, stamp=None):
+        """stamp: how many times files have been written in this chat (invoke). A write since the loop was detected
+        clears it: the same action is a new observation then."""
         with self.lock:
             self.refresh()
             pending = self.state["pending"]
             signature = digest([name, args])
+            gate = self.state["gate"]
+            if gate and stamp is not None and gate.get("stamp") is not None and stamp != gate["stamp"]:
+                self.event("loop_cleared", reason="files written since the loop was detected")
+                self.state["gate"] = None
+                self.save()
             if pending:
                 if pending["status"] != "ready" or pending["signature"] != signature:
                     raise PolicyError(f"Not run: the pending experiment expects {pending['tool']} with "
@@ -366,10 +373,14 @@ class Workbook:
                 experiment = copy.deepcopy(pending)
                 self.save()
             else:
-                if self.state["gate"]:
-                    raise PolicyError("Not run: this action already gave the same result three times with the same "
-                                      "files. Change one of those files, or declare a different observation with "
-                                      "problem_experiment, or ask_user about the blocker.")
+                # only the action that looped is refused; any other call (another check, a write) goes ahead. It used
+                # to refuse every call, and a 27B building a game was refused 6 times in a row: screenshot, page
+                # JavaScript, devtools, a new tab, even the write_file the refusal told it to make
+                if self.state["gate"] and self.state["gate"]["signature"] == signature:
+                    raise PolicyError(f"Not run: this {name} call already gave the same result three times with "
+                                      "nothing written in between, so it would give the same result again. Change "
+                                      "the code it depends on, check it another way (a different tool or "
+                                      "arguments), or ask_user about the blocker.")
                 paths = []
                 experiment = None
             return {"signature": signature, "before": self.versions(paths), "experiment": experiment}
@@ -392,12 +403,16 @@ class Workbook:
             atomic_save(str(self.folder / (eid + ".json")), observation)
             self.state["evidence"].append(eid)
             recent = self.state["recent"]
-            repeat = {"id": eid, "signature": ticket["signature"], "result": observation["result_hash"], "inputs": after}
+            # stamp: files written in this chat so far. An undeclared call has no input list, so without it an edit
+            # between two identical screenshots didn't count and "screenshot, edit, reload, screenshot" was a loop
+            repeat = {"id": eid, "signature": ticket["signature"], "result": observation["result_hash"], "inputs": after,
+                      "stamp": ticket.get("stamp")}
             recent.append(repeat)
             self.state["recent"] = recent[-12:]
-            matches = [r for r in self.state["recent"] if all(r[k] == repeat[k] for k in ("signature", "result", "inputs"))]
+            matches = [r for r in self.state["recent"]
+                       if all(r.get(k) == repeat[k] for k in ("signature", "result", "inputs", "stamp"))]
             if len(matches) >= 3:
-                self.state["gate"] = {"signature": repeat["signature"], "inputs": after,
+                self.state["gate"] = {"signature": repeat["signature"], "inputs": after, "stamp": ticket.get("stamp"),
                     "evidence": [r["id"] for r in matches], "reason": "Three identical actions/results in the last twelve executed observations"}
                 self.event("loop_detected", evidence=self.state["gate"]["evidence"])
             if ticket["experiment"]:
@@ -607,7 +622,11 @@ def invoke(registry, name, args, execute):
     if not isinstance(args, dict):
         return execute()  # Normal schema validation remains authoritative.
     args = registry.normalize_args(name, args)
-    ticket = workbook.before(name, args)
+    ctx = registry.ctx
+    stamp = getattr(ctx, "_wb_writes", 0)
+    ticket = workbook.before(name, args, stamp)
+    ticket["stamp"] = stamp
+    changed_before = dict(getattr(ctx, "changed", None) or {})
     previous = getattr(_local, "capture", None)
     captured = {"ctx": registry.ctx}
     _local.capture = captured
@@ -617,6 +636,11 @@ def invoke(registry, name, args, execute):
         except Exception as exc:
             eid = workbook.observe(name, args, ticket, str(exc), error=True)
             raise PolicyError(f"{exc}\nController evidence: {eid}") from exc
+        if (registry.get(name) or {}).get("kind") == "write" or dict(getattr(ctx, "changed", None) or {}) != changed_before:
+            try:                                      # a file was written: later calls are new observations
+                ctx._wb_writes = stamp + 1
+            except Exception:
+                pass
         raw = captured.get("result", result[0])
         execution = None
         display = getattr(registry.ctx, "display", None)

@@ -120,7 +120,8 @@ def test_three_identical_results_gate_even_with_unrelated_read(env):
     execute(w)
     assert w.state["gate"]
     with pytest.raises(pw.PolicyError):
-        execute(w, args={"path": "unrelated.txt"})
+        execute(w)                                          # the looping action itself
+    execute(w, "other", args={"path": "unrelated.txt"})     # a different check still runs
     # Rewording the plan or changing only declared inputs cannot evade the gate.
     plan(w)
     with pytest.raises(pw.PolicyError):
@@ -430,3 +431,28 @@ def test_new_tools_round_trip_through_normal_registry(tmp_path, monkeypatch):
     r.call("problem_record", {"action":"accept","target":"sum","evidence":eid,
         "interpretation":"Actual result satisfies the requested sum","next":"Report result"})
     assert not pw.incomplete(c)
+
+
+def test_a_write_between_identical_checks_is_not_a_loop_and_clears_one(env, monkeypatch):
+    # run 51976b81: screenshot, edit, reload, screenshot (the scene still looked the same) tripped the gate, and then
+    # every call was refused — screenshot, page JavaScript, devtools, a new tab, write_file
+    w, r, root = env
+    monkeypatch.setattr(pw, "for_ctx", lambda c: w)
+    kinds = {"browser_screenshot": "read", "browser_eval": "read", "write_file": "write"}
+    monkeypatch.setattr(r, "get", lambda name: {"kind": kinds.get(name, "read")})
+    shot = lambda: pw.invoke(r, "browser_screenshot", {}, lambda: ("browser screenshot 1280x1274", None))
+    write = lambda: pw.invoke(r, "write_file", {"path": "game.html"}, lambda: ("wrote game.html", None))
+    for _ in range(3):
+        shot()
+        write()
+    assert not w.state["gate"]                               # an edit between each: three new observations
+    for _ in range(3):
+        shot()
+    assert w.state["gate"]                                   # nothing written between: a real loop
+    with pytest.raises(pw.PolicyError) as e:
+        shot()
+    assert "browser_screenshot" in str(e.value)
+    pw.invoke(r, "browser_eval", {"expression": "1"}, lambda: ("1", None))   # another check is allowed
+    write()                                                  # and a write clears the loop
+    shot()
+    assert not w.state["gate"]
