@@ -34,6 +34,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("LWS_DATA_DIR", str(data))
     monkeypatch.setattr(updater, "app_dir", lambda: str(app))
     monkeypatch.setattr(updater, "smoke", lambda python: None)
+    monkeypatch.setattr(updater, "_progress", {"steps": {}, "current": None, "started": None})   # per-test progress
     updater.record_install(first)
     return origin, app, first
 
