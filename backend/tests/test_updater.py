@@ -97,3 +97,15 @@ def test_apply_refuses_a_version_that_is_not_staged(env):
     st = updater.check()
     with pytest.raises(updater.UpdateError):
         updater.apply(st["latest"])                                  # never built or tested: not installed
+
+
+def test_installing_by_itself_is_opt_in(env):
+    # checking for updates is on by default; installing without asking is off until the user turns it on
+    data = Path(os.environ["LWS_DATA_DIR"])
+    assert updater.settings()["auto_check"] is True and updater.settings()["auto_install"] is False
+    assert updater.status()["auto_install"] is False
+    s = json.loads((data / "settings.json").read_text())
+    for value, expect in (("yes", False), (1, False), (True, True)):    # only a real true turns it on
+        s["update"]["auto_install"] = value
+        (data / "settings.json").write_text(json.dumps(s))
+        assert updater.settings()["auto_install"] is expect

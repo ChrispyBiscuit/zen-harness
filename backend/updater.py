@@ -137,16 +137,18 @@ def save_state(st):
 
 
 def settings():
-    """Settings > Updates: {"remote", "channel", "auto_check"} (defaults when unset). auto_check (on by default) is
-    'Automatic updates': check in the background and ask (a modal) when a new version is found; nothing installs
-    without the user's yes. Off: no background checks; Settings has Check now."""
+    """Settings > Updates: {"remote", "channel", "auto_check", "auto_install"} (defaults when unset).
+    auto_check (on by default): check in the background and ask (a modal) when a new version is found. Off: no
+    background checks; Settings has Check now.
+    auto_install (off by default, opt-in): install a new version without asking, once no agent run is going and
+    nothing is typed in the message box; the UI gives 15 seconds to cancel first."""
     try:
         with open(paths.data("settings.json"), encoding="utf-8") as f:
             s = (json.load(f).get("update") or {})
     except (OSError, ValueError):
         s = {}
     return {"remote": s.get("remote") or DEFAULT_REMOTE, "channel": s.get("channel") or DEFAULT_CHANNEL,
-            "auto_check": s.get("auto_check", True) is not False}
+            "auto_check": s.get("auto_check", True) is not False, "auto_install": s.get("auto_install") is True}
 
 
 # ---------------------------------------------------------------- git
@@ -218,7 +220,7 @@ def status():
             "applied_at": st.get("applied_at"), "can_rollback": bool(bk and os.path.isdir(bk)),
             "busy": _busy["stage"], "error": st.get("apply_error") or st.get("check_error"),
             "rolled_back": st.get("rolled_back"), "declined": st.get("declined_sha"),
-            "auto": settings()["auto_check"], "progress": progress()}
+            "auto": settings()["auto_check"], "auto_install": settings()["auto_install"], "progress": progress()}
 
 
 # ---------------------------------------------------------------- stage

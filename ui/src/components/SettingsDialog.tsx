@@ -170,7 +170,9 @@ export function SettingsDialog() {
       const { model_overrides: _profiles, ...agent } = draft.agent as Record<string, any>
       await saveSettings({ agent: agent as Settings["agent"], temperature: draft.temperature, num_ctx: draft.num_ctx,
         max_steps: draft.max_steps, system_prompt: draft.system_prompt, ui: draft.ui,
-        ...(draft.headless ? { headless: draft.headless } : {}) })
+        ...(draft.headless ? { headless: draft.headless } : {}),
+        // the Updates switches (it was never sent before: flipping "check for updates" did nothing)
+        ...((draft as any).update ? { update: (draft as any).update } : {}) } as any)
       toast.success("Settings saved", { description: "Changes apply from the next message." })
       set({ settingsOpen: false })
     } catch (e: any) {
@@ -274,8 +276,12 @@ export function SettingsDialog() {
               <Section title="Updates">
                 <Toggle checked={((draft as any).update || {}).auto_check !== false}
                   onChange={(v) => setDraft({ ...draft, update: { ...((draft as any).update || {}), auto_check: v } } as any)}
+                  label="Check for updates"
+                  hint="Looks for a new version when the app starts and while it runs, and asks before installing it. Off: check here when you want to." />
+                <Toggle checked={((draft as any).update || {}).auto_install === true}
+                  onChange={(v) => setDraft({ ...draft, update: { ...((draft as any).update || {}), auto_install: v } } as any)}
                   label="Automatic updates"
-                  hint="Checks for a new version in the background and asks before installing it: nothing is downloaded or installed without your yes. Off: check here when you want to." />
+                  hint="Off by default. On: a new version installs by itself when no agent run is going and nothing is typed in the message box, after a 15-second notice you can cancel. The app restarts its server; chats and settings are kept." />
                 <UpdateStatusLine />
               </Section>
             </TabsContent>

@@ -4,11 +4,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { MeterBar } from "@/components/MeterBar"
+import { toast } from "sonner"
 
 /** Updates from git (backend/updater.py): the app follows its GitHub repo's branch and offers new commits.
- *  - Automatic updates (Settings → General → Updates, on by default): the backend checks in the background and, when
- *    a new version is found, this asks in a modal: Install now, or Not now (not asked again for that version).
- *    Nothing installs without a yes.
+ *  - Checking (Settings → General → Updates, on by default): the backend checks in the background and, when a new
+ *    version is found, this asks in a modal: Install now, or Not now (not asked again for that version).
+ *  - Automatic updates (off by default, opt-in from the modal, the chip or Settings): a new version installs without
+ *    asking once no agent run is going and the message box is empty, after a 15-second notice that can cancel it.
  *  - Installing shows each step (download, UI packages, build, Python packages, test, install) with a progress bar,
  *    then the server restarts (never during a run) and the page reloads itself on the new version.
  *  - The chip in the status bar stays while an update waits, for installing it later or going back a version. */
@@ -19,7 +21,7 @@ type Status = {
   installed?: string; installed_short?: string; latest?: string; latest_short?: string; available?: boolean
   commits?: Commit[]; busy?: string | null; error?: string | null; run_busy?: boolean; can_rollback?: boolean
   last_check?: number; rolled_back?: { from: string; reason: string; at: number } | null
-  declined?: string | null; auto?: boolean
+  declined?: string | null; auto?: boolean; auto_install?: boolean
   progress?: { steps: Step[]; current: string | null; step_started?: number; started?: number; frac?: number | null } | null
 }
 
@@ -28,6 +30,21 @@ const ago = (t?: number) => {
   const s = Date.now() / 1000 - t
   return s < 3600 ? `${Math.max(1, Math.round(s / 60))} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago`
     : `${Math.round(s / 86400)} d ago`
+}
+
+/** Turn automatic installs on or off (settings.update.auto_install; the server merges the update section). */
+export async function setAutoInstall(on: boolean) {
+  await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ update: { auto_install: on } }) })
+  toast.success(on ? "Automatic updates on" : "Automatic updates off", { description: on
+    ? "New versions install by themselves when no run is going. Turn it off here or in Settings → General → Updates."
+    : "New versions are offered, and install only when you say so." })
+}
+
+/** Something typed but not sent: an automatic install restarts the page and would lose it. */
+function unsentText() {
+  const box = document.querySelector<HTMLTextAreaElement>("textarea[placeholder^='Give the agent']")
+  return !!box?.value.trim()
 }
 
 async function post(path: string, body: object = {}) {
@@ -90,14 +107,28 @@ export function UpdateChip() {
     return () => clearInterval(t)
   }, [working])
 
-  // a new version was found and automatic updates are on: ask (once per version; "Not now" remembers it)
+  // automatic updates on: install by itself once no run is going and nothing is typed, after a notice that can cancel
   useEffect(() => {
-    if (st.available && st.auto !== false && st.latest && st.latest !== st.declined && !working && !st.busy
-        && asked.current !== st.latest) {
+    if (!st.auto_install || !st.available || !st.latest || working || st.busy || asked.current === st.latest) return
+    if (st.run_busy || unsentText()) return               // the next status poll (30 s) tries again
+    asked.current = st.latest
+    let cancelled = false
+    const id = toast(`Updating to ${st.latest_short} in 15 seconds`, { duration: 15000,
+      description: "Automatic updates are on. The app restarts its server; chats and settings are kept.",
+      action: { label: "Not now", onClick: () => { cancelled = true } },
+      cancel: { label: "Turn off", onClick: () => { cancelled = true; setAutoInstall(false); setSt((x) => ({ ...x, auto_install: false })) } } })
+    const t = setTimeout(() => { toast.dismiss(id); if (!cancelled && !unsentText()) install("apply") }, 15000)
+    return () => clearTimeout(t)
+  }, [st.auto_install, st.available, st.latest, st.run_busy, working, st.busy])
+
+  // a new version was found and automatic updates are off: ask (once per version; "Not now" remembers it)
+  useEffect(() => {
+    if (st.available && st.auto !== false && !st.auto_install && st.latest && st.latest !== st.declined && !working
+        && !st.busy && asked.current !== st.latest) {
       asked.current = st.latest
       setPrompt(true)
     }
-  }, [st.available, st.auto, st.latest, st.declined, working, st.busy])
+  }, [st.available, st.auto, st.auto_install, st.latest, st.declined, working, st.busy])
 
   const install = async (kind: "apply" | "rollback") => {
     setErr(null); setPrompt(false); setQueued(false)
@@ -146,6 +177,9 @@ export function UpdateChip() {
         {changes}
         {st.run_busy && <div className="text-caption text-muted-foreground">An agent run is going: it can install as soon as the run finishes.</div>}
         <DialogFooter>
+          <Button variant="ghost" className="sm:mr-auto" title="New versions will install by themselves when no run is going"
+            onClick={async () => { await setAutoInstall(true); setSt((x) => ({ ...x, auto_install: true })); if (st.run_busy) { setQueued(true); setPrompt(false) } else install("apply") }}>
+            Enable automatic updates</Button>
           <Button variant="ghost" onClick={notNow}>Not now</Button>
           {st.run_busy
             ? <Button autoFocus onClick={() => { setQueued(true); setPrompt(false) }}>Install after this run</Button>
@@ -225,6 +259,10 @@ export function UpdateChip() {
                 </Button>
               )}
               <div className="flex-1" />
+              <button disabled={!!working} onClick={async () => { const on = !st.auto_install; await setAutoInstall(on); setSt((x) => ({ ...x, auto_install: on })) }}
+                className="text-meta text-muted-foreground hover:text-foreground disabled:opacity-40">
+                {st.auto_install ? "Disable automatic updates" : "Enable automatic updates"}
+              </button>
               <button disabled={!!working} onClick={check} className="text-meta text-muted-foreground hover:text-foreground disabled:opacity-40">
                 Check again
               </button>
