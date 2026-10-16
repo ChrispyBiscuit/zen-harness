@@ -6,9 +6,7 @@ import { deleteWithUndo } from "@/lib/undo"
 import { useApp } from "@/lib/store"
 import type { Thread } from "@/lib/types"
 import { cn } from "@/lib/utils"
-import { Logo } from "./Logo"
 import { Schedules } from "./Schedules"
-import { useWindowDrag } from "./WindowFrame"
 
 function bucket(ts: number) {
   const d = new Date(ts * 1000)
@@ -28,14 +26,9 @@ function ThreadRow({ t, child }: { t: Thread; child?: boolean }) {
   const [editing, setEditing] = useState(false)
   const [title, setTitle] = useState(t.title)
   const active = current === t.id
-  // another chat starts with the same words: show two lines, or the rows look identical once truncated
-  const collides = useApp((s) => {
-    const head = t.title.replace(/^⇢\s*/, "").slice(0, 28).toLowerCase()
-    return head.length >= 20 && s.threads.some((o) => o.id !== t.id && o.title.replace(/^⇢\s*/, "").slice(0, 28).toLowerCase() === head)
-  })
   return (
     <div className={cn("group relative flex min-h-(--row-h) items-center rounded-lg transition-ui", active ? "bg-surface-2 shadow-(--hi)" : "hover:bg-surface-1 active:bg-surface-2", child && "ml-4",
-      t.running && !t.waiting && "zen-shine")}>
+      t.running && !t.waiting && "zen-refract")}>
       {editing ? (
         <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)}
           onBlur={() => { setEditing(false); if (title.trim() && title !== t.title) api.rename(t.id, title.trim()) }}
@@ -44,7 +37,7 @@ function ThreadRow({ t, child }: { t: Thread; child?: boolean }) {
       ) : (
         <button onClick={() => select(t.id)} title={t.title.replace(/^⇢\s*/, "")} className="flex min-w-0 flex-1 items-center gap-2 self-stretch rounded-lg px-2 py-(--row-py) text-left">
           {child && <Workflow className="size-3.5 shrink-0 text-muted-foreground" />}
-          <span className={cn(collides ? "line-clamp-2 break-words" : "truncate", "text-ui", active ? "text-sidebar-accent-foreground" : "text-sidebar-foreground/85")}>
+          <span className={cn("truncate text-ui", active ? "text-sidebar-accent-foreground" : "text-sidebar-foreground/85")}>
             {t.title.replace(/^⇢\s*/, "")}
           </span>
           <span className="ml-auto flex shrink-0 items-center gap-1 pl-1">
@@ -81,7 +74,6 @@ function ThreadRow({ t, child }: { t: Thread; child?: boolean }) {
 }
 
 export function Sidebar() {
-  const drag = useWindowDrag()
   const allThreads = useApp((s) => s.threads)
   const hiddenThreads = useApp((s) => (s as any).hiddenThreads as string[] | undefined)
   const threads = useMemo(() => (hiddenThreads?.length ? allThreads.filter((t) => !hiddenThreads.includes(t.id)) : allThreads),
@@ -110,13 +102,9 @@ export function Sidebar() {
 
   return (
     <aside className="flex h-full w-[264px] shrink-0 flex-col bg-ground">
-      {/* the logo row lines up with the top bar and, in the desktop window, drags the window like it */}
-      {/* the logo alone, centred (the sidebar's toggle lives at the top bar's left edge, mirroring the tray's) */}
-      <div onPointerDown={drag} className="flex h-12 shrink-0 select-none items-center justify-center px-3">
-        <Logo />
-      </div>
-      {/* new chat: a quiet row that matches the chat list, not a boxed button */}
-      <div className="px-2 pb-1 pt-1">
+      {/* the name and ensō live in the title bar above; the sidebar starts with new chat, a quiet row that matches
+          the chat list, not a boxed button */}
+      <div className="px-2 pb-1 pt-2">
         <button onClick={() => select(null)} title="New chat (Ctrl+N)"
           className="group flex min-h-(--row-h) w-full items-center gap-2.5 rounded-lg px-2.5 py-(--row-py) text-left text-ui text-sidebar-foreground/90 transition-ui hover:bg-surface-1 active:bg-surface-2">
           <SquarePen className="size-4 text-muted-foreground transition-ui group-hover:text-foreground" />

@@ -104,21 +104,25 @@ export function ResizeEdges() {
   ))}</>
 }
 
-/** A minimal title bar for the moments before the app's own top bar exists (the "Starting…" screen). */
-export function WindowFrame() {
+/** The window's title bar, full width across the top: the ensō and name at the left, then whatever the app puts
+ *  in it (the chat's title, its buttons), and the window controls at the right end. Empty space drags the window.
+ *  The same bar from the "Starting…" screen to the loaded app, so nothing jumps when the app arrives. */
+export function TitleBar({ children }: { children?: React.ReactNode }) {
   const drag = useWindowDrag()
+  return (
+    <div onPointerDown={drag} role="banner" aria-label="Zen Harness"
+      className={cn("flex h-10 shrink-0 select-none items-center gap-2 border-b border-line-1 bg-ground pl-3", drag ? "pr-0" : "pr-2")}>
+      <LogoMark bold className="size-4 shrink-0" />
+      <span className="label-tech shrink-0 text-faint">Zen Harness</span>
+      {children ?? <div className="h-full flex-1" />}
+      <WindowControls className="ml-1" />
+    </div>
+  )
+}
+
+/** The title bar alone, for the moments before the app exists (the "Starting…" screen); desktop window only. */
+export function WindowFrame() {
   const bridge = useWindowBridge()
   if (!bridge) return null
-  return (
-    <>
-      <div onPointerDown={drag} role="banner" aria-label="Zen Harness window"
-        className="flex h-10 shrink-0 select-none items-center border-b border-line-1 bg-sidebar pl-3">
-        <LogoMark bold className="size-4" />
-        <span className="label-tech ml-2 text-faint">Zen Harness</span>
-        <div className="h-full flex-1" />
-        <WindowControls />
-      </div>
-      <ResizeEdges />
-    </>
-  )
+  return (<><TitleBar /><ResizeEdges /></>)
 }

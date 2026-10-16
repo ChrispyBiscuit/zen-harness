@@ -138,10 +138,10 @@
     /* elevation: 0 app · 1 panels and cards · 2 raised (popovers, hover, active card) · 3 modal */
     /* depth (polish v3): panels float on a darker ground; each raised surface is lit from above (--hi) and the
        panels cast a soft contact + ambient shadow (--lift). Light comes from lightness steps, never glow. */
-    --ground: oklch(0.157 0.003 265);   /* just under the panels (0.168), and less blue: at L 0.14 it read as black */
-    --surface-0: oklch(0.168 0.004 265);
-    --surface-1: oklch(0.198 0.005 265);
-    --surface-2: oklch(0.23 0.006 265);
+    --ground: oklch(0.165 0.003 265);   /* just under the panels, and barely tinted: at L 0.14 it read as black */
+    --surface-0: oklch(0.174 0.004 265);
+    --surface-1: oklch(0.203 0.005 265);
+    --surface-2: oklch(0.234 0.006 265);
     --surface-3: oklch(0.25 0.007 265);
     --hi: inset 0 1px 0 oklch(1 0 0 / 4.5%);
     --lift: 0 1px 2px rgb(0 0 0 / 0.28), 0 8px 24px -14px rgb(0 0 0 / 0.5);
@@ -357,15 +357,12 @@ html.dark { color-scheme: dark; }
 #root::after { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 2000; opacity: 0.025; mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
 
-/* a chat that is running: a soft band of light sweeps across its sidebar row now and then (Sidebar ThreadRow), in
-   place of a spinner. Transform only, on a pseudo-element; reduced motion: a still, faint sheen instead. */
-@keyframes zen-shine { 0% { transform: translateX(-100%); } 55%, 100% { transform: translateX(100%); } }
-.zen-shine { position: relative; overflow: hidden; isolation: isolate; }
-.zen-shine::after { content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
-  background: linear-gradient(100deg, transparent 25%, oklch(1 0 0 / 6%) 45%, oklch(0.93 0.008 85 / 9%) 50%, oklch(1 0 0 / 6%) 55%, transparent 75%);
-  transform: translateX(-100%); animation: zen-shine 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+/* a chat that is running: a soft band sweeps across its sidebar row now and then, and inside it the row bends, splits
+   into a breathing red/green/blue fringe and lifts a touch in light (components/Lens.tsx, one shared SVG filter whose
+   band animates inside it). Reduced motion: a still, faint sheen instead. */
+.zen-refract { filter: url(#zen-refract); clip-path: inset(0 round var(--radius-lg)); }   /* the bend never spills past the row's corners */
 @media (prefers-reduced-motion: reduce) {
-  .zen-shine::after { animation: none; transform: none; background: linear-gradient(90deg, oklch(1 0 0 / 5%), transparent 70%); }
+  .zen-refract { filter: none; background-image: linear-gradient(90deg, oklch(1 0 0 / 5%), transparent 70%); }
 }
 /* scrolling inside a panel, dialog or menu never scrolls what is behind it */
 .dockview-theme-app .dv-content-container, [data-slot="dialog-content"], [data-slot="popover-content"],
