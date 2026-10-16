@@ -138,7 +138,7 @@
     /* elevation: 0 app · 1 panels and cards · 2 raised (popovers, hover, active card) · 3 modal */
     /* depth (polish v3): panels float on a darker ground; each raised surface is lit from above (--hi) and the
        panels cast a soft contact + ambient shadow (--lift). Light comes from lightness steps, never glow. */
-    --ground: oklch(0.142 0.005 265);
+    --ground: oklch(0.157 0.003 265);   /* just under the panels (0.168), and less blue: at L 0.14 it read as black */
     --surface-0: oklch(0.168 0.004 265);
     --surface-1: oklch(0.198 0.005 265);
     --surface-2: oklch(0.23 0.006 265);
