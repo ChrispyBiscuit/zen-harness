@@ -37,7 +37,7 @@ def test_thinking_budget_is_capped_by_time_at_the_measured_speed():
     e = engine(effort="medium")
     e._think_effort = "medium"
     assert e._step_budget(True, 3) == agentic.EFFORT_THINK["medium"]       # no speed measured: tokens only
-    e._last_tps = 16.0                                                      # a 27B late in a build
+    e._last_tps, e._tps_exact = 16.0, True                                                      # a 27B late in a build
     assert e._step_budget(True, 3) == 2 * 16 * 30 and e._think_target == 16 * 30   # told 30 s, cut only at 60 s
     e._fail_streak = 1
     assert e._step_budget(True, 3) == 2 * 16 * 45 and e._think_target == 16 * 45   # debugging: told 45 s, cut at 90 s

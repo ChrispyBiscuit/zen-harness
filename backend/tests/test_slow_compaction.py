@@ -13,19 +13,19 @@ from offline_suite import engine
 def test_slow_models_compact_earlier_and_deeper():
     e = engine(num_ctx=61440)
     assert e.context_budget() == 61440 - e.REPLY_RESERVE and e._compact_target() > 30000   # fast: as before
-    e._last_tps = 15.0                                           # a 27B late in a build
+    e._last_tps, e._tps_exact = 15.0, True                                           # a 27B late in a build
     assert e.context_budget() == 35000 and e._compact_target() == 22000
     e._last_tps = 40.0                                           # sticky: one fast stretch doesn't flip it back
     assert e.context_budget() == 35000
     small = engine(num_ctx=16384)
-    small._last_tps = 10.0
+    small._last_tps, small._tps_exact = 10.0, True
     assert small.context_budget() == max(int(16384 * 0.75), 16384 - small.REPLY_RESERVE)   # already below 35K
 
 
 def test_the_working_set_stays_whole_for_slow_models():
     e = engine(num_ctx=61440)
     assert e._working_set_budget(25000) == int(25000 * e.WS_SHARE)
-    e._last_tps = 15.0
+    e._last_tps, e._tps_exact = 15.0, True
     assert e._working_set_budget(25000) == e.WS_MAX_TOKENS          # 9K, not 4.5K
 
 
@@ -42,3 +42,13 @@ def test_every_older_write_drops_its_text():
         msgs.append({"role": "tool", "tool_call_id": f"r{i}", "content": "ok"})
     args, _ = e._stale_extras(msgs)
     assert "w1" in args and "content_omitted" in args["w1"] and "x = 1" not in args["w1"]
+
+
+def test_the_stream_estimate_alone_never_marks_a_model_slow():
+    # 03:33: chunks over wall time counted 17 tok/s for a 27B the server timed at 30
+    e = engine(num_ctx=61440)
+    e.cfg["backend"] = "llama"
+    e._last_tps = 17.0                       # an estimate, no server timing yet
+    assert not e._slow() and e.context_budget() == 61440 - e.REPLY_RESERVE
+    e._last_tps, e._tps_exact = 29.6, True   # llama.cpp's own figure
+    assert not e._slow()
