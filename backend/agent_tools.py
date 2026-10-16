@@ -39,6 +39,7 @@ MEMORY_FILE = paths.data("agent_memory.md")
 SCREEN_TOOLS = {"screen_size", "list_windows", "screenshot", "mouse_move", "mouse_click", "mouse_drag",
                 "scroll", "type_text", "press_keys", "focus_window"}
 MAX_RESULT = 8000
+WEB_FETCH_CHARS = 7600                # one page shown inline: the room MAX_RESULT leaves after the saved-copy note
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 TRASH = paths.data("agent_trash")
 BACKUPS = os.path.join(TRASH, "backups")       # pre-change copies, used by "Revert" in the chat
@@ -1307,7 +1308,8 @@ def t_web_fetch(a, c):
     url = str(a.get("url", ""))
     if not re.match(r"^https?://", url, re.I):
         raise ToolError("only http(s) URLs can be fetched (or give 'urls': a list)")
-    n = int(a.get("max_chars") or 6000)
+    # up to just under MAX_RESULT: at 6000 a Bonsai build paged through the saved copy three more times (TODO B7)
+    n = int(a.get("max_chars") or WEB_FETCH_CHARS)
     out = webtools.web_fetch(url, n)
     if out.startswith(("(no extractable text", "(could not fetch")):
         # PDFs (and pages trafilatura can't parse): the reader web_search uses handles PDF text too
@@ -1761,19 +1763,37 @@ def parse_progress(text):
 _TESTS_ITEM_RX = re.compile(r"\b(run_tests|tests? (pass|green)|all tests|test suite|suite passes)\b", re.I)
 
 
+_TEST_STEP_RX = re.compile(r"\b(tests?|testing|verify|verification|check(s|ed)?)\b", re.I)
+
+
 def _tick_on_green(c, passed, failed):
-    """A full test run passed and the current checklist item is that the tests pass: mark it done — one less turn
-    of bookkeeping (bonsai8 spent 5 separate turns, ~8 min, on checklist updates)."""
+    """A full test run passed: mark done the checklist items that run is the evidence for — one less turn of
+    bookkeeping each (bonsai8 spent 5 separate turns, ~8 min, on checklist updates). Ticked: the current item when it
+    says the tests pass, and, in the current milestone, every open test/verify subtask when the milestone's done-when
+    is the suite passing. Never real build work: only items whose own text is about tests or checks."""
     if failed or not passed or not getattr(c, "tracker", None):
         return ""
     cur = tracker_current(c.tracker)
-    if not cur or not _TESTS_ITEM_RX.search(str(cur[1])):
+    if not cur:
+        return ""
+    ids = [cur[0]] if _TESTS_ITEM_RX.search(str(cur[1])) else []
+    mi = int(str(cur[0]).split(".")[0]) - 1
+    ms = (c.tracker.get("milestones") or [])
+    m = ms[mi] if 0 <= mi < len(ms) else {}
+    if _TESTS_ITEM_RX.search(str(m.get("done_when") or "")):
+        for j, s in enumerate(m.get("subtasks") or [], 1):
+            sid = f"{mi + 1}.{j}"
+            if s.get("status") not in ("done", "skipped") and sid not in ids and \
+                    (_TESTS_ITEM_RX.search(str(s.get("step"))) or _TEST_STEP_RX.search(str(s.get("step")))):
+                ids.append(sid)
+    if not ids:
         return ""
     try:
-        t_update_tracker({"updates": [{"id": cur[0], "status": "done"}]}, c)
+        t_update_tracker({"updates": [{"id": i, "status": "done"} for i in ids]}, c)
     except Exception:
         return ""
-    return f"\n(Checklist: {cur[0]} \"{str(cur[1])[:70]}\" marked done — this run is its evidence.)"
+    names = "; ".join(f'{i} "{str(next((x[1] for x in tracker_items(c.tracker) if x[0] == i), ""))[:60]}"' for i in ids)
+    return f"\n(Checklist: {names} marked done — this run is the evidence.)"
 
 
 def _module_ledger(c):
@@ -2858,6 +2878,14 @@ def mark_progress(c, name, args, text):
             mark_green(c)
             h["green_partial"] = f"{p} passed, {f} failed"
             _save_filehist(c)
+
+
+_SHELL_TEST_RX = re.compile(r"\b(pytest|unittest|npm(\s+run)?\s+test|node\s+--test|jest|vitest|mocha|go\s+test|"
+                            r"cargo\s+test)\b", re.I)
+RUN_TESTS_HINT = ("\n(Tip: run_tests runs this same suite and adds what a shell run can't: the failures parsed with "
+                  "their file and line, only the failing tests re-run first, a note when a fix breaks something "
+                  "else, and the checklist ticked when the suite passes. Use run_tests(path=<project folder>) for "
+                  "test runs from now on.)")
 
 
 def looks_green(name, args, text):
@@ -4783,6 +4811,11 @@ class Registry:
             cmd_blob = json.dumps(args or {}).lower()
             if name == "run_tests" or (name in ("powershell", "python_host") and re.search(r"test|pytest|unittest", cmd_blob)):
                 p_, f_ = test_counts(str(text))
+                if name != "run_tests" and (p_ or f_) and _SHELL_TEST_RX.search(cmd_blob) and \
+                        not _hist(self.ctx).get("run_tests_hint"):
+                    # once per chat: models ran pytest through powershell and lost what run_tests adds
+                    _hist(self.ctx)["run_tests_hint"] = True
+                    text = str(text) + RUN_TESTS_HINT
                 if (p_ or f_) and not str(text).startswith(SUBSET_HEAD):   # the last FULL run, for the work state
                     import code_insight as ci
                     prev = _hist(self.ctx).get("last_tests")
