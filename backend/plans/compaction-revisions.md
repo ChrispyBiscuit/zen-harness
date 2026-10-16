@@ -73,6 +73,47 @@ times in 30 minutes, every 6 to 7 minutes, and kept losing what it had found.
 **To restore the old behavior:** set `SLOW_COMPACT_AT` and `SLOW_COMPACT_TARGET` back to 35000 / 22000 in
 agentic.py, or turn the tier off with `"slow_compaction": false`.
 
+## Reference result: a bug found under the earlier settings
+
+Keep this as a baseline. If a later compaction change makes the agent worse at this class of problem, this run
+shows it could be done.
+
+**The run:** chat 2405352c, folder `bonsai25`, Ternary Bonsai 27B, thinking off (Effort "minimal"), 2026-10-16.
+
+**The bug:** `client.py` line 39 built every request as `f"http://{base}{path}"`. The end-to-end tests passed a
+full URL (`srv.url`, `"http://127.0.0.1:<port>"`), so the client requested `http://http://127.0.0.1:<port>/...`.
+On Windows that fails with `getaddrinfo failed` (errno 11001), because the host becomes `http`. 10 of 11
+end-to-end tests failed. Only the one that called the server directly passed.
+
+**How it was found:**
+- The first `getaddrinfo` error appeared at 03:54. Until 04:28 the model chased wrong theories: a port race in the
+  test helper, a "sandbox DNS" problem, a leftover server.
+- It found the cause at 04:28:53 without a hint. It reproduced the test flow in a standalone script, saw that the
+  direct call (`srv.get`) worked while `client.ping()` failed, and read the URL the client builds.
+- In its words: "`client.ping()` (which builds `url = f"http://{base}{path}"` from `base=srv.url`) fails with
+  `getaddrinfo failed`."
+- It took about 35 minutes and roughly 20 steps.
+
+**Settings in force when it was found** (live code 13b0691):
+
+| Setting | Value |
+|---|---|
+| Compaction summary | the old narrative prompt (item 4 not yet installed) |
+| Compaction points | the slow tier at 35K down to 22K. The old speed estimate wrongly marked the run as slow (17 tok/s counted, about 30 real), so item 3 was not yet installed and item 5 not yet made. |
+| Compactions | five in 30 minutes, at about 36K each time, down to 22.7K to 25.4K |
+| Old write/edit text | all older writes stripped (item 2) |
+| Tool loading | v1 (before plans/tool-loading-v2.md) |
+| Thinking | off |
+
+**What to watch for in future runs:**
+- **The problem class:** a cross-file mismatch between how a test passes a value (a full URL) and how the code
+  uses it (prefixes a scheme). The symptom points somewhere else entirely, here a network error.
+- **The baseline:** found within about 35 minutes / 20 steps, by making a minimal reproduction, despite compacting
+  every 6 to 7 minutes.
+- **A regression:** the same class taking clearly longer under newer settings, or not being found. The likely
+  signs are a summary that drops the ruled-out theories (so they are chased again), or the standalone
+  reproduction not being tried.
+
 ## How to check for a regression
 
 - **Quick check:** `backend/evals/context/compaction_quiz.py` asks questions about a conversation after it is
