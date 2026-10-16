@@ -114,7 +114,7 @@ export function WindowFrame() {
       <div onPointerDown={drag} role="banner" aria-label="Zen Harness window"
         className="flex h-10 shrink-0 select-none items-center border-b border-line-1 bg-sidebar pl-3">
         <LogoMark bold className="size-4" />
-        <span className="label-tech ml-2 text-muted-foreground/70">Zen Harness</span>
+        <span className="label-tech ml-2 text-faint">Zen Harness</span>
         <div className="h-full flex-1" />
         <WindowControls />
       </div>

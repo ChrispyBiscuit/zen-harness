@@ -4,6 +4,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { useApp } from "@/lib/store"
 import { cn } from "@/lib/utils"
+import { deleteWithUndo } from "@/lib/undo"
 
 /** Scheduled agent tasks, at the bottom of the sidebar: a bottom row (count, show/hide, add, and the sidebar's own
  *  fold button at the right), with the list and the add form opening upward above it. Runs are time-based and
@@ -50,7 +51,8 @@ export function Schedules() {
     const r = await call("POST", "/api/schedules", form)
     if (r.ok) { setAdding(false); setForm({ name: "", prompt: "", when: "weekdays 8am" }); setOpen(true) }
   }
-  const list = items || []
+  const [gone, setGone] = useState<string[]>([])
+  const list = (items || []).filter((s) => !gone.includes(s.id))
   const active = list.filter((s) => s.enabled)
   const soonest = active.reduce<Sched | null>((a, s) => (s.next_run && (!a || (a.next_run ?? Infinity) > s.next_run) ? s : a), null)
   const iconBtn = "grid size-7 place-items-center rounded-md text-muted-foreground transition-ui hover:bg-surface-2 hover:text-foreground"
@@ -92,14 +94,16 @@ export function Schedules() {
                 <div className="truncate text-meta text-muted-foreground" title={s.when}>{s.when.replace(" at ", " ")}</div>
                 <div className="flex min-w-0 items-center gap-2 whitespace-nowrap text-meta">
                   <span className={cn("min-w-0 truncate", s.enabled ? "text-foreground/70" : "text-muted-foreground")}>{s.enabled ? `next ${when(s.next_run)}` : "paused"}</span>
-                  {s.last_conv && <button onClick={() => select(s.last_conv!)} className="shrink-0 text-info hover:underline">{s.runs > 1 ? `${s.runs} runs` : "last run"} ›</button>}
+                  {s.last_conv && <button onClick={() => select(s.last_conv!)} className="shrink-0 text-foreground/90 underline decoration-line-3 underline-offset-2 hover:decoration-current">{s.runs > 1 ? `${s.runs} runs` : "last run"} ›</button>}
                 </div>
               </div>
               {/* actions float over the row on hover/focus, so they take no room from the text */}
               <div className="absolute right-1 top-1 flex rounded-md bg-surface-2 opacity-0 shadow-elev-2 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
                 <button title="Run now" aria-label={`Run ${s.name} now`} onClick={() => call("PUT", `/api/schedules/${s.id}`, { run_now: true }).then((r) => r.conv_id && select(r.conv_id))} className="rounded p-1 text-muted-foreground hover:bg-surface-2 hover:text-foreground"><Zap className="size-3.5" /></button>
                 <button title={s.enabled ? "Pause" : "Resume"} aria-label={s.enabled ? `Pause ${s.name}` : `Resume ${s.name}`} onClick={() => call("PUT", `/api/schedules/${s.id}`, { enabled: !s.enabled })} className="rounded p-1 text-muted-foreground hover:bg-surface-2 hover:text-foreground">{s.enabled ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}</button>
-                <button title="Delete" aria-label={`Delete ${s.name}`} onClick={() => { if (confirm(`Delete the scheduled task “${s.name}”?`)) call("DELETE", `/api/schedules/${s.id}`) }} className="rounded p-1 text-muted-foreground hover:bg-surface-2 hover:text-destructive"><Trash2 className="size-3.5" /></button>
+                <button title="Delete" aria-label={`Delete ${s.name}`} onClick={() => deleteWithUndo({ label: `Deleted the scheduled task “${s.name}”`,
+                  hide: () => setGone((g) => [...g, s.id]), restore: () => setGone((g) => g.filter((x) => x !== s.id)),
+                  commit: () => call("DELETE", `/api/schedules/${s.id}`) })} className="rounded p-1 text-muted-foreground hover:bg-surface-2 hover:text-destructive"><Trash2 className="size-3.5" /></button>
               </div>
             </div>
           ))}
@@ -111,8 +115,8 @@ export function Schedules() {
           className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left transition-ui hover:bg-surface-1">
           <AlarmClock data-tone={active.length ? "info" : "muted"} className="tone-text size-3.5 shrink-0" />
           <span className="label-tech text-muted-foreground">Scheduled</span>
-          {list.length > 0 && <span className="mono text-meta text-muted-foreground/70">{active.length}{active.length !== list.length ? `/${list.length}` : ""}</span>}
-          {!open && soonest && <span className="min-w-0 truncate text-meta text-muted-foreground/70">· {when(soonest.next_run)}</span>}
+          {list.length > 0 && <span className="mono text-meta text-faint">{active.length}{active.length !== list.length ? `/${list.length}` : ""}</span>}
+          {!open && soonest && <span className="min-w-0 truncate text-meta text-faint">· {when(soonest.next_run)}</span>}
           <ChevronUp className={cn("ml-auto size-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
         </button>
         <button onClick={() => { setAdding((a) => !a) }} title="Schedule a task" aria-label="Schedule a task" className={iconBtn}><Plus className="size-4" /></button>

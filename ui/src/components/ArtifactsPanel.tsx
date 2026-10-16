@@ -212,7 +212,7 @@ export function ArtifactsPanel() {
           .filter(Boolean).join(" · ")} in this chat · click to open
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto py-1">
-        {list.length > 0 && files.length > 0 && <div className="label-tech px-3 pb-1 pt-2 text-muted-foreground/60">Artifacts</div>}
+        {list.length > 0 && files.length > 0 && <div className="label-tech px-3 pb-1 pt-2 text-faint">Artifacts</div>}
         {[...list].reverse().map((a) => (
           <button key={a.id} onClick={() => set({ artifactSel: a.id, artifactOpen: a.id } as any)} title={a.title}
             className={cn("flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-surface-2 [&_svg]:size-4",
@@ -222,10 +222,10 @@ export function ArtifactsPanel() {
               <span className="block truncate text-ui text-foreground/90">{a.title}</span>
               <span className="block text-meta text-muted-foreground">{a.atype}{a.language ? ` · ${a.language}` : ""} · v{a.version}</span>
             </span>
-            <Eye className="shrink-0 text-muted-foreground/60" />
+            <Eye className="shrink-0 text-faint" />
           </button>
         ))}
-        {files.length > 0 && <div className="label-tech px-3 pb-1 pt-3 text-muted-foreground/60">Files</div>}
+        {files.length > 0 && <div className="label-tech px-3 pb-1 pt-3 text-faint">Files</div>}
         {[...files].reverse().map((f) => (
           <div key={f.path} className="group flex items-center gap-2.5 px-3 py-1.5 hover:bg-surface-2 [&_svg]:size-4">
             <button onClick={() => openFile(f.path)} title={f.path} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
@@ -238,9 +238,9 @@ export function ArtifactsPanel() {
               </span>
             </button>
             <button onClick={() => api.open(f.path, "default")} title="Open in its default app" aria-label="Open in its default app"
-              className="shrink-0 text-muted-foreground/60 opacity-0 hover:text-foreground group-hover:opacity-100"><ExternalLink /></button>
+              className="shrink-0 text-faint opacity-0 hover:text-foreground group-hover:opacity-100"><ExternalLink /></button>
             <button onClick={() => api.open(f.path, "reveal")} title="Show in Explorer" aria-label="Show in Explorer"
-              className="shrink-0 text-muted-foreground/60 opacity-0 hover:text-foreground group-hover:opacity-100"><FolderOpen /></button>
+              className="shrink-0 text-faint opacity-0 hover:text-foreground group-hover:opacity-100"><FolderOpen /></button>
           </div>
         ))}
       </div>

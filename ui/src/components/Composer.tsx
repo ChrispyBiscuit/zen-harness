@@ -257,7 +257,7 @@ export function Composer() {
           rows={1}
           placeholder={running ? (mode === "agent" ? "Add a message for the agent — it reads it at the next step" : "Waiting for the reply…")
             : mode === "agent" ? "Give the agent a task…  (type / for commands)" : mode === "speech" ? "Ask out loud… (answers are verified with search and read aloud)" : "Ask anything…"}
-          className="block max-h-[260px] w-full resize-none bg-transparent px-4 pb-2 pt-3.5 text-chat leading-relaxed outline-none placeholder:text-muted-foreground/70"
+          className="block max-h-[260px] w-full resize-none bg-transparent px-4 pb-2 pt-3.5 text-chat leading-relaxed outline-none placeholder:text-faint"
         />
         <div className="@container flex items-center gap-1 px-2 pb-2">
           <input ref={fileInput} type="file" multiple className="hidden" onChange={(e) => { addFiles(Array.from(e.target.files || [])); e.target.value = "" }} />
@@ -371,7 +371,7 @@ export function Composer() {
             </select>
           )}
           </div>
-          <span className="mr-2 hidden whitespace-nowrap label-tech text-muted-foreground/50 @[720px]:inline">{running ? "" : "Enter ↵ send · Shift+Enter newline"}</span>
+          <span className="mr-2 hidden whitespace-nowrap label-tech text-faint @[720px]:inline">{running ? "" : "Enter ↵ send · Shift+Enter newline"}</span>
           {running && (
             <Button size="icon-sm" variant="secondary" onClick={() => current && api.stop(current)} title="Stop" aria-label="Stop">
               <Square className="size-3.5 fill-current" />

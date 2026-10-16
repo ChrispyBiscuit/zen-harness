@@ -4,6 +4,7 @@ import { speaker } from "@/lib/tts"
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { ArrowDown, BookOpen, Lightbulb, CheckCircle2, ChevronRight, CircleDot, Loader2, ShieldAlert, XCircle, Compass, FileSpreadsheet, FileText, Image as ImageIcon, Presentation, Paperclip, ScanSearch, ShieldCheck } from "lucide-react"
 import { Markdown, SCR_CLOSE, SCR_OPEN } from "./Markdown"
+import { textFx } from "@/lib/textfx"
 import { ChangesCard, CompactedDivider, TaskDoneCard, ToolCard } from "./cards/ToolCards"
 import { useApp } from "@/lib/store"
 import { InkRing } from "./Logo"
@@ -44,7 +45,7 @@ function TurnTime({ t }: { t?: number }) {
   if (!t) return null // exact times were not recorded for older assistant messages
   const date = new Date(t * 1000)
   return <time dateTime={date.toISOString()} title={date.toLocaleString()}
-    className="text-meta text-muted-foreground/80">
+    className="text-meta text-faint">
     {date.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
   </time>
 }
@@ -138,7 +139,7 @@ function InterpretationCard({ msg, k }: { msg: Msg; k: string }) {
   return (
     <div className="overflow-hidden rounded-card border border-line-1 bg-surface-1">
       <button onClick={() => toggle(k)} className="flex w-full items-center gap-2 min-h-9 px-(--card-px) py-(--card-py) transition-ui hover:bg-surface-2 active:bg-surface-3 text-left text-ui">
-        <ScanSearch className="size-4 shrink-0 text-info" />
+        <ScanSearch className="size-4 shrink-0 text-muted-foreground" />
         <span className="shrink-0 font-medium">Understood as</span>
         {!open && <span className="min-w-0 flex-1 truncate text-caption text-muted-foreground">{msg.content}</span>}
         {m.ask && <span data-tone="warning" className="tone-soft tone-text shrink-0 rounded-full px-2 py-0.5 label-tech">asks first</span>}
@@ -153,7 +154,7 @@ function InterpretationCard({ msg, k }: { msg: Msg; k: string }) {
               <span className="min-w-0">{v}</span>
             </div>
           ))}
-          {m.seconds != null && <div className="pt-1 label-tech text-muted-foreground/60">{m.seconds}s</div>}
+          {m.seconds != null && <div className="pt-1 label-tech text-faint">{m.seconds}s</div>}
         </div>
       )}
     </div>
@@ -168,12 +169,12 @@ function PlanCard({ msg, k }: { msg: Msg; k: string }) {
   return (
     <div className="overflow-hidden rounded-card border border-line-1 bg-surface-1">
       <button onClick={() => toggle(k)} className="flex w-full items-center gap-2 min-h-9 px-(--card-px) py-(--card-py) transition-ui hover:bg-surface-2 active:bg-surface-3 text-left text-ui">
-        <Compass className={cn("size-4 text-info", msg.streaming && "animate-pulse")} />
+        <Compass className={cn("size-4", msg.streaming ? "animate-pulse text-info" : "text-muted-foreground")} />
         <span className={cn("font-medium", msg.streaming && "shimmer-text")}>{msg.streaming ? "Planning the approach" : "Approach"}</span>
         <span className="text-caption text-muted-foreground">
           {msg.streaming ? `up to ${((msg.budget || 0) / 1000).toFixed(0)}k tokens` : `${msg.tokens ?? "?"} tokens · ${Math.round(msg.seconds || 0)}s`}
         </span>
-        {tail && !show && <span className="min-w-0 flex-1 truncate text-caption text-muted-foreground/70">{tail}</span>}
+        {tail && !show && <span className="min-w-0 flex-1 truncate text-caption text-faint">{tail}</span>}
         <ChevronRight className={cn("ml-auto size-3.5 text-muted-foreground transition-transform", show && "rotate-90")} />
       </button>
       {show && (
@@ -195,7 +196,7 @@ function Stats({ s }: { s: TurnStats }) {
   if (s.compactions) parts.push(`compressed ×${s.compactions}`)
   if (s.failed_calls) parts.push(`${s.failed_calls} failed`)
   if (s.advisor_cost) parts.push(`advisor $${s.advisor_cost.toFixed(3)}`)
-  return <div className="mt-2 text-caption text-muted-foreground/70">{parts.join(" · ")}</div>
+  return <div className="mt-2 text-caption text-faint">{parts.join(" · ")}</div>
 }
 
 // glyphs for the decode effect: no markdown syntax characters, so the scramble never turns into formatting
@@ -269,18 +270,48 @@ function useTypewriter(text: string, live: boolean) {
   // the next few characters show as cycling glyphs and lock into place as the cursor reaches them; while the
   // model is still producing and the display has caught up, a few glyphs keep flickering at the edge
   let tail = ""
-  if (typing && shown.length === n) {
+  if (typing && shown.length === n && textFx() !== "off") {
     const ahead = text.slice(n, n + SCRAMBLE_LEN).split("\n")[0]
     tail = scramble(ahead)                                   // only real, not-yet-shown characters
   }
   return { shown, typing, tail }
 }
 
+/** Glitch bursts while a reply resolves (index.css .is-glitching): every second or two the decode tail slices into
+ *  red/cyan copies and the line being written jumps a pixel or two, then snaps back; one last burst locks the reply
+ *  in when it finishes. A class toggled on the message element through its ref, never React state, so a burst costs
+ *  no re-render. Calm/Off, reduced motion or a hidden window: no bursts. */
+function useGlitch(ref: React.RefObject<HTMLDivElement | null>, typing: boolean) {
+  const was = useRef(false)
+  useEffect(() => {
+    const fx = textFx()
+    const el = ref.current
+    if (!el || REDUCED_MOTION || fx === "off" || fx === "calm") return
+    const ms = fx === "full" ? 180 : 150
+    const burst = () => {
+      el.style.setProperty("--glitch-dur", `${ms}ms`)
+      el.classList.add("is-glitching")
+      window.setTimeout(() => el.classList.remove("is-glitching"), ms + 40)
+    }
+    if (!typing) {                                           // finished: one burst locks it in
+      if (was.current) burst()
+      was.current = false
+      return
+    }
+    was.current = true
+    const [lo, hi] = fx === "full" ? [600, 1800] : [900, 2600]
+    let timer = 0
+    const next = () => { timer = window.setTimeout(() => { if (!document.hidden) burst(); next() }, lo + Math.random() * (hi - lo)) }
+    next()
+    return () => window.clearTimeout(timer)
+  }, [typing, ref])
+}
+
 function SpeakButton({ k, text }: { k: string; text: string }) {
   const speaking = useApp((s) => (s as any).speaking === k)
   return (
     <button onClick={() => (speaking ? speaker.stop() : speaker.feed(k, text, true))} title={speaking ? "Stop reading" : "Read aloud"}
-      className={cn("rounded p-1 text-muted-foreground/70 hover:bg-surface-2 hover:text-foreground", speaking && "text-info")}>
+      className={cn("rounded p-1 text-faint hover:bg-surface-2 hover:text-foreground", speaking && "text-info")}>
       {speaking ? <VolumeX className="size-3.5" /> : <Volume2 className="size-3.5" />}
     </button>
   )
@@ -293,6 +324,8 @@ const AssistantMessage = memo(function AssistantMessage({ msg, k, variant = "ans
 }) {
   const narration = variant === "narration"
   const { shown, typing, tail } = useTypewriter(msg.content || "", !!msg.streaming)
+  const body = useRef<HTMLDivElement>(null)
+  useGlitch(body, typing && !!msg.content)
   // read aloud as the reply arrives (only replies that were live when they appeared, never old ones)
   const autoRead = useApp((s) => !!(s.settings?.ui as any)?.tts_auto || (s.current ? (s.convs[s.current] as any)?.mode === "speech" : false))
   const wasLive = useRef(!!msg.streaming)
@@ -305,7 +338,7 @@ const AssistantMessage = memo(function AssistantMessage({ msg, k, variant = "ans
       {msg.thinking ? <Thinking text={msg.thinking} live={msg.streaming && !msg.content} k={`${k}:think`} /> : null}
       {!narration && msg.images?.length && (msg.content || !msg.streaming) ? <ImageCarousel images={msg.images} /> : null}
       {msg.content ? (
-        <div className={cn(msg.error && "text-destructive", typing && "typing")}>
+        <div ref={body} className={cn(msg.error && "text-destructive", typing && "typing")}>
           <Markdown text={tail ? shown + SCR_OPEN + tail + SCR_CLOSE : shown} />
         </div>
       ) : null}
@@ -342,7 +375,7 @@ function Item({ msg, conv, index, variant, hideStats }: {
       return (
         <button onClick={() => useApp.getState().set({ settingsOpen: true, settingsTab: "memory" } as any)}
           className="flex w-full items-center gap-2 rounded-card border border-line-1 bg-surface-1 min-h-9 px-(--card-px) py-(--card-py) transition-ui hover:bg-surface-2 active:bg-surface-3 text-left text-caption">
-          <BookOpen className="size-4 shrink-0 text-info" />
+          <BookOpen className="size-4 shrink-0 text-muted-foreground" />
           <span className="truncate"><span className="text-muted-foreground">Playbook:</span> {msg.content}
             {(msg as any).also?.length ? <span className="text-muted-foreground"> + {(msg as any).also.join(", ")}</span> : null}</span>
           {(msg as any).notes > 0 && <span className="ml-auto shrink-0 text-meta text-muted-foreground">{(msg as any).notes} lesson{(msg as any).notes === 1 ? "" : "s"} from earlier runs</span>}

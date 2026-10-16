@@ -140,7 +140,7 @@ export function Clip() {
           <p className="mt-1 text-caption text-muted-foreground">— {say.by}</p>
           {tipList.length > 0 && (
             <div className="mt-2.5 space-y-1">
-              <div className="label-tech text-muted-foreground/60">Try asking</div>
+              <div className="label-tech text-faint">Try asking</div>
               {tipList.map((t) => (
                 <button key={t} onClick={() => { fillComposer(t); setSay(null) }}
                   className="group flex w-full items-start gap-1.5 rounded-chip border border-line-1 bg-surface-1 px-2 py-1.5 text-left text-caption text-foreground/90 transition-ui hover:border-line-3 hover:bg-surface-3">

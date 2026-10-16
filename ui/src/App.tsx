@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, useMemo } from "react"
 import { BookOpen, CircleHelp, Cpu, Info, LayoutGrid, PanelLeftOpen, Plug, Scale, Settings2, WifiOff } from "lucide-react"
 import { filesIn } from "@/components/ArtifactsPanel"
 import { latestChecklist } from "@/components/Checklist"
@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils"
 import { MeterBar } from "@/components/MeterBar"
 import { levelTone, type Tone } from "@/lib/tone"
 import { applyDensity, storedDensity, type Density } from "@/lib/density"
+import { applyTextFx, storedTextFx, TEXT_FX, type TextFx } from "@/lib/textfx"
 
 function useTick(on: boolean) {
   const [, set] = useState(0)
@@ -38,7 +39,7 @@ function fmtElapsed(sec: number) {
 function Meter({ label, pct, text, title }: { label: string; pct?: number; text: string; title?: string }) {
   return (
     <div className="flex items-center gap-1.5 whitespace-nowrap" title={title}>
-      <span className="label-tech text-muted-foreground/60">{label}</span>
+      <span className="label-tech text-faint">{label}</span>
       {pct != null && <MeterBar pct={pct} tone={levelTone(pct)} label={label} className="w-10" />}
       <span className="mono tabular-nums text-foreground/80">{text}</span>
     </div>
@@ -133,15 +134,67 @@ function StatusBar() {
       )}
       {!connected && <span className="flex items-center gap-1 text-destructive"><WifiOff className="size-3" /> reconnecting</span>}
       <span className="flex min-w-0 items-center gap-2" title="Model · context window · how full this chat's context is">
-        <Cpu className="size-3.5 shrink-0 text-muted-foreground/70" />
+        <Cpu className="size-3.5 shrink-0 text-faint" />
         <span className="mono hidden min-w-0 truncate text-foreground/80 @xl:inline">{model}</span>
-        {mode !== "chat" && a && <span className="mono shrink-0 text-muted-foreground/60">{Math.round(configuredCtx(a) / 1024)}k</span>}
+        {mode !== "chat" && a && <span className="mono shrink-0 text-faint">{Math.round(configuredCtx(a) / 1024)}k</span>}
         <ContextGauge />
       </span>
       <div className="flex-1" />
       <div className="hidden @2xl:flex"><Monitor /></div>
     </footer>
   )
+}
+
+const SIDE_W = 264
+const REDUCED_MOTION = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+
+/** The sidebar slides in and out (Ctrl+B or the buttons) and the main column glides with it. Web Animations, not
+ *  keyframe classes, so a toggle mid-slide turns around from where things are on screen instead of restarting:
+ *  each new slide starts from the live (presentation) offset and takes the share of the time that is left. Opening
+ *  docks the sidebar at once (the main column starts shifted back by its width); closing lifts it out of the flow
+ *  (absolute) so the main column widens at once and glides back. Reduced motion: a short fade. */
+function useSidebarSlide(open: boolean) {
+  const sideRef = useRef<HTMLDivElement>(null)
+  const mainRef = useRef<HTMLElement>(null)
+  const [mounted, setMounted] = useState(open)
+  if (open && !mounted) setMounted(true)                    // mount in the same render that opens it
+  const was = useRef(open)
+  const wasMounted = useRef(open)
+  const anims = useRef<Animation[]>([])
+  useLayoutEffect(() => {
+    const before = was.current, beforeMounted = wasMounted.current
+    was.current = open
+    wasMounted.current = mounted
+    if (before === open) return
+    const s = sideRef.current, m = mainRef.current
+    const tx = (el: Element | null) => (el ? new DOMMatrixReadOnly(getComputedStyle(el).transform).m41 : 0)
+    // where things are on screen right now (a running slide included), read before cancelling it
+    const sx = s && beforeMounted ? tx(s) : -SIDE_W
+    const sOpacity = s && beforeMounted ? +getComputedStyle(s).opacity : 0.4
+    const mx = tx(m)
+    for (const a of anims.current) a.cancel()
+    anims.current = []
+    if (!s || !m || !s.animate) { if (!open) setMounted(false); return }
+    if (REDUCED_MOTION) {
+      const a = s.animate([{ opacity: open ? 0 : 1 }, { opacity: open ? 1 : 0 }], { duration: 150, fill: "forwards" })
+      a.onfinish = () => { if (!open) setMounted(false); else a.cancel() }
+      anims.current = [a]
+      return
+    }
+    const target = open ? 0 : -SIDE_W
+    const share = Math.min(1, Math.max(0.3, Math.abs(target - sx) / SIDE_W))
+    const timing: KeyframeAnimationOptions = open
+      ? { duration: 320 * share, easing: "cubic-bezier(0.32, 0.72, 0, 1)" }       // --ease-spring, --dur-slow
+      : { duration: 220 * share, easing: "cubic-bezier(0.23, 1, 0.32, 1)" }       // --ease-out, a quicker exit
+    // the main column's layout jumped by the sidebar's width; start it where it was drawn
+    const mStart = (before ? SIDE_W : 0) + mx - (open ? SIDE_W : 0)
+    const am = m.animate([{ transform: `translateX(${mStart}px)` }, { transform: "none" }], timing)
+    const as = s.animate([{ transform: `translateX(${sx}px)`, opacity: sOpacity },
+      { transform: `translateX(${target}px)`, opacity: open ? 1 : 0.2 }], { ...timing, fill: "forwards" })
+    as.onfinish = () => { if (!open) setMounted(false); else as.cancel() }       // at rest: no fill left behind
+    anims.current = [am, as]
+  }, [open, mounted])
+  return { sideRef, mainRef, sideMounted: mounted }
 }
 
 function TopBar() {
@@ -182,13 +235,7 @@ export default function App() {
   const current = useApp((s) => s.current)
   const conv = useApp((s) => (s.current ? s.convs[s.current] : null))
   const sidebarOpen = useApp((s) => s.sidebarOpen)
-  // the sidebar slides in and out; "open"/"closed" are at rest, "opening"/"closing" animate (index.css)
-  const [side, setSide] = useState<"open" | "opening" | "closing" | "closed">(sidebarOpen ? "open" : "closed")
-  const firstSide = useRef(true)
-  useEffect(() => {
-    if (firstSide.current) { firstSide.current = false; return }
-    setSide(sidebarOpen ? "opening" : "closing")
-  }, [sidebarOpen])
+  const { sideRef, mainRef, sideMounted } = useSidebarSlide(sidebarOpen)
   const panelOpen = useApp((s) => s.panel.open)
   const hasChecklist = useApp((s) => !!(s.current && s.convs[s.current] && latestChecklist(s.convs[s.current].messages)))
   const autoOpened = useRef(new Set<string>())
@@ -243,10 +290,13 @@ export default function App() {
   useEffect(() => {
     document.documentElement.classList.add("dark")
     applyDensity(storedDensity())
+    applyTextFx(storedTextFx())
     init()
   }, [init])
   const density = useApp((s) => (s.settings?.ui as any)?.density as Density | undefined)
   useEffect(() => { if (density) applyDensity(density) }, [density])
+  const textFx = useApp((s) => (s.settings?.ui as any)?.text_fx as TextFx | undefined)
+  useEffect(() => { if (textFx && TEXT_FX.includes(textFx)) applyTextFx(textFx) }, [textFx])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.altKey && !e.shiftKey && e.key.toLowerCase() === "b") { e.preventDefault(); toggleTray(); return }
@@ -275,15 +325,12 @@ export default function App() {
       <div className="flex h-full flex-col overflow-hidden bg-background text-foreground">
         <ResizeEdges />
         <div className="relative flex min-h-0 flex-1 overflow-hidden">
-          {side !== "closed" && (
-            <div className={cn("h-full shrink-0", side === "closing" && "absolute inset-y-0 left-0 z-30",
-              side === "opening" && "zen-side-in", side === "closing" && "zen-side-out")}
-              onAnimationEnd={(e) => { if (e.target === e.currentTarget) setSide(side === "closing" ? "closed" : "open") }}>
+          {sideMounted && (
+            <div ref={sideRef} className={cn("h-full shrink-0", !sidebarOpen && "absolute inset-y-0 left-0 z-30")}>
               <Sidebar />
             </div>
           )}
-          <main className={cn("flex h-full min-w-0 flex-1 flex-col",
-              side === "opening" && "zen-main-from-left", side === "closing" && "zen-main-from-right")}>
+          <main ref={mainRef} className="flex h-full min-w-0 flex-1 flex-col">
             <TopBar />
             <Workspace />
           </main>

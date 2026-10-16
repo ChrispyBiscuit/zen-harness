@@ -66,7 +66,7 @@ function Elapsed() {
 function Took({ className }: { className?: string }) {
   const t = useContext(ToolTimeCtx)
   return !t.live && t.done != null && t.done >= 1
-    ? <span className={cn("mono shrink-0 text-meta tabular-nums text-muted-foreground/60", className)} title="How long this step took">{fmtSecs(t.done)}</span>
+    ? <span className={cn("mono shrink-0 text-meta tabular-nums text-faint", className)} title="How long this step took">{fmtSecs(t.done)}</span>
     : null
 }
 
@@ -126,7 +126,7 @@ function PathLink({ path, label }: { path: string; label?: string }) {
   const openFile = useApp((s) => s.openFile)
   return (
     <button onClick={() => openFile(path)} title={path}
-      className="mono truncate text-caption text-info hover:underline">
+      className="mono truncate text-caption text-foreground/90 hover:underline">
       {label ?? basename(path)}
     </button>
   )
@@ -188,8 +188,8 @@ function WebHitsCard({ d, k }: { d: Display; k: string }) {
   const host = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, "") } catch { return u } }
   const item = (h: any, read: boolean) => (
     <a key={h.url} href={h.url} target="_blank" rel="noreferrer" className="block px-(--card-px) py-1.5 hover:bg-surface-2">
-      <div className={cn("truncate text-caption", read ? "text-info" : "text-muted-foreground")}>{h.title || h.url}</div>
-      <div className="truncate text-caption text-muted-foreground/70">{host(h.url)}</div>
+      <div className={cn("truncate text-caption", read ? "text-foreground/90" : "text-muted-foreground")}>{h.title || h.url}</div>
+      <div className="truncate text-caption text-faint">{host(h.url)}</div>
     </a>)
   const queries: string[] = (d as any).queries || []
   const verb = queries.length ? "Searched the web" : "Read web pages"
@@ -208,7 +208,7 @@ function WebHitsCard({ d, k }: { d: Display; k: string }) {
       {open && (
         <div className="divide-y divide-line-1 border-t border-line-1">
           {pages.map((h) => item(h, true))}
-          {links.length > 0 && pages.length > 0 && <div className="px-(--card-px) pt-1.5 text-meta uppercase tracking-wide text-muted-foreground/60">also found</div>}
+          {links.length > 0 && pages.length > 0 && <div className="px-(--card-px) pt-1.5 text-meta uppercase tracking-wide text-faint">also found</div>}
           {links.slice(0, pages.length ? 4 : 10).map((h) => item(h, false))}
         </div>
       )}
@@ -248,14 +248,14 @@ function TerminalCard({ tool, d, k }: { tool: Tool; d: Display; k: string }) {
           </div>
         ))}
         {!expanded && lines.length > LIMIT && (
-          <button onClick={() => toggle(k)} className="my-1 text-caption text-info hover:underline">
+          <button onClick={() => toggle(k)} className="my-1 text-caption text-muted-foreground hover:text-foreground">
             Show {lines.length - LIMIT} earlier lines
           </button>
         )}
         {shown.length > 0 && <pre className="mt-1 whitespace-pre-wrap break-all text-foreground/75">{shown.join("\n")}</pre>}
         {!out && tool.result != null && d.exit != null && <div className="mt-1 text-muted-foreground">(no output)</div>}
         {expanded && lines.length > LIMIT && (
-          <button onClick={() => toggle(k)} className="mt-1 text-caption text-info hover:underline">Collapse</button>
+          <button onClick={() => toggle(k)} className="mt-1 text-caption text-muted-foreground hover:text-foreground">Collapse</button>
         )}
       </div>
     </CardShell>
@@ -319,7 +319,7 @@ function DiffCard({ tool, d, k, convId, index }: { tool: Tool; d: Display; k: st
           {shown.map((r, i) => (
             <div key={i} className={cn("flex min-w-max",
               r.kind === "add" && "bg-success/[0.10]", r.kind === "del" && "bg-destructive/[0.10]",
-              r.kind === "hunk" && "text-muted-foreground/70")}>
+              r.kind === "hunk" && "text-faint")}>
               <span className="w-10 shrink-0 select-none pr-2 text-right text-muted-foreground/40">{r.kind === "hunk" ? "" : r.a ?? ""}</span>
               <span className="w-10 shrink-0 select-none pr-2 text-right text-muted-foreground/40">{r.kind === "hunk" ? "" : r.b ?? ""}</span>
               <span className={cn("w-4 shrink-0 select-none",
@@ -331,7 +331,7 @@ function DiffCard({ tool, d, k, convId, index }: { tool: Tool; d: Display; k: st
             </div>
           ))}
           {rows.length > LIMIT && (
-            <button onClick={() => toggle(k)} className="px-3 py-1 text-caption text-info hover:underline">
+            <button onClick={() => toggle(k)} className="px-3 py-1 text-caption text-muted-foreground hover:text-foreground">
               {expanded ? "Collapse" : `Show all ${rows.length} lines`}
             </button>
           )}
@@ -490,7 +490,7 @@ function PythonCard({ tool, d, k }: { tool: Tool; d: Display; k: string }) {
         {files.length > 0 && (
           <div className="flex flex-wrap gap-1.5 border-t border-line-1 px-2 py-1.5 text-caption">
             {files.slice(0, 12).map((p) => (
-              <button key={p} onClick={() => openFile(p)} className="rounded-chip border border-line-1 px-2 py-0.5 text-info hover:bg-surface-2"><FileText className="mr-1 inline size-3" />{basename(p)}</button>
+              <button key={p} onClick={() => openFile(p)} className="rounded-chip border border-line-1 px-2 py-0.5 text-foreground/90 hover:bg-surface-2"><FileText className="mr-1 inline size-3" />{basename(p)}</button>
             ))}
           </div>
         )}
@@ -498,7 +498,7 @@ function PythonCard({ tool, d, k }: { tool: Tool; d: Display; k: string }) {
       </>}
       title={<span className="flex min-w-0 items-center gap-2"><span className="shrink-0 font-medium">Python</span>
         <span className="shrink-0 text-caption text-muted-foreground">{d.sandbox ? "sandbox" : "on this PC"}</span>
-        <span className="mono truncate text-caption text-muted-foreground/80">{codeLines.find((l) => l.trim() && !l.trim().startsWith("#")) || ""}</span></span>}
+        <span className="mono truncate text-caption text-faint">{codeLines.find((l) => l.trim() && !l.trim().startsWith("#")) || ""}</span></span>}
       right={<div className="flex items-center gap-1">{out && <CopyButton text={out} />}{status}</div>}>
       <div ref={ref} className="mono max-h-[460px] overflow-auto border-t border-line-1 bg-code px-(--card-px) py-2.5 text-caption leading-[1.55]">
         {shownCode.map((line, i) => (
@@ -508,7 +508,7 @@ function PythonCard({ tool, d, k }: { tool: Tool; d: Display; k: string }) {
           </div>
         ))}
         {codeLines.length > CODE_LIMIT && (
-          <button onClick={() => toggle(k)} className="my-1 text-caption text-info hover:underline">
+          <button onClick={() => toggle(k)} className="my-1 text-caption text-muted-foreground hover:text-foreground">
             {expanded ? "Collapse code" : `… ${codeLines.length - CODE_LIMIT} more lines of code`}
           </button>
         )}
@@ -609,7 +609,7 @@ function ToolCardInner({ msg, convId, index }: { msg: Msg; convId: string; index
           <div className="min-w-0 flex-1 truncate">
             <span className="text-foreground/85">{verb[d.action] || d.action}</span>{" "}
             <span className="mono text-caption">{d.detail}</span>
-            {d.title && <span className="text-muted-foreground/70"> · {d.title}</span>}
+            {d.title && <span className="text-faint"> · {d.title}</span>}
           </div>
           {d.shot && <img src={rawUrl(d.shot)} className="h-9 w-14 shrink-0 rounded border border-border object-cover object-top" />}
         </div>
@@ -630,12 +630,12 @@ function ToolCardInner({ msg, convId, index }: { msg: Msg; convId: string; index
     case "file":
       if (tool.ok !== false)
         return <Row icon={<FileText />} onClick={() => openFile(d.path)} right={<span className="text-caption">lines {d.start}–{d.end} of {d.total}</span>}>
-          Read <span className="mono text-caption text-info">{basename(d.path)}</span></Row>
+          Read <span className="mono text-caption text-foreground/90">{basename(d.path)}</span></Row>
       break
     case "document":
       return <Row icon={<FileText />} onClick={() => openFile(d.path)}
         right={<span className="text-caption">{d.unit === "page" || d.unit === "slide" ? `${d.unit}s ${d.first}–${d.last} of ${d.total}` : d.kind}</span>}>
-        Read document <span className="mono text-caption text-info">{basename(d.path)}</span></Row>
+        Read document <span className="mono text-caption text-foreground/90">{basename(d.path)}</span></Row>
     case "image":
       return (
         <div className="flex items-start gap-3 rounded-card border border-line-1 bg-surface-1 p-2">
@@ -715,7 +715,7 @@ function ToolCardInner({ msg, convId, index }: { msg: Msg; convId: string; index
           <div className="divide-y divide-line-1">
             {(d.hits || []).map((h: any) => (
               <button key={h.path} onClick={() => openFile(h.path)} className="block w-full px-3 py-1.5 text-left hover:bg-surface-2">
-                <div className="truncate text-caption text-info">{basename(h.path)} <span className="text-muted-foreground/60">{dirname(h.path)}</span></div>
+                <div className="truncate text-caption text-foreground/90">{basename(h.path)} <span className="text-faint">{dirname(h.path)}</span></div>
                 <div className="line-clamp-2 text-caption text-muted-foreground">{h.snippet}</div>
               </button>
             ))}
@@ -727,7 +727,7 @@ function ToolCardInner({ msg, convId, index }: { msg: Msg; convId: string; index
       return (
         <div onClick={() => openFile(d.path)}
           className="flex cursor-pointer items-center gap-2.5 rounded-card border border-line-1 bg-surface-1 px-3 py-2 text-ui hover:bg-surface-2">
-          <span className="text-info [&_svg]:size-4"><FileText /></span>
+          <span className="text-muted-foreground [&_svg]:size-4"><FileText /></span>
           <div className="min-w-0 flex-1">
             <div className="truncate font-medium text-foreground/90">{basename(d.path)}</div>
             <div className="text-caption text-muted-foreground">Created {String(d.kind).toUpperCase()} · {d.info}</div>
@@ -742,7 +742,7 @@ function ToolCardInner({ msg, convId, index }: { msg: Msg; convId: string; index
       return (
         <div onClick={() => { useApp.getState().set({ artifactSel: d.id, artifactOpen: d.id } as any); showPanel("artifacts") }}
           className="flex cursor-pointer items-center gap-2.5 rounded-card border border-line-1 bg-surface-1 px-3 py-2 text-ui hover:bg-surface-2">
-          <span className="text-info [&_svg]:size-4">{tool.result == null ? <Loader2 className="animate-spin" /> : TYPE_ICON[d.atype] || <FileText />}</span>
+          <span className={cn("[&_svg]:size-4", tool.result == null ? "text-info" : "text-muted-foreground")}>{tool.result == null ? <Loader2 className="animate-spin" /> : TYPE_ICON[d.atype] || <FileText />}</span>
           <div className="min-w-0 flex-1">
             <div className="truncate font-medium text-foreground/90">{d.title}</div>
             <div className="text-caption text-muted-foreground">{d.action === "created" ? "Created" : "Revised"} · {d.atype}{d.language ? ` · ${d.language}` : ""} · v{d.version}</div>
@@ -779,9 +779,9 @@ export function ChangesCard({ msg, convId, index }: { msg: Msg; convId: string; 
       <div className="space-y-0.5">
         {files.map(([p, what]) => (
           <div key={p} className="flex items-center gap-2 text-caption">
-            <button className="mono text-info hover:underline" onClick={() => openFile(p)}>{basename(p)}</button>
+            <button className="mono text-foreground/90 hover:underline" onClick={() => openFile(p)}>{basename(p)}</button>
             <span className="text-muted-foreground">{what}</span>
-            <span className="mono truncate text-meta text-muted-foreground/60">{dirname(p)}</span>
+            <span className="mono truncate text-meta text-faint">{dirname(p)}</span>
           </div>
         ))}
       </div>

@@ -134,7 +134,7 @@ export function ImageCarousel({ images }: { images: AnswerImage[] }) {
       <div className="mb-2 flex items-center gap-1.5 text-meta text-muted-foreground">
         <Images className="size-3.5" />
         <span className="label-tech">{places ? (places === 1 ? "1 place" : `${places} places`) : "From the web"}</span>
-        {places > 0 && list.length > places && <span className="text-muted-foreground/60">· {list.length - places} more from articles</span>}
+        {places > 0 && list.length > places && <span className="text-faint">· {list.length - places} more from articles</span>}
       </div>
       <div className="group/rail relative">
         <div ref={rail} onScroll={measure}
