@@ -5612,7 +5612,8 @@ class AgentEngine:
         if getattr(self, "_slow_model", False):
             return True
         tps = float(getattr(self, "_last_tps", 0) or 0)
-        if 0 < tps < self.SLOW_TPS:
+        exact = getattr(self, "_tps_exact", False) or self.cfg.get("backend", "llama") != "llama"
+        if exact and 0 < tps < self.SLOW_TPS:       # decided on llama.cpp's own timing, never on the stream estimate
             self._slow_model = True
             _log({"slow_model": round(tps, 1), "compact_at": self.SLOW_COMPACT_AT, "conv": self.ctx.conv_id})
         return getattr(self, "_slow_model", False)
@@ -6232,8 +6233,9 @@ class AgentEngine:
             return b
         self._think_target = None
         tps = float(getattr(self, "_last_tps", 0) or 0)
-        if tps < 1:
-            return b                                 # no measurement yet: the token budget alone
+        exact = getattr(self, "_tps_exact", False) or self.cfg.get("backend", "llama") != "llama"
+        if tps < 1 or not exact:
+            return b                                 # no reliable measurement yet: the token budget alone
         level = "debug" if (getattr(self, "_debugging", False) or self._fail_streak >= 1) else eff
         secs = self.THINK_SECONDS.get(level, 30) * (2 if self._wrapping_up() else 1)
         target = max(self.THINK_FLOOR, int(tps * secs))
@@ -7021,6 +7023,10 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
                     gen_tm = tm                            # the last one has the whole step's totals
                 if tm.get("predicted_per_second") and tm.get("predicted_n", 0) > 8:
                     self.emit("stats", tps=float(tm["predicted_per_second"]))     # llama.cpp's exact figure
+                    if tm.get("predicted_n", 0) >= 40:
+                        # sizes thinking and compaction: the server's own figure, not streamed chunks over wall time
+                        # (that counted 17 tok/s for a 27B generating at 30, and marked it slow)
+                        self._last_tps, self._tps_exact = float(tm["predicted_per_second"]), True
                 for ch in ev.get("choices") or []:
                     dd = ch.get("delta") or {}
                     if dd.get("content") or dd.get("reasoning_content") or dd.get("reasoning") or dd.get("tool_calls"):
@@ -7032,8 +7038,9 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
                         if now - tps_last > 1.0 and now - tps_first > 0.5:
                             tps_last = now
                             self.emit("stats", tps=tps_count / (now - tps_first))
-                            if tps_count >= 40:
-                                self._last_tps = tps_count / (now - tps_first)   # sizes the next steps' thinking
+                            if tps_count >= 40 and not getattr(self, "_tps_exact", False):
+                                # a rough stand-in until the server reports its exact speed (non-llama backends)
+                                self._last_tps = tps_count / (now - tps_first)
                             if getattr(self, "_live_ctx", None):     # a main step: the context gauge moves too
                                 self.emit_context(self._live_ctx + tps_count)
                 pp = ev.get("prompt_progress")
