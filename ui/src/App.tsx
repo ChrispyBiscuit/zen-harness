@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils"
 import { MeterBar } from "@/components/MeterBar"
 import { CodeIndexChip } from "@/components/CodeIndex"
 import { Decode } from "@/components/Decode"
+import { LensFilter } from "@/components/Lens"
 import { levelTone, type Tone } from "@/lib/tone"
 import { applyDensity, storedDensity, type Density } from "@/lib/density"
 import { applyTextFx, storedTextFx, TEXT_FX, type TextFx } from "@/lib/textfx"
@@ -336,6 +337,7 @@ export default function App() {
     <TooltipProvider delay={300}>
       <div className="flex h-full flex-col overflow-hidden bg-ground text-foreground">
         <ResizeEdges />
+        <LensFilter />
         <TopBar />
         <div className="relative flex min-h-0 flex-1 overflow-hidden">
           {sideMounted && (
