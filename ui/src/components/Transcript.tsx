@@ -202,7 +202,7 @@ function Stats({ s }: { s: TurnStats }) {
 
 // glyphs for the decode effect: no markdown syntax characters, so the scramble never turns into formatting
 const GLYPHS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghkmnpqrstuvwxyz0123456789@%&?ΔΘΛΞΣΦΨΩλμπψ¥§¤░▒▓"
-const SCRAMBLE_LEN = 8
+const SCRAMBLE_LEN = 5                                       // letters in the decode band ahead of the text
 function scramble(s: string) {
   let out = ""
   for (const ch of s) out += /\s/.test(ch) ? ch : GLYPHS[(Math.random() * GLYPHS.length) | 0]
@@ -211,8 +211,12 @@ function scramble(s: string) {
 
 const REDUCED_MOTION = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
 
-/** Reveal streamed text a few characters per frame. The step grows with the backlog, so the display never
- *  falls far behind the model; text that was already complete when it mounted shows at once. */
+/** Reveal streamed text letter by letter at a steady pace, however the model's tokens arrive. The pace follows the
+ *  stream's own speed (smoothed), and a few letters are always held back while it streams: that buffer is what the
+ *  decode tail scrambles, so a band of SCRAMBLE_LEN glyphs slides along just ahead of the text and locks into place
+ *  letter by letter. Pace changes are eased (no jumps when a burst of tokens lands); if the buffer grows, the pace
+ *  rises gently to catch up, and when the stream ends the rest drains at a brisk, still letter-by-letter pace.
+ *  Text that was already complete when it mounted shows at once. */
 function useTypewriter(text: string, live: boolean) {
   const animate = useRef(live && !REDUCED_MOTION)          // decided once: old messages never animate
   const [n, setN] = useState(animate.current ? 0 : text.length)
@@ -225,38 +229,55 @@ function useTypewriter(text: string, live: boolean) {
   target.current = text
   useEffect(() => {
     if (!animate.current) return
-    // Time-based: one tick per screen frame (~16 ms). Slow streams type one character at a time (≥ 45 chars/s);
-    // fast ones reveal several per frame so the display never trails the model by more than ~0.35 s — a 60 Hz
-    // screen can't show more than 60 single characters a second, and models stream 400-800.
-    // Timers, not animation frames: frames stop in a hidden window.
-    const MIN_RATE = 45, MAX_LAG = 0.35
+    // One tick per screen frame (~16 ms); timers, not animation frames, which stop in a hidden window.
     let timer = 0
     let stopped = false
     let last = performance.now()
-    let carry = 0                                            // fractional characters owed
+    let carry = 0                                            // fractional letters owed
+    let rate = 40                                            // display pace, letters/s (eased)
+    let inRate = 0                                           // arrival pace, letters/s (smoothed)
+    let seen = target.current.length, seenAt = last
     const step = () => {
       if (stopped) return
       const now = performance.now()
       const dt = Math.min(0.1, (now - last) / 1000)
       last = now
       const total = target.current.length
+      if (total > seen) {                                    // a chunk arrived: fold its speed into the average
+        const inst = Math.min(2000, (total - seen) / Math.max(0.016, (now - seenAt) / 1000))
+        inRate = inRate ? inRate * 0.8 + inst * 0.2 : inst
+        seen = total
+        seenAt = now
+      }
       const cur = nRef.current
+      const streaming = liveRef.current
+      const hold = streaming ? SCRAMBLE_LEN : 0              // letters kept back for the decode band
+      const backlog = total - cur
       if (document.hidden) {                                 // nobody is watching: just show everything
         if (cur < total) { nRef.current = total; setN(total) }
-      } else if (cur < total) {
-        const backlog = total - cur
-        carry += Math.max(MIN_RATE, backlog / MAX_LAG) * dt
-        const add = Math.min(backlog, Math.max(1, Math.floor(carry)))
-        carry = Math.max(0, carry - add)
-        nRef.current = cur + add
-        setN(cur + add)
+      } else if (backlog > hold) {
+        // the stream's pace, capped so letters come out one or two a frame (a 60 Hz screen shows ~60 single
+        // letters a second); a long buffer (over ~1.5 s of text) raises the pace gently so it never falls far
+        // behind, and once the stream is done the rest drains at a brisk, still steady pace
+        const want = hold + Math.max(6, inRate * 1.5)
+        const base = streaming ? Math.min(110, Math.max(25, inRate)) : Math.max(90, Math.min(400, backlog / 1.2))
+        const goal = base * Math.min(2.5, Math.max(0.7, 1 + 0.6 * (backlog - want) / Math.max(want, 1)))
+        rate += (goal - rate) * Math.min(1, dt * 5)
+        carry += rate * dt
+        const add = Math.min(backlog - hold, Math.floor(carry))
+        if (add > 0) {
+          carry -= add
+          nRef.current = cur + add
+          setN(cur + add)
+        }
         setFrame((f) => (f + 1) % 1_000_000)                 // re-roll the scramble glyphs
-      } else if (!liveRef.current) {
+      } else if (!streaming && backlog === 0) {
         return                                               // finished and caught up: stop
       } else {
-        carry = 0
+        carry = Math.min(carry, 1)                           // waiting on the model: hold the band, keep it flickering
+        setFrame((f) => (f + 1) % 1_000_000)
       }
-      timer = window.setTimeout(step, target.current.length > nRef.current ? 16 : 40)
+      timer = window.setTimeout(step, backlog > 0 ? 16 : 40)
     }
     timer = window.setTimeout(step, 16)
     return () => { stopped = true; window.clearTimeout(timer) }
@@ -268,8 +289,7 @@ function useTypewriter(text: string, live: boolean) {
     if (marks.length % 2) shown = shown.slice(0, marks[marks.length - 1].index)
   }
   const typing = live || n < text.length
-  // the next few characters show as cycling glyphs and lock into place as the cursor reaches them; while the
-  // model is still producing and the display has caught up, a few glyphs keep flickering at the edge
+  // the next few (real, held-back) letters show as cycling glyphs and lock into place as the text reaches them
   let tail = ""
   if (typing && shown.length === n && textFx() !== "off") {
     const ahead = text.slice(n, n + SCRAMBLE_LEN).split("\n")[0]
