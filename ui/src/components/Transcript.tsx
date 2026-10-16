@@ -225,6 +225,8 @@ function useTypewriter(text: string, live: boolean) {
   liveRef.current = live
   const nRef = useRef(n)
   nRef.current = n
+  const quiet = useRef(false)                                // the stream went quiet: no caret, no band
+  const wake = useRef<() => void>(() => {})                  // restart the loop when text arrives after a quiet spell
   const target = useRef(text)
   target.current = text
   useEffect(() => {
@@ -237,6 +239,15 @@ function useTypewriter(text: string, live: boolean) {
     let rate = 40                                            // display pace, letters/s (eased)
     let inRate = 0                                           // arrival pace, letters/s (smoothed)
     let seen = target.current.length, seenAt = last
+    let active = false
+    const start = () => {
+      if (active || stopped) return
+      active = true
+      quiet.current = false
+      last = performance.now()
+      timer = window.setTimeout(step, 16)
+    }
+    wake.current = start
     const step = () => {
       if (stopped) return
       const now = performance.now()
@@ -251,7 +262,9 @@ function useTypewriter(text: string, live: boolean) {
       }
       const cur = nRef.current
       const streaming = liveRef.current
-      const hold = streaming ? SCRAMBLE_LEN : 0              // letters kept back for the decode band
+      // letters kept back for the decode band, only while text is actually arriving: a stream that has gone quiet
+      // for 1.5 s (or a message whose streaming flag outlived its run) lets them out, so they never stay scrambled
+      const hold = streaming && now - seenAt < 1500 ? SCRAMBLE_LEN : 0
       const backlog = total - cur
       if (document.hidden) {                                 // nobody is watching: just show everything
         if (cur < total) { nRef.current = total; setN(total) }
@@ -271,24 +284,30 @@ function useTypewriter(text: string, live: boolean) {
           setN(cur + add)
         }
         setFrame((f) => (f + 1) % 1_000_000)                 // re-roll the scramble glyphs
-      } else if (!streaming && backlog === 0) {
-        return                                               // finished and caught up: stop
+      } else if (backlog === 0 && (!streaming || now - seenAt > 3000)) {
+        quiet.current = true                                 // finished (or nothing new for 3 s): stop, drop the caret
+        active = false
+        setFrame((f) => (f + 1) % 1_000_000)
+        return
       } else {
         carry = Math.min(carry, 1)                           // waiting on the model: hold the band, keep it flickering
         setFrame((f) => (f + 1) % 1_000_000)
       }
       timer = window.setTimeout(step, backlog > 0 ? 16 : 40)
     }
-    timer = window.setTimeout(step, 16)
+    start()
     return () => { stopped = true; window.clearTimeout(timer) }
   }, [])
+  useEffect(() => {                                          // more text after the loop went quiet: pick it up again
+    if (animate.current && quiet.current && text.length > nRef.current) wake.current()
+  }, [text])
   if (!animate.current) return { shown: text, typing: false, tail: "" }
   let shown = text.slice(0, n)
   if (n < text.length) {                                     // mid-typing: don't show half a formula
     const marks = [...shown.matchAll(/(?<![\\$])\$(?!\d)/g)]  // $ that open/close math (not $25, not \$)
     if (marks.length % 2) shown = shown.slice(0, marks[marks.length - 1].index)
   }
-  const typing = live || n < text.length
+  const typing = (live && !quiet.current) || n < text.length
   // the next few (real, held-back) letters show as cycling glyphs and lock into place as the text reaches them
   let tail = ""
   if (typing && shown.length === n && textFx() !== "off") {
@@ -353,7 +372,8 @@ const AssistantMessage = memo(function AssistantMessage({ msg, k, variant = "ans
   msg: Msg; k: string; variant?: "answer" | "narration"; hideStats?: boolean
 }) {
   const narration = variant === "narration"
-  const { shown, typing, tail } = useTypewriter(msg.content || "", !!msg.streaming)
+  const running = useApp((s) => !!s.threads.find((t) => t.id === s.current)?.running)
+  const { shown, typing, tail } = useTypewriter(msg.content || "", !!msg.streaming && running)
   const body = useRef<HTMLDivElement>(null)
   useGlitch(body, typing && !!msg.content)
   // read aloud as the reply arrives (only replies that were live when they appeared, never old ones)
