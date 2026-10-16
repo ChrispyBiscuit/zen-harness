@@ -28,7 +28,7 @@ function ThreadRow({ t, child }: { t: Thread; child?: boolean }) {
   const active = current === t.id
   return (
     <div className={cn("group relative flex min-h-(--row-h) items-center rounded-lg transition-ui", active ? "bg-surface-2 shadow-(--hi)" : "hover:bg-surface-1 active:bg-surface-2", child && "ml-4",
-      t.running && !t.waiting && "zen-lens")}>
+      t.running && !t.waiting && "zen-refract")}>
       {editing ? (
         <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)}
           onBlur={() => { setEditing(false); if (title.trim() && title !== t.title) api.rename(t.id, title.trim()) }}
