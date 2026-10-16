@@ -36,6 +36,16 @@ function FileLink({ path, children }: { path: string; children?: React.ReactNode
 
 /** Normalize math delimiters for remark-math: \( \) and \[ \] become $ / $$, and a $ that starts a money
  *  amount ("$25", "$1,200.50") is escaped so it is not read as the start of a formula. Code is left alone. */
+const BLOCK_NAMES = "chart|map|facts|timeline|cards|mermaid"
+/** Answer blocks as small models actually write them: the block's name on the line after a bare ``` fence, or the
+ *  opening fence at the end of a sentence. Both become a proper ```name fence on its own line. */
+export function prepBlocks(text: string) {
+  return text
+    .replace(new RegExp(String.raw`^([ \t]*)\`\`\`[ \t]*\n[ \t]*(${BLOCK_NAMES})[ \t]*\n(?=[ \t]*[[{]|[ \t]*(?:flowchart|graph|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|mindmap)\b)`, "gim"),
+      (_m, ind: string, name: string) => `${ind}\`\`\`${name.toLowerCase()}\n`)
+    .replace(new RegExp(String.raw`([^\s\`])[ \t]*\`\`\`(${BLOCK_NAMES})[ \t]*\n`, "g"), (_m, ch: string, name: string) => `${ch}\n\n\`\`\`${name}\n`)
+}
+
 export function prepMath(text: string) {
   return text.split(/(```[\s\S]*?(?:```|$)|`[^`\n]*`)/g).map((part, i) => {
     if (i % 2) return part
@@ -223,7 +233,7 @@ export const Markdown = memo(function Markdown({ text, className, live = false }
     <div className={cn("prose-chat break-words", className)}>
       <LiveContext.Provider value={live}>
         <ReactMarkdown remarkPlugins={REMARK} rehypePlugins={REHYPE} urlTransform={urlTransform} components={COMPONENTS}>
-          {linkifyPaths(prepMath(body))}
+          {linkifyPaths(prepMath(prepBlocks(body)))}
         </ReactMarkdown>
       </LiveContext.Provider>
       {sources.length > 0 && !live && <SourcesList sources={sources} />}

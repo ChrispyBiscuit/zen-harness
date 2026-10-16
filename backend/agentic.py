@@ -2474,6 +2474,10 @@ class AgentEngine:
                      "office, recent events) prefer live web results when given and say 'as of' their date; a figure "
                      "like a population or a census count is fine to give from the Reference WITH its year (e.g. 'as "
                      f"of the 2021 census'); if web and Wikipedia disagree, say so.\n{ref}\n</system-reminder>")
+        shape = answer_shapes.hint(user_text)     # a shape question answered here gets the same nudge
+        if shape:
+            last += (f"\n\n{REMINDER_TAG}\n{shape} If it needs facts or pictures from the web, call get_tools."
+                     "\n</system-reminder>")
         msgs = [{"role": "system", "content": system}] + convo[-12:] + [{"role": "user", "content": last}]
         self.emit("status", text="Thinking…")
         self._delta = "ans_delta"
@@ -3177,6 +3181,14 @@ class AgentEngine:
             if cwd and (parts or os.path.normcase(cwd) != os.path.normcase(str(self.ctx.workspace or ""))):
                 # here, not in the system prompt: a `cd` used to change the prompt's opening (a full re-read)
                 parts.append(f"Working folder (powershell): {cwd}")
+        except Exception:
+            pass
+        try:                                 # the shape that suits this question (answer_shapes.hint)
+            q = next((m.get("content") for m in reversed(self.history) if m.get("role") == "user"
+                      and isinstance(m.get("content"), str) and not m["content"].startswith(REMINDER_TAG)), "")
+            shape = answer_shapes.hint(re.split(r"\n\n<system-reminder>|\n\n\(Reference", q or "")[0])
+            if shape:
+                parts.append("For the final answer: " + shape[0].lower() + shape[1:])
         except Exception:
             pass
         if not parts:

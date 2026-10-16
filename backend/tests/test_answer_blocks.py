@@ -101,3 +101,34 @@ def test_picture_note_lists_subject_pictures_only():
     note = agent_tools._picture_note("[1] https://pequods.example/ [2] https://news.example/top10")
     assert "https://pequods.example/p.jpg" in note and "b.jpg" not in note and "![caption]" in note
     assert agent_tools._picture_note("no links here") == ""
+
+
+def test_hint_picks_the_block_for_the_question():
+    cases = {
+        "Where are the 5 largest football stadiums in Europe?": "map",
+        "Good ramen shops near Shinjuku station in Tokyo": "map",
+        "How did US GDP growth change from 2019 to 2024?": "chart",
+        "Timeline of the Apollo program": "timeline",
+        "Draw a simple flowchart of how a bill becomes law": "mermaid",
+        "Quick facts about Mount Everest": "facts",
+        "Kindle vs Kobo, which should I buy?": "cards",
+        "Compare the iPhone 16 and Pixel 9 on battery": "table",
+        "What does a Shiba Inu look like?": "image",
+        "What is 17% of 2,340?": "",
+        "hi! how's it going?": "",
+        "Explain recursion in two sentences.": "",
+        "fix the failing test in main.py": "",
+    }
+    for q, want in cases.items():
+        assert answer_shapes.kind(q) == want, (q, answer_shapes.kind(q))
+    assert answer_shapes.hint("hi") == ""
+    assert "```map" in answer_shapes.hint("Where is the Louvre?")
+    assert answer_shapes.kind("x" * 700 + " where is it") == ""        # long tasks are not lookups
+
+
+def test_mermaid_is_in_the_shapes_and_fences_open_lines():
+    import re
+    assert "```mermaid\nflowchart" in answer_shapes.TEXT
+    for line in answer_shapes.TEXT.splitlines():
+        if "```" in line:
+            assert line.startswith("```") or "``` followed" in line or "```chart/" in line, line
