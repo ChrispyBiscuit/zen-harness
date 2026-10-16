@@ -5,6 +5,10 @@ With a local model, the model runs on your PC: your messages, files and the agen
 when a tool reaches the internet:
 - **Web search / reading web pages** — your search terms and the pages' addresses go to search engines and those
   websites (as if you searched yourself).
+- **Maps and pictures in answers** — a map loads its tiles from OpenStreetMap (which sees the area shown), and a
+  place named without coordinates is looked up on OpenStreetMap's Nominatim (only the place name is sent; answers
+  are cached on your PC). With web access off, places are not looked up. Pictures in an answer load from the site
+  that hosts them.
 - **Cloud models** (OpenAI, Anthropic, …) — if you pick one, your conversation and whatever the agent reads are sent
   to that provider under their terms.
 - **Cloud advisor** (optional, off by default) — asks a cloud model for a second opinion when the local model is

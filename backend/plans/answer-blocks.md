@@ -52,8 +52,8 @@ Tables stay plain Markdown tables, styled for scanning (sticky header, numeric c
   direct labels, hover tooltips, a table view toggle, text in ink tokens and never the series color. Categorical
   palette: the reference dark steps, validated against the card surface (`validate_palette.js`, all checks pass:
   worst adjacent CVD ΔE 8.4, normal-vision 19.3, all ≥ 3:1). No dual axes; a 9th series folds into "Other".
-- **Maps**: Leaflet (~40 KB gz) lazy-loaded only when a map block appears; CARTO dark raster tiles (OpenStreetMap data,
-  attributed). Markers without coordinates are geocoded by `/api/geocode` (Nominatim, cached, 1 request/s, a proper
+- **Maps**: Leaflet (~40 KB gz) lazy-loaded only when a map block appears; OpenStreetMap standard tiles darkened with a CSS filter (no key; CARTO now needs one),
+  attributed. Markers without coordinates are geocoded by `/api/geocode` (Nominatim, cached, 1 request/s, a proper
   User-Agent; refused when the agent's web access is off). Offline or tiles failing: the same places as a list.
   Privacy note in docs: map tiles and geocoding send place names and areas to those services.
 

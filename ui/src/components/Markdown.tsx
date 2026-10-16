@@ -9,6 +9,8 @@ import { FileText, Folder } from "lucide-react"
 import { toast } from "sonner"
 import { api } from "@/lib/api"
 import { CodeBlock } from "./CodeBlock"
+import { AnswerBlock, BLOCK_LANGS, InlineImage } from "./blocks/AnswerBlock"
+import { LiveContext } from "./blocks/Frame"
 import { basename, fromHref, isWinPath, linkifyPaths } from "@/lib/paths"
 import { useApp } from "@/lib/store"
 import { showPanel } from "@/lib/dock"
@@ -72,6 +74,35 @@ function rehypeScramble() {
   return (tree: any) => walk(tree)
 }
 
+const NUMERIC = /^[\s(+\-\u2212~≈<>]*[$€£¥₹]?\s*\d[\d,]*(?:\.\d+)?\s*(?:%|[kKmMbBtT]n?|x|×)?[)\s]*$|^[–—-]$|^$/
+
+/** rehype plugin: a table column whose cells are all numbers (or blank) is right-aligned, for scanning. */
+function rehypeNumericColumns() {
+  const text = (n: any): string => n.type === "text" ? n.value : (n.children || []).map(text).join("")
+  const cells = (row: any) => (row.children || []).filter((c: any) => c.tagName === "td" || c.tagName === "th")
+  const walk = (node: any) => {
+    if (node.tagName === "table") {
+      const rows: any[] = []
+      const collect = (n: any) => { for (const c of n.children || []) { if (c.tagName === "tr") rows.push(c); else collect(c) } }
+      collect(node)
+      const body = rows.filter((r) => cells(r).some((c: any) => c.tagName === "td"))
+      if (!body.length) return
+      const cols = Math.max(...rows.map((r) => cells(r).length))
+      for (let i = 0; i < cols; i++) {
+        const vals = body.map((r) => text(cells(r)[i] || { type: "text", value: "" }).trim())
+        if (!vals.some((v) => v && /\d/.test(v)) || !vals.every((v) => NUMERIC.test(v))) continue
+        for (const r of rows) {
+          const c = cells(r)[i]
+          if (c) c.properties = { ...(c.properties || {}), className: [...((c.properties?.className as string[]) || []), "num"] }
+        }
+      }
+      return
+    }
+    for (const c of node.children || []) walk(c)
+  }
+  return (tree: any) => walk(tree)
+}
+
 function urlTransform(url: string) {
   if (/^file:/i.test(url) || /^artifact:/i.test(url) || /^cite:/i.test(url) || /^[A-Za-z]:[\\/]/.test(url)) return url
   return defaultUrlTransform(url)
@@ -118,16 +149,28 @@ export function prepCitations(text: string): { body: string; sources: Source[] }
 
 const host = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, "") } catch { return u } }
 
+const favicon = (u: string) => { try { return new URL("/favicon.ico", u).href } catch { return "" } }
+
+/** The answer's sources as compact cards: number, site icon, title, site. */
 function SourcesList({ sources }: { sources: Source[] }) {
   return (
-    <div className="mt-4 max-w-full border-t border-border/50 pt-1.5 text-meta leading-[1.6] text-faint">
-      <ol>
+    <div className="sources not-prose mt-4 max-w-full">
+      <div className="mb-1.5 text-meta font-medium text-faint">Sources</div>
+      <ol className="grid gap-1.5 [grid-template-columns:repeat(auto-fill,minmax(210px,1fr))]">
         {sources.map((s) => (
-          <li key={s.n + s.url} className="flex min-w-0 items-baseline gap-1.5">
-            <sup className="w-3 shrink-0 text-right text-meta tabular-nums">{s.n}</sup>
+          <li key={s.n + s.url} className="min-w-0">
             <a href={s.url} target="_blank" rel="noreferrer" title={s.url}
-              className="min-w-0 truncate no-underline hover:text-foreground hover:underline">{s.title || host(s.url)}</a>
-            {s.title && <span className="shrink-0 text-faint">· {host(s.url)}</span>}
+              className="group/src flex h-full min-w-0 items-start gap-2 rounded-[var(--radius-card)] bg-surface-1 px-2.5 py-1.5 no-underline ring-1 ring-line-1 transition-colors hover:bg-surface-2 hover:ring-line-2">
+              <span className="mt-px w-3 shrink-0 text-right text-meta tabular-nums text-faint">{s.n}</span>
+              <span className="min-w-0 flex-1">
+                <span className="line-clamp-2 text-meta leading-snug text-muted-foreground group-hover/src:text-foreground">{s.title || host(s.url)}</span>
+                <span className="mt-0.5 flex min-w-0 items-center gap-1 text-[10.5px] text-faint">
+                  <img src={favicon(s.url)} alt="" referrerPolicy="no-referrer" loading="lazy" className="size-3 shrink-0 rounded-sm"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }} />
+                  <span className="truncate">{host(s.url)}</span>
+                </span>
+              </span>
+            </a>
           </li>
         ))}
       </ol>
@@ -135,16 +178,13 @@ function SourcesList({ sources }: { sources: Source[] }) {
   )
 }
 
-export const Markdown = memo(function Markdown({ text, className }: { text: string; className?: string }) {
-  const { body, sources } = prepCitations(text)
-  return (
-    <div className={cn("prose-chat break-words", className)}>
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: true }]]}
-        rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false, output: "htmlAndMathml" }], rehypeScramble]}
-        urlTransform={urlTransform}
-        components={{
-          a: ({ href, children }) => {
+const REMARK: any[] = [remarkGfm, [remarkMath, { singleDollarTextMath: true }]]
+const REHYPE: any[] = [[rehypeKatex, { throwOnError: false, strict: false, output: "htmlAndMathml" }], rehypeScramble, rehypeNumericColumns]
+
+// Stable across renders: an inline object makes every element a new component type each render, so a streaming
+// reply would remount its code blocks (and rebuild a chart or map) on every frame.
+const COMPONENTS: any = {
+          a: ({ href, children }: any) => {
             if (href && /^cite:/i.test(href)) {        // inline citation [1] → small numbered link to the source
               const url = decodeURIComponent(href.slice(5))
               return <sup className="cite ml-px leading-none"><a href={url} target="_blank" rel="noreferrer" title={host(url)}
@@ -163,19 +203,30 @@ export const Markdown = memo(function Markdown({ text, className }: { text: stri
               </a>
             )
           },
-          pre: ({ children }) => <>{children}</>,
-          code: ({ className: cls, children }) => {
+          pre: ({ children }: any) => <>{children}</>,
+          code: ({ className: cls, children }: any) => {
             const text = String(children ?? "")
             const m = /language-([\w+#-]+)/.exec(cls || "")
+            const lang = m?.[1]?.toLowerCase() || ""
+            if (BLOCK_LANGS.has(lang)) return <AnswerBlock lang={lang} code={text.replace(/\n$/, "")} />
             if (m || text.includes("\n")) return <CodeBlock code={text.replace(/\n$/, "")} lang={m?.[1] || ""} />
             if (isWinPath(text)) return <FileLink path={text.trim()}><code className="mono text-[0.88em]">{text}</code></FileLink>
             return <code className="mono rounded bg-muted px-1.5 py-0.5 text-[0.86em] text-foreground/90">{text}</code>
           },
-        }}
-      >
-        {linkifyPaths(prepMath(body))}
-      </ReactMarkdown>
-      {sources.length > 0 && <SourcesList sources={sources} />}
+          img: ({ src, alt }: any) => <InlineImage src={typeof src === "string" ? src : undefined} alt={alt} />,
+}
+
+/** Markdown for chat text. `live`: the text is still streaming (an unfinished chart or map shows a placeholder). */
+export const Markdown = memo(function Markdown({ text, className, live = false }: { text: string; className?: string; live?: boolean }) {
+  const { body, sources } = prepCitations(text)
+  return (
+    <div className={cn("prose-chat break-words", className)}>
+      <LiveContext.Provider value={live}>
+        <ReactMarkdown remarkPlugins={REMARK} rehypePlugins={REHYPE} urlTransform={urlTransform} components={COMPONENTS}>
+          {linkifyPaths(prepMath(body))}
+        </ReactMarkdown>
+      </LiveContext.Provider>
+      {sources.length > 0 && !live && <SourcesList sources={sources} />}
     </div>
   )
 })

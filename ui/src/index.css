@@ -322,9 +322,10 @@
 .prose-chat :is(h1, h2, h3, h4) { text-wrap: balance; }
 .prose-chat :is(p, li) { text-wrap: pretty; }
 .prose-chat code, .prose-chat pre { font-feature-settings: "liga" 0, "calt" 0, "zero" 1; }
-.prose-chat ul { list-style: disc; padding-left: 1.4em; }
-.prose-chat ol { list-style: decimal; padding-left: 1.4em; }
-.prose-chat li + li { margin-top: 0.25em; }
+/* answer blocks (charts, maps, panels: .not-prose) style themselves; prose rules stop at their edge */
+.prose-chat ul:not(.not-prose *) { list-style: disc; padding-left: 1.4em; }
+.prose-chat ol:not(.not-prose *) { list-style: decimal; padding-left: 1.4em; }
+.prose-chat li:not(.not-prose *) + li { margin-top: 0.25em; }
 /* formulas: lines holding inline maths get room so fractions don't collide; display maths scrolls, never squeezes */
 .prose-chat :is(p, li):has(.katex) { line-height: 2; }
 .prose-chat .katex { font-size: 1.08em; }
@@ -332,9 +333,16 @@
 .prose-chat sup.cite + sup.cite { margin-left: 2px; }
 .prose-chat li > p { margin: 0; }
 .prose-chat blockquote { border-left: 2px solid var(--border); padding-left: 1em; color: var(--muted-foreground); }
-.prose-chat table { border-collapse: collapse; font-size: 0.92em; display: block; overflow-x: auto; }
-.prose-chat th, .prose-chat td { border: 1px solid var(--border); padding: 0.4em 0.75em; text-align: left; }
-.prose-chat th { background: var(--muted); font-weight: 600; }
+/* tables for scanning: hairline rows, a header that stays put when a long table scrolls, numbers right-aligned
+   (the .num columns, marked in Markdown.tsx) */
+.prose-chat table:not(.not-prose *) { border-collapse: separate; border-spacing: 0; font-size: 0.92em; display: block; overflow: auto;
+    max-width: 100%; width: max-content; max-height: 32rem; border: 1px solid var(--line-1); border-radius: var(--radius-card); }
+.prose-chat :is(th, td):not(.not-prose *) { border-bottom: 1px solid var(--line-1); padding: 0.45em 0.85em; text-align: left; vertical-align: top; }
+.prose-chat th:not(.not-prose *) { position: sticky; top: 0; z-index: 1; background: var(--surface-2); font-weight: 600; color: var(--foreground);
+    font-size: 0.94em; white-space: nowrap; }
+.prose-chat tr:last-child > td:not(.not-prose *) { border-bottom: 0; }
+.prose-chat tbody tr:hover > td:not(.not-prose *) { background: color-mix(in oklab, var(--surface-2) 45%, transparent); }
+.prose-chat :is(th, td).num { text-align: right; font-variant-numeric: tabular-nums; }
 .prose-chat hr { border-color: var(--border); margin: 1.5em 0; }
 .prose-chat strong { font-weight: 560; color: var(--foreground); }
 @keyframes shimmer { 0% { background-position: -200% 0 } 100% { background-position: 200% 0 } }
@@ -513,3 +521,27 @@ select optgroup { color: var(--muted-foreground); font-weight: 600; }
   .clip-bob, .clip-eyes, .clip-talking .clip-brows { animation: none; }
   .shimmer-text { animation: none; background: none; color: var(--muted-foreground); }
 }
+
+/* chart series (blocks/Chart.tsx): the validated dark categorical order, checked against the card surface
+   (validate_palette.js: CVD-adjacent ΔE ≥ 8, normal-vision ≥ 15, all ≥ 3:1). Fixed order, never cycled. */
+:root {
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+    --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
+}
+
+/* map blocks (blocks/MapBlock.tsx): Leaflet in the app's dark surfaces */
+.zen-map.leaflet-container { background: var(--surface-2); font: inherit; }
+.zen-map .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.82) saturate(0.45); }
+.zen-map .leaflet-control-attribution { background: color-mix(in oklab, var(--surface-1) 80%, transparent); color: var(--faint); font-size: 10px; }
+.zen-map .leaflet-control-attribution a { color: var(--muted-foreground); }
+.zen-map .leaflet-bar { border: 1px solid var(--line-2); box-shadow: var(--elev-2); }
+.zen-map .leaflet-bar a { background: var(--surface-2); color: var(--foreground); border-bottom-color: var(--line-1); }
+.zen-map .leaflet-bar a:hover { background: var(--surface-3); }
+.zen-pin { display: grid; place-items: center; }
+.zen-pin span { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 999px; background: var(--series-1);
+    color: #fff; font-size: 10.5px; font-weight: 600; box-shadow: 0 0 0 2px var(--surface-1), 0 2px 8px rgb(0 0 0 / 0.5); }
+.zen-pin-tip.leaflet-tooltip { background: var(--popover); color: var(--foreground); border: 1px solid var(--line-2); border-radius: 6px;
+    box-shadow: var(--elev-2); padding: 4px 8px; font-size: 12px; max-width: 240px; white-space: normal; }
+.zen-pin-tip.leaflet-tooltip-top::before { border-top-color: var(--popover); }
+.zen-pin-name { font-weight: 600; }
+.zen-pin-note { color: var(--muted-foreground); font-size: 11px; }

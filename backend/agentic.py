@@ -26,6 +26,7 @@ import urllib.error
 import urllib.request
 
 import agent_tools as at
+import answer_shapes
 import llama_local
 import swarm
 from mcp_client import MCPManager
@@ -190,7 +191,7 @@ report", "that file"), look once where it would be, then ask — never search th
 other folders are private and outside your scope).
 - When you mention a file or folder, write its full path as a markdown link so the user can click \
 it, e.g. [report.md](C:/Users/me/Desktop/report.md).
-- Final answers: short and concrete. Summarize what you did and what changed. Format for a reader who scans: open with the answer itself (a bold one-line takeaway; a short heading first only for long answers). **Bold** the key names, figures and verdicts. Bullets for 3+ items; a table when comparing items on the same attributes; numbered steps for procedures; `code` for commands, file names and exact values; > for quotes; link names inline ([Name](url)) when you have the URL. Short paragraphs; a heading per section only when there are several parts. No preamble, no restating the question, no filler closing.
+- Final answers: short and concrete. Summarize what you did and what changed. Format for a reader who scans: open with the answer itself (a bold one-line takeaway; a short heading first only for long answers). **Bold** the key names, figures and verdicts. Bullets for 3+ items; a table when comparing items on the same attributes; numbered steps for procedures; `code` for commands, file names and exact values; > for quotes; link names inline ([Name](url)) when you have the URL. Short paragraphs; a heading per section only when there are several parts. No preamble, no restating the question, no filler closing.{shapes}
 Today is {today}."""
 
 SUBAGENT_NOTE = """
@@ -1371,7 +1372,7 @@ work (look-ups, reading, simple edits, commands). \
 "medium" for choosing between approaches, combining facts or figures, ordinary debugging. "high" for design, \
 tricky logic or maths, hard debugging, or when the request is ambiguous or high-stakes.
 Spend effort where it changes the result, not by default: simple things fast, complex things carefully.
-Format for a reader who scans: open with the answer itself (a bold one-line takeaway; a short heading first only for long answers). **Bold** the key names, figures and verdicts. Bullets for 3+ items; a table when comparing items on the same attributes; numbered steps for procedures; `code` for commands, file names and exact values; > for quotes; link names inline ([Name](url)) when you have the URL. Short paragraphs; a heading per section only when there are several parts. No preamble, no restating the question, no filler closing. Math in LaTeX ($...$ inline, $$...$$ on its own line); money as $25.{extra}"""
+Format for a reader who scans: open with the answer itself (a bold one-line takeaway; a short heading first only for long answers). **Bold** the key names, figures and verdicts. Bullets for 3+ items; a table when comparing items on the same attributes; numbered steps for procedures; `code` for commands, file names and exact values; > for quotes; link names inline ([Name](url)) when you have the URL. Short paragraphs; a heading per section only when there are several parts. No preamble, no restating the question, no filler closing.{shapes} Math in LaTeX ($...$ inline, $$...$$ on its own line); money as $25.{extra}"""
 
 LEAN_CALC = {"type": "function", "function": {
     "name": "calculate",
@@ -1469,7 +1470,7 @@ Never add details a source does not state; if you cannot verify something, remov
 app checks every critical fact against what you actually read.
 Same name, different entity: treat findings as the same person, company or place only when a specific identifier \
 matches; otherwise present them as separate possible matches.
-Format for a reader who scans: open with the answer itself (a bold one-line takeaway; a short heading first only for long answers). **Bold** the key names, figures and verdicts. Bullets for 3+ items; a table when comparing items on the same attributes; numbered steps for procedures; `code` for commands, file names and exact values; > for quotes; link names inline ([Name](url)) when you have the URL. Short paragraphs; a heading per section only when there are several parts. No preamble, no restating the question, no filler closing. Math in LaTeX ($...$ inline, $$...$$ for fractions/limits/sums on their own \
+Format for a reader who scans: open with the answer itself (a bold one-line takeaway; a short heading first only for long answers). **Bold** the key names, figures and verdicts. Bullets for 3+ items; a table when comparing items on the same attributes; numbered steps for procedures; `code` for commands, file names and exact values; > for quotes; link names inline ([Name](url)) when you have the URL. Short paragraphs; a heading per section only when there are several parts. No preamble, no restating the question, no filler closing.{shapes} Math in LaTeX ($...$ inline, $$...$$ for fractions/limits/sums on their own \
 line); money as $25.{extra}"""
 
 BASIC_NOTE = ("Basic mode: this is a short task — answer it directly with your tools. No plan, no checklist, no "
@@ -2381,7 +2382,7 @@ class AgentEngine:
         if getattr(self.ctx, "web_off", False):
             extra += "\n" + WEB_OFF_NOTE
         system = LEAN_SYSTEM.format(user=os.environ.get("USERNAME", "the user"), today=self._today(),
-                                    extra=extra)
+                                    extra=extra, shapes=answer_shapes.TEXT)
         convo = []                      # earlier turns as plain text: no tool calls, results or app reminders
         for m in self.history[:-1]:
             if m.get("role") not in ("user", "assistant") or m.get("tool_calls"):
@@ -2685,7 +2686,7 @@ class AgentEngine:
             extra += "\n" + WEB_OFF_NOTE
         return BASIC_SYSTEM.format(user=os.environ.get("USERNAME", "the user"), today=self._today(),
                                    roots="; ".join(self.ctx.roots) or "none", workspace=self._workspace_text(),
-                                   extra=extra)
+                                   extra=extra, shapes=answer_shapes.TEXT)
 
     def _basic_budget(self):
         return max(2, int(self.cfg.get("basic_calls") or 6))
@@ -2955,7 +2956,8 @@ class AgentEngine:
         s = SYSTEM.format(roots="; ".join(self.ctx.roots), workspace=self._workspace_text(),
                           today=self._today(),
                           user=os.environ.get("USERNAME", "?"), machine=os.environ.get("COMPUTERNAME", "?"),
-                          cwd=at.shell_cwd(self.ctx) if self.ctx.roots else "?", extra=extra)
+                          cwd=at.shell_cwd(self.ctx) if self.ctx.roots else "?", extra=extra,
+                          shapes=answer_shapes.TEXT)
         if self.reg and self._profiled():
             s = self._layer_prompt(s, set(self._active_names()))
         if getattr(self, "_build_profile", False):
@@ -3956,8 +3958,9 @@ class AgentEngine:
                          "conversion, interest, a count of days…), compute it with calculate (or code) and use that "
                          "result exactly; if it is a fact from a source, it must match that source.")
         parts.append("Then give the corrected final answer as a fresh, complete answer (the earlier version is hidden "
-                     "from the user; do not mention it or this check). This note is from the app, not the user: don't "
-                     "reply to it — begin with the answer itself, and answer every part of the user's message.")
+                     "from the user; do not mention it or this check)." + answer_shapes.KEEP + " This note is from the "
+                     "app, not the user: don't reply to it — begin with the answer itself, and answer every part of "
+                     "the user's message.")
         return " ".join(parts)
 
     def _auto_verify(self, results):
@@ -4036,7 +4039,7 @@ class AgentEngine:
                 "the exact sentence in your sources (look again or search if needed) and quote it word for word. "
                 "Keep the same answer unless a source you read states something different; then answer from that "
                 "source. If no source states it, say you couldn't verify it. Reply with the final answer only, as a "
-                "fresh, complete answer — no remarks about correcting it. " + self.QUOTE_RULE)
+                "fresh, complete answer — no remarks about correcting it." + answer_shapes.KEEP + " " + self.QUOTE_RULE)
 
     _RETRY_META_RX = re.compile(r"\b(corrected answer|more careful|exact quotes?|word[- ]for[- ]word|looking at the "
                                 r"(source|text|sources) (text )?again|let me (provide|correct|fix|revise)|upon "
@@ -4123,7 +4126,8 @@ class AgentEngine:
         if not bad:
             self.history.append({"role": "user", "content": f"{REMINDER_TAG}\n{dates_note}\nThen give the corrected "
                                  "final answer, written as a fresh, complete answer: the earlier version is hidden from "
-                                 "the user, so do not mention it or this check.\n</system-reminder>"})
+                                 "the user, so do not mention it or this check." + answer_shapes.KEEP +
+                                 "\n</system-reminder>"})
             return True, ""
         listing = "\n".join(f"- {r['claim']} (key: \"{r['key']}\", source given: {r['source'] or 'none'}) — {r['why']}"
                             for r in bad[:15])
@@ -4904,8 +4908,8 @@ class AgentEngine:
         """Images for the answer's carousel: the preview images of the pages searched this turn, the pages the
         answer cites first (in citation order). [] when nothing was searched."""
         imgs = getattr(self, "_turn_images", None) or []
-        if not imgs or (not early and (not final or final.startswith("("))):
-            return []
+        if early or not imgs or not final or final.startswith("("):
+            return []                    # never while searching: a strip of pictures that may vanish is noise
         cited = re.findall(r"https?://[^\s)\]>]+", final)
         rank = {u.rstrip(".,;"): i for i, u in reversed(list(enumerate(cited)))}
         order = sorted(range(len(imgs)), key=lambda i: (rank.get(imgs[i]["page"], 10_000), i))
@@ -4918,7 +4922,11 @@ class AgentEngine:
             out.append({"src": im["src"], "page": im["page"], "title": im.get("title", ""),
                         "name": im.get("name", ""), "publisher": im.get("publisher", ""),
                         "listing": bool(im.get("listing")), "cited": im["page"] in rank})
-        return out[:limit]
+        # Only pictures of the answer's own subjects: pages it cites that show a place or product of their own
+        # (a name from the site, not an article's banner). Fewer than two: no carousel (images in the answer
+        # itself are the model's to place, as ![caption](url)).
+        out = [im for im in out if im["cited"] and im.get("name") and not im.get("listing")]
+        return out[:limit] if len(out) >= 2 else []
 
 
 

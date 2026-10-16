@@ -1430,6 +1430,18 @@ async def api_upload(req):
     return J({"files": out})
 
 
+@routes.post("/api/geocode")
+async def api_geocode(req):
+    """Coordinates for the place names in an answer's map block (geocode.py). Refused when web access is off."""
+    if not (STORE.settings.get("agent") or {}).get("web", True):
+        return J({"error": "web access is off", "places": {}}, 403)
+    body = await req.json()
+    names = [str(n) for n in (body.get("names") or []) if str(n).strip()][:25]
+    import geocode
+    places = await asyncio.to_thread(geocode.lookup, names, os.path.join(DATA_DIR, "geocode_cache.json"))
+    return J({"places": places})
+
+
 @routes.get("/api/file")
 async def api_file(req):
     p = req.query.get("path", "")

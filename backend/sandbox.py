@@ -207,7 +207,8 @@ def run(conv, code, timeout=120, reset=False, preload="", on_output=None):
         parts.append(str(r["result"]))
     images = [os.path.join(s.work, ".figures", os.path.basename(p)) for p in r.get("figures") or []]
     if images:
-        parts.append(f"[{len(images)} figure(s) shown to the user]")
+        parts.append(f"[{len(images)} figure(s) shown to the user: " + ", ".join(images) +
+                     " — to show one in your answer too, write ![caption](path)]")
     after = _snapshot(s.work)
     changed = sorted(p for p, v in after.items() if before.get(p) != v and p != saved)
     if saved:

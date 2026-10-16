@@ -1056,13 +1056,21 @@ def compaction_pins_code_outline():
 
 
 @test
-def answer_images_cited_first():
+def answer_images_only_cited_subjects():
+    # the carousel shows only pictures of the answer's own subjects: cited pages with a name of their own (not an
+    # article), at least two of them, in citation order; never while searching
     e = engine()
-    e._turn_images = [{"src": "https://i/a.jpg", "page": "https://a.com/x", "title": "A"},
-                      {"src": "https://i/b.jpg", "page": "https://b.com/y", "title": "B"},
-                      {"src": "https://i/b.jpg", "page": "https://b.com/y", "title": "B"}]
-    out = e._answer_images("Try B [1].\n\nSources:\n1. [B](https://b.com/y)")
-    assert [i["src"] for i in out] == ["https://i/b.jpg", "https://i/a.jpg"] and out[0]["cited"] and not out[1]["cited"]
+    e._turn_images = [{"src": "https://i/a.jpg", "page": "https://a.com/x", "name": "A Cafe"},
+                      {"src": "https://i/b.jpg", "page": "https://b.com/y", "name": "B Bistro"},
+                      {"src": "https://i/b.jpg", "page": "https://b.com/y", "name": "B Bistro"},
+                      {"src": "https://i/c.jpg", "page": "https://c.com/z", "name": "Best of 2026", "listing": True},
+                      {"src": "https://i/d.jpg", "page": "https://d.com/w", "name": "D Diner"}]
+    final = ("Try B [1] or A [2].\n\nSources:\n1. [B](https://b.com/y)\n2. [A](https://a.com/x)\n"
+             "3. [C](https://c.com/z)")
+    out = e._answer_images(final)
+    assert [i["src"] for i in out] == ["https://i/b.jpg", "https://i/a.jpg"] and all(i["cited"] for i in out), out
+    assert e._answer_images(final, early=True) == []
+    assert e._answer_images("Try B [1].\n\nSources:\n1. [B](https://b.com/y)") == [], "one picture: no carousel"
     assert e._answer_images("(stopped)") == []
     e._turn_images = []
     assert e._answer_images("No search ran.") == []

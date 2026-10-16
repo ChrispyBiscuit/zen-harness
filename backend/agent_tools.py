@@ -1516,7 +1516,19 @@ def t_web_search(a, c):
     except ValueError as e:
         raise ToolError(str(e))
     c.display = dict(info, type="web_hits")
-    return out
+    return out + _picture_note(out)
+
+
+def _picture_note(out, limit=4):
+    """The pictures of the pages just read (each page's own preview image, deep_search.PAGE_IMAGES), so the answer
+    can show one with ![caption](url) — only pages that show a place or product of their own, not articles."""
+    import deep_search
+    pages = list(dict.fromkeys(u.rstrip(".,;)") for u in re.findall(r"https?://[^\s)\]>\"']+", out)))
+    ims = [im for im in deep_search.images_for(pages) if im.get("name") and not im.get("listing")][:limit]
+    if not ims:
+        return ""
+    return ("\n\nPictures on these pages (to show one in the answer: ![caption](image URL), only if it shows the "
+            "subject):\n" + "\n".join(f"- {im['name']}: {im['src']} (from {im['page']})" for im in ims))
 
 
 def _browser_read_page(url, max_chars):
@@ -1565,7 +1577,7 @@ def t_web_fetch(a, c):
         if os.path.isdir(save) and not c.inside(save) and os.path.dirname(save) not in c.roots:
             c.roots.append(os.path.dirname(save))   # the saved pages are readable with read_file
         c.display = info
-        return out
+        return out + _picture_note(out)
     url = str(a.get("url", ""))
     if not re.match(r"^https?://", url, re.I):
         raise ToolError("only http(s) URLs can be fetched (or give 'urls': a list)")

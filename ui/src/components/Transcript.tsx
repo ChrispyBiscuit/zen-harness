@@ -330,7 +330,7 @@ function useGlitch(ref: React.RefObject<HTMLDivElement | null>, typing: boolean)
     if (!el || REDUCED_MOTION || fx === "off" || fx === "calm") return
     const ms = fx === "full" ? 180 : 150
     const burst = (block: Element | null | undefined) => {
-      if (!block || done.current.has(block) || document.hidden) return
+      if (!block || done.current.has(block) || document.hidden || block.classList.contains("answer-block")) return
       done.current.add(block)
       el.style.setProperty("--glitch-dur", `${ms}ms`)
       block.classList.add("glitch-block")
@@ -389,7 +389,7 @@ const AssistantMessage = memo(function AssistantMessage({ msg, k, variant = "ans
       {!narration && msg.images?.length && (msg.content || !msg.streaming) ? <ImageCarousel images={msg.images} /> : null}
       {msg.content ? (
         <div ref={body} className={cn(msg.error && "text-destructive", typing && "typing")}>
-          <Markdown text={tail ? shown + SCR_OPEN + tail + SCR_CLOSE : shown} />
+          <Markdown text={tail ? shown + SCR_OPEN + tail + SCR_CLOSE : shown} live={typing} />
         </div>
       ) : null}
       {!narration && msg.content && !msg.streaming ? <div className="-mt-1 flex"><SpeakButton k={k} text={msg.content} /></div> : null}

@@ -46,7 +46,7 @@ function Card({ im, onOpen, onBroken }: { im: AnswerImage; onOpen: () => void; o
 }
 
 /** Full-screen view: the image large, its page one click away; arrows, thumbnails and keys move between images. */
-function Lightbox({ list, start, onClose }: { list: AnswerImage[]; start: number; onClose: () => void }) {
+export function Lightbox({ list, start, onClose }: { list: AnswerImage[]; start: number; onClose: () => void }) {
   const [i, setI] = useState(start)
   const go = useCallback((d: number) => setI((x) => (x + d + list.length) % list.length), [list.length])
   useEffect(() => {

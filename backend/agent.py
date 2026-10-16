@@ -37,7 +37,7 @@ MAX_STEPS = 6              # safety cap on tool-call rounds
 SYSTEM = (
     "You are a helpful assistant running locally, with an OPTIONAL web-search "
     "capability. Today's date is {today}.\n"
-    "You have two tools: web_search (find pages) and web_fetch (read a page). "
+    "You have three tools: web_search (find pages), web_fetch (read a page) and calculate (exact maths). "
     "YOU decide whether a question needs them — most do not.\n"
     "- Answer DIRECTLY from your own knowledge, with no search, for general facts, "
     "explanations, definitions, reasoning, math, coding, writing, and casual "
@@ -55,7 +55,7 @@ SYSTEM = (
 # Plain chat only has the two web tools. Without this note models say "I'm a text-only AI and can't
 # access your computer", which is wrong for this app: Agent mode has PowerShell, files and screen.
 CHAT_MODE_NOTE = (
-    "\n\nYou are in this app's Chat mode, where your only tools are web_search and web_fetch. The app "
+    "\n\nYou are in this app's Chat mode, where your only tools are web_search, web_fetch and calculate. The app "
     "also has an Agent mode (the 'Agent' checkbox at the top of the window) in which you DO get "
     "PowerShell, file reading/creating/editing, screen control and MCP tools on the user's PC. If the "
     "user asks you to run a command, use PowerShell, check processes, or read or change files on "
@@ -81,7 +81,23 @@ TOOL_SCHEMAS = [
         }, "required": ["url"]}}},
 ]
 
-DISPATCH = {"web_search": tools.web_search, "web_fetch": tools.web_fetch}
+def _calculate(expression="", **_):
+    """The agent's exact calculator (arithmetic, percentages, units, dates, equations) for chat mode."""
+    import calc
+    try:
+        return calc.render(calc.calculate(str(expression).strip(), 15))
+    except calc.CalcError as e:
+        return f"Error: {e}. Examples: '2^64', 'x^2-5x+6=0', '65 mph to m/s', 'days between 2026-03-03 and 2026-06-09'"
+
+
+TOOL_SCHEMAS.append({"type": "function", "function": {
+    "name": "calculate",
+    "description": "Exact calculator: arithmetic, percentages, compound interest, unit conversions ('65 mph to m/s'), "
+                   "day counts ('days between 2026-03-03 and 2026-06-09'), equations. Use it for any number you would "
+                   "otherwise work out in your head.",
+    "parameters": {"type": "object", "properties": {"expression": {"type": "string"}}, "required": ["expression"]}}})
+
+DISPATCH = {"web_search": tools.web_search, "web_fetch": tools.web_fetch, "calculate": _calculate}
 
 
 def run_agent(question: str, model: str = MODEL, verbose: bool = True) -> str:
@@ -221,7 +237,8 @@ def run_agent_events(question: str, model: str = MODEL, emit=None,
 
         today = datetime.date.today().strftime("%B %d, %Y")
         sys_text = (system_prompt if system_prompt is not None else SYSTEM)
-        sys_text = sys_text.replace("{today}", today) + CHAT_MODE_NOTE
+        import answer_shapes
+        sys_text = sys_text.replace("{today}", today) + CHAT_MODE_NOTE + "\n" + answer_shapes.TEXT
         tools_arg = TOOL_SCHEMAS
         messages = [{"role": "system", "content": sys_text}]
         for turn in (history or []):
