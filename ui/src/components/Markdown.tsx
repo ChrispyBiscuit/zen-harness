@@ -127,6 +127,9 @@ const SOURCE_PAIR = new RegExp(String.raw`\[(\d{1,2})\][ \t]*(?:\[([^\]]+)\]\(($
 
 /** Split off a trailing "Sources:" list and turn inline [1] / [1, 2] markers into citation links. */
 export function prepCitations(text: string): { body: string; sources: Source[] } {
+  // a sources list quoted as a block ("> Sources:" then "> 1. …"): the same list, unquoted
+  text = text.replace(/^>[ \t]*((?:\*\*|__)?(?:Sources?|References|Citations)\b[^\n]*(?:\n>[^\n]*)*)/im,
+    (_all, block: string) => block.replace(/\n>[ \t]?/g, "\n"))
   const m = SOURCES_HEAD.exec(text)
   if (!m || m.index === undefined) return { body: text, sources: [] }
   const before = text.slice(0, m.index)

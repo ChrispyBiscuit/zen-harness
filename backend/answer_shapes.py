@@ -29,7 +29,7 @@ none); the numbers and names in it come from your sources or tools, as in your t
 ```timeline
 [{"date":"1969","title":"Apollo 11","text":"First crewed Moon landing"},{"date":"1972","title":"Apollo 17","text":"Last crewed landing"}]
 ```
-- cards: 2-5 options to choose between, the same attributes on each.
+- cards: 2-5 options to choose between.
 ```cards
 [{"title":"Kobo Clara BW","subtitle":"$130","badge":"best value","items":[["Screen","6 in"]]},{"title":"Kindle","subtitle":"$110","items":[["Screen","6 in"]]}]
 ```
