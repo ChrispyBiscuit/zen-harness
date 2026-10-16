@@ -72,12 +72,10 @@ export function UpdateChip() {
   const commits = st.commits || []
   return (
     <Popover>
-      <PopoverTrigger asChild>
-        <button className="flex items-center gap-1.5 whitespace-nowrap rounded px-1.5 text-info transition-ui hover:bg-surface-2"
-          title="A newer version of the app is available">
-          {working || st.busy ? <Loader2 className="size-3.5 animate-spin" /> : <ArrowDownToLine className="size-3.5" />}
-          <span>{working || st.busy ? "Updating" : st.available ? `Update · ${commits.length} change${commits.length === 1 ? "" : "s"}` : "Rolled back"}</span>
-        </button>
+      <PopoverTrigger className="flex items-center gap-1.5 whitespace-nowrap rounded px-1.5 text-info transition-ui hover:bg-surface-2"
+        title="A newer version of the app is available">
+        {working || st.busy ? <Loader2 className="size-3.5 animate-spin" /> : <ArrowDownToLine className="size-3.5" />}
+        <span>{working || st.busy ? "Updating" : st.available ? `Update · ${commits.length} change${commits.length === 1 ? "" : "s"}` : "Rolled back"}</span>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-96 p-0">
         <div className="border-b border-line-1 px-3 py-2">
