@@ -21,6 +21,7 @@ SCRATCH = tempfile.mkdtemp(prefix="zh_offline_")
 os.environ["LWS_DATA_DIR"] = os.path.join(SCRATCH, "data")
 os.environ["LWS_NO_TELEGRAM"] = "1"
 os.environ["LWS_NO_SCHEDULER"] = "1"
+os.environ["LWS_NO_CODE_INDEX"] = "1"
 os.makedirs(os.environ["LWS_DATA_DIR"], exist_ok=True)
 sys.path.insert(0, APP)
 

@@ -162,7 +162,7 @@ plausible (not all zero), did the command do what the user wanted? If not, corre
 - If the same approach fails twice, do not repeat it: re-read the error and look it up — web_search the exact \
 error message, or how others solve this problem (official docs, known issues, a working example) — then try \
 something fundamentally different, or explain what is blocking you.
-- Before editing a file, read_file the part you will change. Use edit_file for targeted changes \
+- Before editing a file, read_file the part you will change. When a task or a failure spans several files, focus_pack(goal=...) brings the relevant functions from all of them in one block (call it again with names=[...] for what is missing) instead of reading whole files one by one. Use edit_file for targeted changes \
 (copy 'old' exactly, without the line-number prefix) and write_file for new files or full rewrites. \
 Think briefly — just enough to choose the next action — then act: a tool result is worth more than more \
 deliberation, and you can think again after it. When you are unsure how a library, an API or your own code behaves, check it instead of reasoning it out: run a \
@@ -5827,7 +5827,7 @@ class AgentEngine:
     CORE_GROUPS = ("files", "shell", "code", "web", "math", "memory")
     COMPACT_CORE_NAMES = {"available_tools", "update_tracker", "ask_user", "history_search", "read_guide",
                           "read_file", "write_file", "edit_file", "list_dir", "find_files", "search_text",
-                          "make_dir", "powershell", "run_tests", "go_extensive"}
+                          "make_dir", "powershell", "run_tests", "go_extensive", "focus_pack"}
     # a software build never uses these (~3K tokens of the ~13K fixed prompt start); listed in available_tools and
     # turned on if called (used = enabled), as any other tool
     BUILD_SKIP = {"record", "query_data", "python_sandbox", "python_host", "calculate", "read_formula", "encyclopedia",

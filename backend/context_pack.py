@@ -153,19 +153,74 @@ def _default_embed(texts, query=False):
 
 
 _EMB_CACHE = {}      # sha1 of the embedded text -> vector: unchanged slices are never embedded twice
+_EMB_LOADED = False
+_EMB_DIRTY = False
+STATUS = {"state": "idle"}     # what the index is doing, for the app's status chip: idle / indexing / ready / error
 
 
-def _embed_cached(embed, texts):
+def _store_path():
+    try:
+        import paths
+        return paths.data("code_index", "embeddings.pkl")
+    except Exception:
+        return ""
+
+
+def _load_store():
+    """The saved embeddings (one file for every project: vectors are keyed by the text they embed)."""
+    global _EMB_LOADED
+    if _EMB_LOADED:
+        return
+    _EMB_LOADED = True
+    p = _store_path()
+    if p and os.path.isfile(p):
+        import pickle
+        try:
+            with open(p, "rb") as f:
+                _EMB_CACHE.update(pickle.load(f))
+        except Exception:
+            pass
+
+
+def _save_store():
+    global _EMB_DIRTY
+    p = _store_path()
+    if not (p and _EMB_DIRTY):
+        return
+    import pickle
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    tmp = p + ".tmp"
+    with open(tmp, "wb") as f:
+        pickle.dump(_EMB_CACHE, f, protocol=pickle.HIGHEST_PROTOCOL)
+    os.replace(tmp, p)
+    _EMB_DIRTY = False
+
+
+def _embed_cached(embed, texts, persist=True, batch=32):
+    """Vectors for `texts`, embedding only the ones never seen before (in batches, reporting progress in STATUS)."""
+    global _EMB_DIRTY
     import hashlib
     import numpy as np
+    if persist:
+        _load_store()
     keys = [hashlib.sha1(t.encode("utf-8", "replace")).hexdigest() for t in texts]
     todo = [i for i, k in enumerate(keys) if k not in _EMB_CACHE]
     if todo:
-        vecs = embed([texts[i] for i in todo])
-        if vecs is None:
-            return None
-        for i, v in zip(todo, vecs):
-            _EMB_CACHE[keys[i]] = v
+        STATUS.update(total=len(todo), done=0)
+        for s in range(0, len(todo), batch):
+            part = todo[s:s + batch]
+            vecs = embed([texts[i] for i in part])
+            if vecs is None:
+                return None
+            for i, v in zip(part, vecs):
+                _EMB_CACHE[keys[i]] = v
+            STATUS["done"] = min(len(todo), s + batch)
+        _EMB_DIRTY = True
+        if persist:
+            try:
+                _save_store()
+            except OSError:
+                pass
     return np.stack([_EMB_CACHE[k] for k in keys]) if keys else None
 
 
@@ -188,6 +243,9 @@ def _index(root, files, embed, max_lines=None):
         hit = _CACHE.get(key)
         if hit and hit["sig"] == sig:
             return hit
+        t0 = time.time()
+        STATUS.clear()
+        STATUS.update(state="indexing", root=root, files=len(sig), started=t0, done=0, total=0)
         units = []
         for rel, *_ in sig:
             try:
@@ -202,9 +260,78 @@ def _index(root, files, embed, max_lines=None):
         for i, u in enumerate(units):
             if u["symbol"]:
                 defs[_short(u["symbol"])].append(i)
-        entry = {"sig": sig, "units": units, "bm25": bm, "vecs": vecs, "defs": defs, "built": time.time()}
+        entry = {"sig": sig, "units": units, "bm25": bm, "vecs": vecs, "defs": defs, "built": time.time(),
+                 "root": root, "files": len(sig), "seconds": round(time.time() - t0, 1)}
         _CACHE[key] = entry
+        STATUS.clear()
+        STATUS.update(state="ready", root=root, files=len(sig), slices=len(units), seconds=entry["seconds"],
+                      built=entry["built"], embedded=vecs is not None)
         return entry
+
+
+def start_index(root, files=None, embed=_default_embed, max_lines=None):
+    """Build or refresh `root`'s index in the background (after the agent writes code, or when a project opens), so a
+    focus_pack call later finds it ready. Unchanged slices reuse their saved embeddings; only new text is embedded."""
+    def work():
+        try:
+            _index(root, list(files) if files is not None else code_files(root), embed, max_lines)
+        except Exception as e:
+            STATUS.clear()
+            STATUS.update(state="error", root=root, error=repr(e)[:200])
+    th = threading.Thread(target=work, daemon=True, name="code-index")
+    th.start()
+    return th
+
+
+def index_status():
+    return dict(STATUS)
+
+
+def index_summary(root):
+    """What is indexed for `root` (for the app's code-index view): files, slices, when, and saved-vector count."""
+    key = next((k for k in _CACHE if k[0] == os.path.normcase(os.path.abspath(root))), None)
+    e = _CACHE.get(key) if key else None
+    if not e:
+        return {"root": root, "indexed": False}
+    per_file = Counter(u["file"] for u in e["units"])
+    return {"root": root, "indexed": True, "files": e["files"], "slices": len(e["units"]), "built": e["built"],
+            "seconds": e["seconds"], "embedded": e["vecs"] is not None, "saved_vectors": len(_EMB_CACHE),
+            "largest": per_file.most_common(8)}
+
+
+def indexed_roots():
+    return sorted({e["root"] for e in _CACHE.values() if e.get("root")})
+
+
+def forget(root):
+    """Drop `root`'s in-memory index (its saved embeddings stay, so a rebuild only re-reads files)."""
+    n = os.path.normcase(os.path.abspath(root))
+    for k in [k for k in _CACHE if k[0] == n]:
+        _CACHE.pop(k, None)
+
+
+def named_units(ix, names):
+    """Units for definitions named exactly (Class.method, function, class; a file name gives that file's units),
+    head window first. -> (unit ids, names that matched nothing)."""
+    units, defs = ix["units"], ix["defs"]
+    out, missing = [], []
+    for raw in names or []:
+        name = str(raw).strip()
+        if not name:
+            continue
+        base = os.path.basename(name.replace("\\", "/")).lower()
+        by_file = [i for i, u in enumerate(units) if os.path.basename(u["file"]).lower() == base] if "." in base and \
+            base.rsplit(".", 1)[-1] in ("py", "js", "mjs", "ts", "tsx", "jsx", "html", "css", "md") else []
+        short = name.split(".")[-1]
+        ids = defs.get(short) or []
+        if "." in name and not by_file:
+            ids = [i for i in ids if (units[i]["symbol"] or "").split("#")[0].endswith(name)] or ids
+        ids = by_file or ids
+        if not ids:
+            missing.append(name)
+            continue
+        out += sorted(ids, key=lambda i: (units[i]["file"], not units[i].get("head"), units[i]["start"]))
+    return list(dict.fromkeys(out)), missing
 
 
 LINK_SEEDS = 0        # off: following the top hits' call links did not help (measure_focus.py); 5 to try it
@@ -263,32 +390,48 @@ def code_files(root, limit=4000):
     return [rel for rel, _p, _st in repomap._walk(os.path.abspath(root), code_only=True, max_files=limit)]
 
 
+def unit_key(u):
+    return (u["file"], u["start"], u["end"], hash(u["text"]))
+
+
 def focus_pack(root, query, budget_tokens=4000, files=None, embed=_default_embed, max_lines=None, link_seeds=None,
-               link_boost=None):
+               link_boost=None, names=None, skip=None):
     """-> (text, chosen units). The function-level slices of the code under `root` that best match `query` (a goal, a
     question or an error trace), filled to `budget_tokens`, shown grouped by file in line order with line numbers.
+    names: definitions or files asked for exactly (a second round: what the model saw was missing) — they come first.
+    skip: unit_key()s already shown (left out, so a follow-up call brings only new code).
     embed=None: keyword ranking only (no embedding model). max_lines: the slice size for long definitions;
     link_seeds / link_boost: how many top hits have their call links followed, and how strongly (0 = off)."""
     files = list(files) if files is not None else code_files(root)
     ix = _index(root, files, embed, max_lines)
     if not ix["units"]:
         return "", []
-    chosen, used = [], tokens("[Focus pack]") + 20
-    for i in rank(ix, query, embed, link_seeds, link_boost):
+    named, missing = named_units(ix, names)
+    seen = set(named)
+    full_query = " ".join([query] + [str(n) for n in names or []])
+    order = named + [i for i in rank(ix, full_query, embed, link_seeds, link_boost) if i not in seen]
+    skip = skip or set()
+    chosen, used, skipped = [], tokens("[Focus pack]") + 20, 0
+    for i in order:
         u = ix["units"][i]
+        if unit_key(u) in skip:
+            skipped += 1
+            continue
         if used + u["tokens"] <= budget_tokens:
             chosen.append(u)
             used += u["tokens"]
         if used >= budget_tokens - 40:
             break
+    note = (f" Not found in the project: {', '.join(missing)}." if missing else "") + \
+           (f" {skipped} slice(s) already shown earlier left out." if skipped else "")
     if not chosen:
-        return "", []
+        return ("[Focus pack: nothing new matched." + note + "]") if (missing or skipped) else "", []
     by_file = defaultdict(list)
     for u in chosen:
         by_file[u["file"]].append(u)
     order = [f for f in dict.fromkeys(u["file"] for u in chosen)]      # files in rank order of their best slice
     parts = [f"[Focus pack: {len(chosen)} code slices from {len(order)} file(s), ~{used:,} tokens, the best match for: "
-             f"{' '.join(query.split())[:160]}. Line numbers as read_file shows them — edit from this text.]"]
+             f"{' '.join(query.split())[:160]}.{note} Line numbers as read_file shows them — edit from this text.]"]
     for f in order:
         for u in sorted(by_file[f], key=lambda u: u["start"]):
             label = f" ({u['symbol']})" if u["symbol"] else ""

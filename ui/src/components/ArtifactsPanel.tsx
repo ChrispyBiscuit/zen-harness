@@ -7,6 +7,7 @@ import { useApp } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
 import type { Msg } from "@/lib/types"
+import { CodeIndexSection } from "./CodeIndex"
 
 export type ArtifactRef = { id: string; title: string; atype: string; language?: string; version: number; action?: string }
 type Meta = { id: string; title: string; type: string; language?: string; versions: { v: number; t: number; chars: number; note?: string }[] }
@@ -198,10 +199,13 @@ export function ArtifactsPanel() {
 
   if (!conv || (!list.length && !files.length)) {
     return (
+      <div className="flex h-full flex-col">
+      <CodeIndexSection />
       <div className="px-6 py-12 text-center text-ui text-muted-foreground">
         <Layers className="mx-auto mb-3 size-6 opacity-60" />
         Documents, pages, diagrams and code the agent creates show up here, with every file it writes or edits, and update
         as it revises them.
+      </div>
       </div>
     )
   }
@@ -212,6 +216,7 @@ export function ArtifactsPanel() {
           .filter(Boolean).join(" · ")} in this chat · click to open
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto py-1">
+        <CodeIndexSection />
         {list.length > 0 && files.length > 0 && <div className="label-tech px-3 pb-1 pt-2 text-faint">Artifacts</div>}
         {[...list].reverse().map((a) => (
           <button key={a.id} onClick={() => set({ artifactSel: a.id, artifactOpen: a.id } as any)} title={a.title}

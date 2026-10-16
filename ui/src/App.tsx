@@ -17,6 +17,7 @@ import { ResizeEdges, WindowControls, WindowFrame, useWindowDrag } from "@/compo
 import { useApp } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import { MeterBar } from "@/components/MeterBar"
+import { CodeIndexChip } from "@/components/CodeIndex"
 import { Decode } from "@/components/Decode"
 import { levelTone, type Tone } from "@/lib/tone"
 import { applyDensity, storedDensity, type Density } from "@/lib/density"
@@ -141,6 +142,7 @@ function StatusBar() {
         <ContextGauge />
       </span>
       <div className="flex-1" />
+      <CodeIndexChip />
       <div className="hidden @2xl:flex"><Monitor /></div>
     </footer>
   )
