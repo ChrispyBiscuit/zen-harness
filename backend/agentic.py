@@ -298,6 +298,19 @@ At most 300 words in total; write "none" under a heading with nothing. Do not ad
 conversation."""
 SUMMARY_MAX_TOKENS = 700           # ~300 words with headings and paths; was 1200 for a 500-word summary
 
+# the summary before 2026-10-16 (commit 150acc6), kept for comparison: Settings compact_summary = "narrative"
+# restores it (plans/compaction-revisions.md)
+SUMMARY_PROMPT_NARRATIVE = """Summarize the conversation so far for an agent that will continue the work \
+without seeing the original messages. Build it on the turning points the app recorded (listed below, if any): they \
+are facts. Use these headings:
+1. Goal and constraints: the user's requests, quoting exact requirements.
+2. Current understanding: how the problem and the solution work, as you now see them — the concepts, the design, \
+what turned out to matter.
+3. Turning points: what was tried, what was learned, what was ruled out and why — with the exact names, paths, \
+commands, error texts and line numbers involved.
+4. Current state and next step: what you were in the middle of, the last result, what comes next.
+Be specific and factual; at most 500 words. Do not add anything that is not in the conversation."""
+
 
 _OUTCOME_RX = re.compile(r"exit code|\bPASS\b|\bFAIL|passed|failed|error|Error|Traceback|saved at|full text:|"
                          r"\d+ ?/ ?\d+|warning|assert", re.I)
@@ -3272,7 +3285,9 @@ class AgentEngine:
                 norm = os.path.abspath(path).lower() if path else ""
                 # every older write/edit drops the text it carried, not only superseded ones: the file is on disk,
                 # the working set re-adds the current version, and these arguments were a third of a 27B's history
-                if old and fn.get("name") in ("write_file", "edit_file", "artifact_create", "artifact_edit"):
+                superseded_only = self.cfg.get("trim_old_writes") == "superseded"   # the rule before 2026-10-16
+                if old and (norm in later or not superseded_only) and fn.get("name") in (
+                        "write_file", "edit_file", "artifact_create", "artifact_edit"):
                     import copy
                     tc2 = copy.deepcopy(tc)
                     _slim_call_args(tc2)
@@ -5618,7 +5633,16 @@ class AgentEngine:
     # (the 27B re-read files it could already see). Measured once per engine and then kept, so budgets don't flap.
     SLOW_TPS, SLOW_COMPACT_AT, SLOW_COMPACT_TARGET = 20.0, 35000, 22000
 
+    def _summary_prompt(self):
+        """compact_summary: 'terse' (the fixed five-slot template, default) or 'narrative' (before 2026-10-16)."""
+        return SUMMARY_PROMPT_NARRATIVE if self.cfg.get("compact_summary") == "narrative" else SUMMARY_PROMPT
+
+    def _summary_max_tokens(self, narrative_cap):
+        return narrative_cap if self.cfg.get("compact_summary") == "narrative" else SUMMARY_MAX_TOKENS
+
     def _slow(self):
+        if self.cfg.get("slow_compaction", True) is False:
+            return False                             # the compaction points before 2026-10-16 for every model
         if getattr(self, "_slow_model", False):
             return True
         tps = float(getattr(self, "_last_tps", 0) or 0)
@@ -5850,7 +5874,7 @@ class AgentEngine:
             tl = cm.render_timeline(self.ctx.conv_id)
         except Exception:
             tl = ""
-        ask = (f"{REMINDER_TAG}\nPause the task. {SUMMARY_PROMPT}"
+        ask = (f"{REMINDER_TAG}\nPause the task. {self._summary_prompt()}"
                + (f"\n\nTurning points the app recorded:\n{tl}" if tl else "")
                + "\n\nSummarize ONLY the part of this conversation BEFORE "
                f"{who} that begins: «{anchor}». That message and everything after it will be kept word for "
@@ -5864,7 +5888,7 @@ class AgentEngine:
         try:
             # Cold replay has no prompt prefix to reuse. Its full tool schema costs tokens and time
             # without helping a no-tool summary. Keep the unchanged schema prefix on warm runs.
-            msg, _n, _p = self._call_openai(msgs, tools=False, max_tokens=SUMMARY_MAX_TOKENS, no_think=True,
+            msg, _n, _p = self._call_openai(msgs, tools=False, max_tokens=self._summary_max_tokens(1600), no_think=True,
                                            omit_tool_schemas=not bool(self.last_prompt_tokens))
         finally:
             self._delta = "ans_delta"
@@ -5894,7 +5918,8 @@ class AgentEngine:
             text = text[:limit // 3] + "\n…\n" + text[-(limit * 2 // 3):]
         return self._plain(
             [{"role": "system", "content": "You write precise summaries of an AI agent's work."},
-             {"role": "user", "content": f"{SUMMARY_PROMPT}\n\nCONVERSATION:\n{text}"}], SUMMARY_MAX_TOKENS).strip()
+             {"role": "user", "content": f"{self._summary_prompt()}\n\nCONVERSATION:\n{text}"}],
+            self._summary_max_tokens(1200)).strip()
 
     def _pack_ask(self, prompt):
         """focus_pack's second round: one short side request (no thinking, no tool list, not shown in the chat) in

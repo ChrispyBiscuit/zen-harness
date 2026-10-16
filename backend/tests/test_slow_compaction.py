@@ -60,3 +60,23 @@ def test_the_summary_is_a_terse_fixed_template():
     for head in ("GOAL:", "ESTABLISHED:", "RULED OUT:", "DECISIONS:", "NOW:"):
         assert head in p
     assert "300 words" in p and "root cause" in p and agentic.SUMMARY_MAX_TOKENS <= 800
+
+
+def test_each_compaction_change_can_be_switched_back():
+    import agentic
+    e = engine(num_ctx=61440, compact_summary="narrative", slow_compaction=False, trim_old_writes="superseded")
+    assert e._summary_prompt() == agentic.SUMMARY_PROMPT_NARRATIVE and e._summary_max_tokens(1600) == 1600
+    e._last_tps, e._tps_exact = 10.0, True
+    assert not e._slow() and e.context_budget() == 61440 - e.REPLY_RESERVE       # the old compaction point
+    big = "x = 1\n" * 200
+    msgs = [{"role": "user", "content": "build"},
+            {"role": "assistant", "content": "", "tool_calls": [{"id": "w1", "type": "function", "function": {
+                "name": "write_file", "arguments": json.dumps({"path": "server.py", "content": big})}}]},
+            {"role": "tool", "tool_call_id": "w1", "content": "created server.py"}]
+    for i in range(8):
+        msgs += [{"role": "assistant", "content": "", "tool_calls": [{"id": f"r{i}", "type": "function",
+                  "function": {"name": "run_tests", "arguments": "{}"}}]},
+                 {"role": "tool", "tool_call_id": f"r{i}", "content": "ok"}]
+    args, _ = e._stale_extras(msgs)
+    assert "w1" not in args                       # superseded only: server.py was never touched again
+    assert engine()._summary_prompt() == agentic.SUMMARY_PROMPT
