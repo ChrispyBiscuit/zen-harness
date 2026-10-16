@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { help, modelsApi, type About, type Download as Dl } from "@/lib/api"
 import { useApp } from "@/lib/store"
 import { cn } from "@/lib/utils"
+import { confirmDownload } from "@/components/ConsentDialog"
 
 /* First run: no model configured yet. Checks the hardware, recommends a model from the catalog
    (backend/model_catalog.json), downloads it and sets it up (models_api.install_from_catalog saves the profile and
@@ -51,6 +52,9 @@ export function WelcomeDialog() {
     setOpen(false)
   }
   const install = async (id: string) => {
+    const m = cat.find((x) => x.id === id)
+    if (m && !m.installed && !await confirmDownload({ title: m.name || id, size: m.size + m.extras.reduce((s, e) => s + e.size, 0),
+      source: "huggingface.co", detail: "The model, and any helper files it needs, download once into your models folder; it is set up as your default when done." })) return
     const r = await fetch("/api/models/catalog/install", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, make_default: true }) }).then((x) => x.json())
     if (!r.ok) toast.error(r.error || "Could not start the download")

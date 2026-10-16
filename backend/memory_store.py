@@ -23,6 +23,15 @@ DB_PATH = paths.data("agent_memory.db")
 OLD_MEMORY_MD = paths.data("agent_memory.md")
 EMBED_MODEL = "BAAI/bge-small-en-v1.5"
 EMBED_CACHE = os.path.join(paths.models_dir(), "fastembed")
+EMBED_SIZE = 70 << 20          # the quantized ONNX model + tokenizer, roughly (progress bar only)
+
+
+def _embed_cached():
+    """Is the embedding model already in the fastembed cache (any .onnx file under it)?"""
+    for dp, _, files in os.walk(EMBED_CACHE) if os.path.isdir(EMBED_CACHE) else []:
+        if any(f.endswith(".onnx") for f in files):
+            return True
+    return False
 DIM = 384
 RRF_K = 60
 CHUNK = 900                         # characters per conversation chunk
@@ -67,6 +76,9 @@ class MemoryStore:
     # ------------------------------------------------------------------ embeddings
     def _embedder(self):
         if self._model is None and self._model_err is None:
+            if not _embed_cached():
+                self._ask_for_model()                     # first use: ask (in the background); keyword search meanwhile
+                return None
             with self._model_lock:
                 if self._model is None and self._model_err is None:
                     try:
@@ -75,6 +87,33 @@ class MemoryStore:
                     except Exception as e:                    # no model: keyword search still works
                         self._model_err = repr(e)
         return self._model
+
+    def _ask_for_model(self):
+        """The embedding model isn't downloaded yet: ask the user once (downloads.py), then fetch it in the background.
+        Until then (or if declined) memory search is keyword-only."""
+        if getattr(self, "_asking", False):
+            return
+        self._asking = True
+
+        def run():
+            import downloads
+            ok, rid = downloads.ask("embeddings", "Memory search model (bge-small, about 70 MB)",
+                                    "Lets memory search find notes by meaning, not just matching words. Downloaded "
+                                    "once; it runs on your CPU and nothing you store leaves this PC.",
+                                    EMBED_SIZE, "huggingface.co (Qdrant/bge-small-en-v1.5-onnx-q)")
+            if not ok:
+                self._model_err = "the download was declined: keyword search only"
+                return
+            downloads.track(rid, EMBED_CACHE, EMBED_SIZE)
+            try:
+                from fastembed import TextEmbedding
+                with self._model_lock:
+                    self._model = TextEmbedding(EMBED_MODEL, cache_dir=EMBED_CACHE, threads=4)
+                downloads.finish(rid, True)
+            except Exception as e:
+                self._model_err = repr(e)
+                downloads.finish(rid, False, e)
+        threading.Thread(target=run, daemon=True, name="memory-embedder-ask").start()
 
     def embed(self, texts, query=False):
         m = self._embedder()

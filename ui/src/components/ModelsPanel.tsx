@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Field, Section, inputCls } from "@/components/SettingsDialog"
 import { help, modelsApi, type Download as Dl, type ModelList, type Profile, type Proposal, type TestResult } from "@/lib/api"
 import { cn } from "@/lib/utils"
+import { confirmDownload } from "@/components/ConsentDialog"
 
 /* Settings → Models: everything about local models in one place — what's in the models folder, saved profiles
    (per-model context / KV cache / MoE offload / helper files), adding a model (pick, drop in the folder, download),
@@ -103,7 +104,13 @@ export function ModelsPanel({ current, onUse }: { current: string; onUse: (name:
     if (path) inspect(path)
   }
   const download = async () => {
-    try { await modelsApi.download(url); setUrl(""); toast.success("Download started"); pollDownloads() } catch (e: any) { toast.error(e.message) }
+    const link = url.trim()
+    const file = decodeURIComponent(link.split("?")[0].split("/").pop() || "the model")
+    let host = ""
+    try { host = new URL(link).host } catch { /* the backend explains a bad link */ }
+    if (!await confirmDownload({ title: file, source: host || link,
+      detail: "A model file for the models folder. It downloads in the background (you can pause and resume it below)." })) return
+    try { await modelsApi.download(link); setUrl(""); toast.success("Download started"); pollDownloads() } catch (e: any) { toast.error(e.message) }
   }
   const removeProfile = async (name: string) => {
     if (!confirm(`Remove the profile “${name}”? The model file stays in the folder.`)) return

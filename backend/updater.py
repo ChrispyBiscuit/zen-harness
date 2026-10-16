@@ -31,6 +31,69 @@ DETACHED = (0x00000008 | 0x00000200 | 0x08000000) if os.name == "nt" else 0
 
 _lock = threading.RLock()
 _busy = {"stage": None}                # what the updater is doing now (for the UI)
+# An install's steps, in order, for the progress bar: (key, label, typical seconds). Steps a given update doesn't need
+# (no UI change, no new packages) are marked skipped; the bar moves by step and creeps within one by its typical time.
+STEPS = [("download", "Downloading the update", 4), ("deps", "Installing UI packages", 60),
+         ("build", "Building the interface", 25), ("python", "Installing Python packages", 40),
+         ("test", "Testing the new version", 12), ("install", "Installing", 4)]
+_progress = {"steps": {}, "current": None, "started": None}
+
+
+def progress_begin():
+    _progress.update(steps={k: "pending" for k, _, _ in STEPS}, current=None, started=time.time())
+
+
+def _step(key):
+    """Mark `key` as the running step (earlier pending steps were not needed: skipped)."""
+    if not _progress["steps"]:
+        return
+    for k, _, _ in STEPS:
+        if k == key:
+            break
+        if _progress["steps"].get(k) in ("pending", "running"):
+            _progress["steps"][k] = "done" if _progress["steps"][k] == "running" else "skipped"
+    _progress["steps"][key] = "running"
+    _progress.update(current=key, step_started=time.time())
+
+
+def progress_end(ok=True):
+    for k, v in list(_progress["steps"].items()):
+        if v == "running":
+            _progress["steps"][k] = "done" if ok else "failed"
+        elif v == "pending" and ok:
+            _progress["steps"][k] = "skipped"
+    _progress["current"] = None
+
+
+def progress():
+    if not _progress["steps"]:
+        return None
+    return {"steps": [{"key": k, "label": lab, "typical": t, "state": _progress["steps"].get(k, "pending")}
+                      for k, lab, t in STEPS],
+            "current": _progress["current"], "step_started": _progress.get("step_started"),
+            "started": _progress["started"]}
+
+
+def fetch_for_install(sha):
+    """The download step of an install: make sure the clone has `sha` (normally already fetched by check())."""
+    with _lock:
+        _step("download")
+        _busy["stage"] = "downloading"
+        try:
+            ensure_clone()
+            if not _has(sha):
+                _git("fetch", "--quiet", "origin", settings()["channel"], timeout=600)
+            if not _has(sha):
+                raise UpdateError("the update could not be downloaded (the commit is not on the server)")
+        finally:
+            _busy["stage"] = None
+
+
+def decline(sha):
+    """'Not now' for this version: the app won't ask again until a newer one appears."""
+    st = load_state()
+    st["declined_sha"] = sha
+    save_state(st)
 
 
 class UpdateError(Exception):
@@ -73,7 +136,9 @@ def save_state(st):
 
 
 def settings():
-    """Settings > Updates: {"remote", "channel", "auto_check"} (defaults when unset)."""
+    """Settings > Updates: {"remote", "channel", "auto_check"} (defaults when unset). auto_check (on by default) is
+    'Automatic updates': check in the background and ask (a modal) when a new version is found; nothing installs
+    without the user's yes. Off: no background checks; Settings has Check now."""
     try:
         with open(paths.data("settings.json"), encoding="utf-8") as f:
             s = (json.load(f).get("update") or {})
@@ -151,7 +216,8 @@ def status():
             "commits": st.get("commits") or [], "last_check": st.get("last_check"), "channel": st.get("channel"),
             "applied_at": st.get("applied_at"), "can_rollback": bool(bk and os.path.isdir(bk)),
             "busy": _busy["stage"], "error": st.get("apply_error") or st.get("check_error"),
-            "rolled_back": st.get("rolled_back")}
+            "rolled_back": st.get("rolled_back"), "declined": st.get("declined_sha"),
+            "auto": settings()["auto_check"], "progress": progress()}
 
 
 # ---------------------------------------------------------------- stage
@@ -184,9 +250,11 @@ def stage(sha, python=None):
                     raise UpdateError("the UI changed but npm (Node.js) is not installed, so it can't be built")
                 deps = _changed(base, sha, "ui/package-lock.json", "ui/package.json")
                 if deps is None or deps or not os.path.isdir(os.path.join(ui, "node_modules")):
+                    _step("deps")
                     _run([npm, "ci", "--no-audit", "--no-fund"], cwd=ui, timeout=1200)
                     notes.append("UI packages installed")
                 env = dict(os.environ, ZEN_UI_OUT=os.path.join(clone_dir(), "backend", "web_dist"))
+                _step("build")
                 _run([npm, "run", "build"], cwd=ui, timeout=900, env=env)
                 notes.append("UI built")
                 st["built_sha"] = sha
@@ -194,10 +262,12 @@ def stage(sha, python=None):
             req = _changed(base, sha, "backend/requirements.txt")
             if req:                      # (unknown base: assume the installed packages already fit)
                 _busy["stage"] = "installing Python packages"
+                _step("python")
                 _run([python, "-m", "pip", "install", "--quiet", "-r",
                       os.path.join(clone_dir(), "backend", "requirements.txt")], timeout=1800)
                 notes.append("Python packages updated")
             _busy["stage"] = "testing the new version"
+            _step("test")
             smoke(python)
             notes.append("the new version imports cleanly")
             st = load_state()
@@ -243,6 +313,7 @@ def apply(sha):
             if st.get("staged_sha") != sha or _git("rev-parse", "HEAD").strip() != sha:
                 raise UpdateError("that version has not been built and tested yet (stage it first)")
             _busy["stage"] = "installing"
+            _step("install")
             src, dst = os.path.join(clone_dir(), "backend"), app_dir()
             stamp = time.strftime("%Y%m%d_%H%M%S")
             bk = os.path.join(root(), "backups", f"{stamp}_{_short(st.get('installed_sha')) or 'unknown'}")

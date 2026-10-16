@@ -4,6 +4,7 @@
   POST /api/update/check      fetch now
   POST /api/update/apply      stage + install the latest version, then restart the server (refused while a run is going)
   POST /api/update/rollback   put the previous version back, then restart
+  POST /api/update/decline    'Not now' for the latest version: no prompt again until a newer one
 
 The window is not restarted: the page sees the new server (a new `started` in /api/build) and reloads itself.
 """
@@ -54,18 +55,31 @@ async def apply(req):
     sha = st.get("latest")
     if not sha:
         return J({"ok": False, "error": "no update has been found yet: check first"}, 409)
+    updater.progress_begin()
     try:
+        await asyncio.to_thread(updater.fetch_for_install, sha)
         notes = await asyncio.to_thread(updater.stage, sha)
         if _ctx["busy"]():                    # a run started while the new version was being built
+            updater.progress_end(False)
             return J({"ok": False, "error": "an agent run started: install when it finishes"}, 409)
         res = await asyncio.to_thread(updater.apply, sha)
+        updater.progress_end(True)
     except Exception as e:
+        updater.progress_end(False)
         s = updater.load_state()
         s["apply_error"] = str(e)[:400]
         updater.save_state(s)
         return J({"ok": False, "error": str(e)[:400]}, 500)
     _restart()
     return J({"ok": True, "notes": notes, **res, "restarting": True})
+
+
+async def decline(req):
+    b = await req.json()
+    sha = str(b.get("sha") or updater.status().get("latest") or "")
+    if sha:
+        updater.decline(sha)
+    return J({"ok": True})
 
 
 async def rollback(req):
@@ -85,6 +99,7 @@ def install(app, busy, port, before_exit):
     app.router.add_post("/api/update/check", check)
     app.router.add_post("/api/update/apply", apply)
     app.router.add_post("/api/update/rollback", rollback)
+    app.router.add_post("/api/update/decline", decline)
 
     async def started(_app):
         updater.start_background_checks()

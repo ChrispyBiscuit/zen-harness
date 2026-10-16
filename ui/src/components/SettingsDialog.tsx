@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { setDensity, storedDensity, type Density } from "@/lib/density"
 import { setTextFx, storedTextFx, TEXT_FX } from "@/lib/textfx"
+import { UpdateStatusLine } from "@/components/UpdateChip"
 import { cn } from "@/lib/utils"
 import { useApp } from "@/lib/store"
 import type { Settings } from "@/lib/types"
@@ -267,6 +268,13 @@ export function SettingsDialog() {
                   label="Desktop notifications" hint="When a run finishes or needs your approval while the app is in the background." />
                 <Toggle checked={(draft.ui as any).clip !== false} onChange={(v) => setUi({ clip: v } as any)}
                   label="Clip the paperclip" hint="A little assistant in the corner with a line of philosophy now and then, and query ideas." />
+              </Section>
+              <Section title="Updates">
+                <Toggle checked={((draft as any).update || {}).auto_check !== false}
+                  onChange={(v) => setDraft({ ...draft, update: { ...((draft as any).update || {}), auto_check: v } } as any)}
+                  label="Automatic updates"
+                  hint="Checks for a new version in the background and asks before installing it: nothing is downloaded or installed without your yes. Off: check here when you want to." />
+                <UpdateStatusLine />
               </Section>
             </TabsContent>
 
