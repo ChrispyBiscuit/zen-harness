@@ -6,9 +6,7 @@ import { deleteWithUndo } from "@/lib/undo"
 import { useApp } from "@/lib/store"
 import type { Thread } from "@/lib/types"
 import { cn } from "@/lib/utils"
-import { Logo } from "./Logo"
 import { Schedules } from "./Schedules"
-import { useWindowDrag } from "./WindowFrame"
 
 function bucket(ts: number) {
   const d = new Date(ts * 1000)
@@ -81,7 +79,6 @@ function ThreadRow({ t, child }: { t: Thread; child?: boolean }) {
 }
 
 export function Sidebar() {
-  const drag = useWindowDrag()
   const allThreads = useApp((s) => s.threads)
   const hiddenThreads = useApp((s) => (s as any).hiddenThreads as string[] | undefined)
   const threads = useMemo(() => (hiddenThreads?.length ? allThreads.filter((t) => !hiddenThreads.includes(t.id)) : allThreads),
@@ -110,13 +107,9 @@ export function Sidebar() {
 
   return (
     <aside className="flex h-full w-[264px] shrink-0 flex-col bg-ground">
-      {/* the logo row lines up with the top bar and, in the desktop window, drags the window like it */}
-      {/* the logo alone, centred (the sidebar's toggle lives at the top bar's left edge, mirroring the tray's) */}
-      <div onPointerDown={drag} className="flex h-12 shrink-0 select-none items-center justify-center px-3">
-        <Logo />
-      </div>
-      {/* new chat: a quiet row that matches the chat list, not a boxed button */}
-      <div className="px-2 pb-1 pt-1">
+      {/* the name and ensō live in the title bar above; the sidebar starts with new chat, a quiet row that matches
+          the chat list, not a boxed button */}
+      <div className="px-2 pb-1 pt-2">
         <button onClick={() => select(null)} title="New chat (Ctrl+N)"
           className="group flex min-h-(--row-h) w-full items-center gap-2.5 rounded-lg px-2.5 py-(--row-py) text-left text-ui text-sidebar-foreground/90 transition-ui hover:bg-surface-1 active:bg-surface-2">
           <SquarePen className="size-4 text-muted-foreground transition-ui group-hover:text-foreground" />

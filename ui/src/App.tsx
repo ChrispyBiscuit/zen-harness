@@ -13,7 +13,7 @@ import { HelpDialog } from "@/components/HelpDialog"
 import { WelcomeDialog } from "@/components/WelcomeDialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Clip } from "@/components/Clip"
-import { ResizeEdges, WindowControls, WindowFrame, useWindowDrag } from "@/components/WindowFrame"
+import { ResizeEdges, TitleBar, WindowFrame } from "@/components/WindowFrame"
 import { useApp } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import { MeterBar } from "@/components/MeterBar"
@@ -204,16 +204,16 @@ function TopBar() {
   const current = useApp((s) => s.current)
   const conv = useApp((s) => (s.current ? s.convs[s.current] : null))
   const thread = useApp((s) => s.threads.find((t) => t.id === s.current))
-  const drag = useWindowDrag()
   const [, setTick] = useState(0)
   useEffect(() => { const off = onDockChange(() => setTick((x) => x + 1)); return () => { off() } }, [])
   const set = useApp((s) => s.set)
   const connected = useApp((s) => s.connected)
+  const title = current ? (thread?.title || conv?.title || "") : "New chat"
   return (
-    // the top bar is also the window's title bar: empty space drags the window, the controls sit at the right end
-    <header onPointerDown={drag} className={cn("@container flex h-12 shrink-0 select-none items-center gap-2 bg-ground pl-3",
-      drag ? "pr-0" : "pr-3")}>
-      <div className="min-w-0 flex-1 truncate text-ui font-medium" title={current ? (thread?.title || conv?.title || "") : undefined}>{current ? (thread?.title || conv?.title || "") : "New chat"}</div>
+    // the window's title bar, full width (the same bar as the Starting… screen): name / chat, then the app's buttons
+    <TitleBar>
+      <span aria-hidden="true" className="shrink-0 text-faint">/</span>
+      <div className="min-w-0 flex-1 truncate text-ui font-medium" title={current ? title : undefined}>{title}</div>
       {!connected && <span className="flex items-center gap-1 text-caption text-destructive"><WifiOff className="size-3.5" /> reconnecting</span>}
       <Tooltip>
         <TooltipTrigger render={<Button variant="ghost" size="icon-sm" onClick={() => { if (confirm("Reset the panel layout to the default?")) resetLayout() }} aria-label="Reset panel layout" />}>
@@ -237,8 +237,7 @@ function TopBar() {
         </TooltipTrigger>
         <TooltipContent side="bottom">Settings</TooltipContent>
       </Tooltip>
-      <WindowControls className="ml-1" />
-    </header>
+    </TitleBar>
   )
 }
 
@@ -337,6 +336,7 @@ export default function App() {
     <TooltipProvider delay={300}>
       <div className="flex h-full flex-col overflow-hidden bg-ground text-foreground">
         <ResizeEdges />
+        <TopBar />
         <div className="relative flex min-h-0 flex-1 overflow-hidden">
           {sideMounted && (
             <div ref={sideRef} className={cn("h-full shrink-0", !sidebarOpen && "absolute inset-y-0 left-0 z-30")}>
@@ -344,7 +344,6 @@ export default function App() {
             </div>
           )}
           <main ref={mainRef} className="flex h-full min-w-0 flex-1 flex-col">
-            <TopBar />
             <Workspace />
           </main>
         </div>
