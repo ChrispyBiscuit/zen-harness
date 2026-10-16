@@ -237,3 +237,24 @@ def test_writing_the_file_directly_drops_its_draft(ledger):
  l=ledger;l.keep_draft('app.py','write_file',{'path':'app.py','content':'x'})
  before=l.inventory();(l.root/'app.py').write_text('y');l.record_changes(before)
  assert 'app.py' not in l.state.get('drafts',{})
+
+
+def test_a_passing_verify_ticks_the_linked_checklist_items(ledger,monkeypatch):
+ # 27B run 95fc5c3e: completion refused once (stale receipt), module verified later, item never ticked (2/14)
+ import agent_tools as at
+ import verification_ledger as vl
+ c=at.Ctx([str(ledger.root)]);c.cwd=str(ledger.root);c.build_test_record=True;c.verification_root=str(ledger.root)
+ c.conv_id='verification-fixture';c.tracker_path=str(ledger.root/'PROGRESS.md')
+ monkeypatch.setattr(vl,'for_ctx',lambda ctx:ledger)
+ r=at.Registry(c,enabled={'module_contract','begin_module','verify_module','update_tracker'})
+ r.call('update_tracker',{'new':True,'goal':'Build addition','milestones':[{'title':'Addition','subtasks':[
+  {'step':'Implement add'},{'step':'Test add'},{'step':'Write the README'}]}]})
+ r.call('module_contract',contract(tracker_ids=['1.1','1.2']));r.call('begin_module',{'id':'math'})
+ with pytest.raises(at.ToolError) as e:r.call('update_tracker',{'updates':[{'id':'1.1','status':'done'}]})
+ msg=str(e.value)
+ assert "run verify_module('math')" in msg and 'marked done automatically' in msg
+ text,_=r.call('verify_module',{'id':'math'})
+ assert '"status": "passed"' in text and 'marked done' in text
+ st=[s['status'] for s in c.tracker['milestones'][0]['subtasks']]
+ assert st==['done','done','pending']                 # the README is not this module's: untouched
+ assert c.display and c.display.get('type')=='terminal'   # the verification output stays the call's card

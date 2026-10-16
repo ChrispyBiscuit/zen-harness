@@ -2043,7 +2043,35 @@ def t_begin_module(a,c):
 
 
 def t_verify_module(a,c):
-    return _module_ledger(c).verify(a["id"],c)
+    ledger=_module_ledger(c)
+    out=ledger.verify(a["id"],c)
+    return out+_tick_on_verified(c,ledger,a["id"])
+
+
+def _tick_on_verified(c,ledger,mid):
+    """The module passed verification: mark the checklist items its contract links (tracker_ids) done, with the
+    receipt as evidence. A 27B had its completion refused once (stale receipt), verified the module minutes later and
+    never ticked the item again: its checklist sat at 2/14 with the server proven."""
+    with ledger.lock:
+        m=ledger.state["modules"].get(mid) or {}
+        if m.get("state")!="verified" or not getattr(c,"tracker",None):
+            return ""
+        links=[str(t) for t in m.get("tracker_ids") or []]
+        receipt=m.get("receipt") or ""
+    ids=[i for i,_text,status,_ms in tracker_items(c.tracker)
+         if status not in ("done","skipped") and any(i==t or i.startswith(t+".") for t in links)]
+    if not ids:
+        return ""
+    shown=getattr(c,"display",None)                 # keep the verification output as this call's card
+    try:
+        t_update_tracker({"updates":[{"id":i,"status":"done","evidence":f"verify_module {mid} passed (receipt {receipt})"}
+                                     for i in ids]},c)
+    except Exception:
+        return ""
+    finally:
+        c.display=shown
+    names="; ".join(f'{i} "{str(next((x[1] for x in tracker_items(c.tracker) if x[0]==i),""))[:60]}"' for i in ids)
+    return f"\n(Checklist: {names} marked done: this module's verification is the evidence.)"
 
 
 def t_module_status(a,c):

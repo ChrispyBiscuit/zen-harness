@@ -220,6 +220,21 @@ class Ledger:
         self.save();self.refresh()
         return changed
 
+    def completion_message(self,iid,linked):
+        """Why checklist item `iid` can't be marked done yet, and the one step that does it. The old generic refusal
+        ('requires current verify_module receipts') made a 27B stop ticking items for the rest of the build."""
+        todo=[m["id"] for m in linked if m["state"]!="verified"]
+        msg="Build gate: "+iid+" was NOT marked done yet."
+        if self.state["unowned"]:
+            msg+=(" Changed files no module owns: "+", ".join(self.state["unowned"][:6])+". Add them to a module "
+                  "(module_contract with them in sources or tests), then verify it.")
+        if todo:
+            msg+=(" "+("Module '"+todo[0]+"' is" if len(todo)==1 else "Modules "+", ".join("'"+t+"'" for t in todo)+" are")
+                  +" not verified at the current code: run verify_module('"+todo[0]+"').")
+        msg+=(" When verification passes, the checklist items those modules are linked to (tracker_ids) are marked "
+              "done automatically: there is no need to mark them again.")
+        return msg
+
     def check_tracker(self,updates,tracker):
         self.refresh()
         for u in updates or []:
@@ -228,7 +243,8 @@ class Ledger:
             if status in ("done","complete","completed","finished","in_progress","started"):
                 linked=[m for m in self.state["modules"].values() if any(t==iid or t.startswith(iid+".") or iid.startswith(t+".") for t in m["tracker_ids"])]
                 if status in ("done","complete","completed","finished"):
-                    if linked and (self.state["unowned"] or any(m["state"]!="verified" for m in linked)):raise PolicyError("Build gate: checklist completion requires current verify_module receipts")
+                    if linked and (self.state["unowned"] or any(m["state"]!="verified" for m in linked)):
+                        raise PolicyError(self.completion_message(iid,linked))
                 elif linked and any(any(self.state["modules"][d]["state"]!="verified" for d in m["dependencies"]) for m in linked):raise PolicyError("Build gate: prerequisite checks are not verified")
 
     def summary(self):
