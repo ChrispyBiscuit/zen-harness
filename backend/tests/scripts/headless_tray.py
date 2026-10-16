@@ -71,8 +71,8 @@ def main():
     svc = headless.Service(app, PORT)
     threading.Thread(target=headless.run_server, args=(svc, PORT), daemon=True).start()
     menu_texts = [a.text() for a in svc.menu.actions() if a.text()]
-    check("menu has every item", menu_texts[1:] == ["Open Zen Harness", "Pause API runs", "Copy API token",
-                                                    "Open logs", "Quit Zen Headless Harness"], menu_texts)
+    check("menu has every item", menu_texts[1:] == ["Open Zen", "Pause API runs", "Copy API token",
+                                                    "Open logs", "Quit Zen Headless"], menu_texts)
 
     def pump(secs, until=lambda: False):
         end = time.time() + secs
@@ -111,7 +111,7 @@ def main():
     with mock.patch("subprocess.Popen") as po:
         svc.a_open.trigger()
     args = po.call_args
-    check("Open Zen Harness launches the window on this port",
+    check("Open Zen launches the window on this port",
           args and args[0][0][-1].endswith("app_web.py") and args[1]["env"]["LWS_PORT"] == str(PORT), args)
 
     calls = []

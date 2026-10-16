@@ -1,4 +1,4 @@
-# PyInstaller spec for Zen Harness (onedir). Build with packaging/build.ps1, which runs:
+# PyInstaller spec for Zen (onedir). Build with packaging/build.ps1, which runs:
 #   backend\venv\Scripts\pyinstaller packaging\zen-harness.spec --distpath packaging\out\dist --workpath packaging\out\work
 # Two programs share one bundle: ZenHarness.exe (windowed: window, server, tray service) and zenharness-cli.exe
 # (console: the MCP stdio bridge, --version). See backend/zen_main.py.

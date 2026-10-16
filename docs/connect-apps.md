@@ -1,6 +1,6 @@
 # Connect other apps (API & MCP)
 
-Zen Harness can take tasks from other programs: scripts (REST API), and AI apps that speak the
+Zen can take tasks from other programs: scripts (REST API), and AI apps that speak the
 **Model Context Protocol** (MCP) — Claude Desktop, Claude Code, Cursor, VS Code and others. A task sent this way runs
 like a normal chat: it appears in the sidebar, where you can watch every step or continue it.
 
@@ -11,8 +11,8 @@ your real port, token and program path filled in, plus a **Test connection** but
 
 Settings → Connect apps:
 - **REST API** and **MCP server** switches (both on by default; they only answer on this PC).
-- **Run in the background at sign-in** — keeps Zen Harness available to other apps even when its window is closed
-  (a tray icon appears). Without it, other apps can use Zen Harness only while the app is open — except MCP over
+- **Run in the background at sign-in** — keeps Zen available to other apps even when its window is closed
+  (a tray icon appears). Without it, other apps can use Zen only while the app is open — except MCP over
   stdio, which starts it on demand.
 - **Allow other devices on my network** — off by default. When on, other devices can reach the API and MCP (with the
   token) but never the app itself.
@@ -39,7 +39,7 @@ paste into `claude_desktop_config.json`:
   }
 }
 ```
-Restart Claude Desktop. The stdio bridge reads the port and token itself and starts Zen Harness if it isn't running.
+Restart Claude Desktop. The stdio bridge reads the port and token itself and starts Zen if it isn't running.
 
 ### Claude Code
 ```bash
@@ -52,7 +52,7 @@ claude mcp add zen-harness --transport http http://127.0.0.1:8765/mcp --header "
                                 "headers": { "Authorization": "Bearer <token>" } } } }
 ```
 
-### MCP tools Zen Harness provides
+### MCP tools Zen provides
 | Tool | What it does |
 |---|---|
 | `run_task(task, conversation_id?, read_only?, wait_seconds?)` | runs a task; returns the answer, or a run id if it takes longer than `wait_seconds` (default 300) |

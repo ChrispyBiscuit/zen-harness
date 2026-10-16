@@ -8,7 +8,8 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-NAME = "Zen Headless Harness.lnk"
+NAME = "Zen Headless.lnk"
+LEGACY = "Zen Headless Harness.lnk"     # the name before the rename to Zen: still honoured, replaced on refresh
 
 
 def startup_dir():
@@ -27,7 +28,7 @@ def pythonw():
 
 
 def is_registered():
-    return os.path.exists(shortcut_path())
+    return os.path.exists(shortcut_path()) or os.path.exists(os.path.join(startup_dir(), LEGACY))
 
 
 def register():
@@ -40,9 +41,13 @@ def register():
     # values go through the environment, never into the script text (no quoting/injection issues)
     script = ("$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:ZH_LNK);"
               "$s.TargetPath=$env:ZH_TGT;$s.Arguments=$env:ZH_ARGS;$s.WorkingDirectory=$env:ZH_WD;"
-              "$s.Description='Zen Headless Harness (tray service)';"
+              "$s.Description='Zen Headless (tray service)';"
               "if($env:ZH_ICO){$s.IconLocation=$env:ZH_ICO};$s.WindowStyle=7;$s.Save()")
     os.makedirs(startup_dir(), exist_ok=True)
+    try:
+        os.remove(os.path.join(startup_dir(), LEGACY))
+    except FileNotFoundError:
+        pass
     env = {**os.environ, **{f"ZH_{k}": v for k, v in vals.items()}}
     r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], env=env,
                        capture_output=True, text=True, timeout=30, creationflags=0x08000000)
@@ -52,10 +57,11 @@ def register():
 
 
 def unregister():
-    try:
-        os.remove(shortcut_path())
-    except FileNotFoundError:
-        pass
+    for n in (NAME, LEGACY):
+        try:
+            os.remove(os.path.join(startup_dir(), n))
+        except FileNotFoundError:
+            pass
 
 
 def stdio_command():

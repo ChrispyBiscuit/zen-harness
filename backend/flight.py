@@ -29,7 +29,7 @@ import time
 BASE = os.path.join(tempfile.gettempdir(), "zen_flight")
 KEEP_RUNS = 40
 
-RECORDER = r'''# zen_flight: records notable events of this process for Zen Harness (ZEN_FLIGHT_DIR set). Never raises.
+RECORDER = r'''# zen_flight: records notable events of this process for Zen (ZEN_FLIGHT_DIR set). Never raises.
 import os, sys, json, time, threading, traceback
 _D = os.environ.get("ZEN_FLIGHT_DIR")
 _ROOT = os.path.normcase(os.path.abspath(os.environ.get("ZEN_FLIGHT_ROOT") or os.getcwd()))

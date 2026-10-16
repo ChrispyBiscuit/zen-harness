@@ -187,7 +187,7 @@ export function SettingsDialog() {
   return (
     <Dialog open={open} onOpenChange={(v) => set({ settingsOpen: v, ...(v ? {} : { settingsTab: undefined }) } as any)}>
       <DialogContent className="flex max-h-[min(88dvh,820px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
-        <DialogHeader className="shrink-0 px-6 pb-3 pt-5"><DialogTitle className="flex items-center gap-2"><span className="label-tech text-faint">Zen Harness</span><span className="text-muted-foreground/30">/</span>Settings</DialogTitle></DialogHeader>
+        <DialogHeader className="shrink-0 px-6 pb-3 pt-5"><DialogTitle className="flex items-center gap-2"><span className="label-tech text-faint">Zen</span><span className="text-muted-foreground/30">/</span>Settings</DialogTitle></DialogHeader>
         <Tabs key={String(open) + tab} defaultValue={tab} className="flex min-h-0 flex-1 flex-col">
           <TabsList className="mx-6 max-w-[calc(100%-3rem)] shrink-0 justify-start overflow-x-auto">
             <TabsTrigger value="general">General</TabsTrigger>

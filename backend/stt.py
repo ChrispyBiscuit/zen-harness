@@ -31,7 +31,7 @@ def _model(size):
                 from faster_whisper import WhisperModel
             except ImportError:
                 # installed builds leave it out: its audio decoder (PyAV) bundles GPL-licensed FFmpeg codecs
-                raise RuntimeError("Voice input isn't included in this version of Zen Harness (it will be an optional "
+                raise RuntimeError("Voice input isn't included in this version of Zen (it will be an optional "
                                    "download).") from None
             _models.clear()                                   # keep only one loaded
             _models[size] = WhisperModel(size, device="cpu", compute_type="int8", cpu_threads=8, download_root=MODEL_DIR)

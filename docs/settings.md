@@ -41,6 +41,6 @@ Extra tools from **MCP servers** you add (a command to start, or a URL), with a 
 allow read-only, or allow all.
 
 ## Connect apps
-Let other programs use Zen Harness: REST API and MCP switches, token, port, network access, background service at
+Let other programs use Zen: REST API and MCP switches, token, port, network access, background service at
 sign-in, approval policy for tasks from other apps, and ready-to-copy setup for Claude Desktop, Claude Code, Cursor
 and scripts. See [Connect other apps](connect-apps.md).
