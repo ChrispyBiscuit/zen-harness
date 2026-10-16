@@ -1,7 +1,7 @@
-# Zen — tester guide (give this whole file to your Claude)
+# Zazen — tester guide (give this whole file to your Claude)
 
 > **To the tester:** from <https://github.com/ChrispyBiscuit/zen-harness/releases/tag/v0.1.0-alpha.3> download
-> `ZenHarness-Setup-0.1.0-alpha.3.exe` and `zen-harness-tester-kit-0.1.0-alpha.3.zip`. Install Zen
+> `ZenHarness-Setup-0.1.0-alpha.3.exe` and `zen-harness-tester-kit-0.1.0-alpha.3.zip`. Install Zazen
 > (section 1), unzip the kit (e.g. to `%USERPROFILE%\zen-tester-kit`), then open Claude Code in the kit folder and say:
 > *"Read TESTER_GUIDE.md and run the test plan in it. Ask me before anything it says to ask about."* Everything
 > below is written for Claude.
@@ -10,7 +10,7 @@
 
 ## Your role (Claude)
 
-You are helping test **Zen**, a Windows desktop app that runs a local AI agent on local GGUF models with
+You are helping test **Zazen**, a Windows desktop app that runs a local AI agent on local GGUF models with
 llama.cpp. You will drive the app through its local HTTP API (as its developer does), run two benchmarks on up to
 three local models, grade the results, and write one report. Work in the folder this file is in (the **kit
 folder**).
@@ -138,7 +138,7 @@ first (PRD/design files), errors it hit and fixed, any intervention.
 
 ## 4. Benchmark B — standard benchmarks (the runner, ~4–10 h per model)
 
-Well-known benchmarks with published numbers, run on the same fixed questions for every model. **Close Zen
+Well-known benchmarks with published numbers, run on the same fixed questions for every model. **Close Zazen
 first** (tray icon → Quit, or the window's close) — the runner starts its own llama-server on port 8111 and refuses
 to run while the app's model server (port 8099) is up.
 

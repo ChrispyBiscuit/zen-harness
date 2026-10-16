@@ -1,4 +1,4 @@
-"""The launch splash: a small native card (ensō, ZEN, what is happening, a progress line) that appears within half a
+"""The launch splash: a small native card (ensō, ZAZEN, what is happening, a progress line) that appears within half a
 second of the click, while the agent server starts and the interface loads behind it. app_web.py drives it.
 
 Progress follows real milestones, not a timer: the window is up, the agent server is listening, the interface has
@@ -54,7 +54,7 @@ class Splash(QWidget):
                          | Qt.WindowType.WindowStaysOnTopHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setFixedSize(self.W, self.H)
-        self.setWindowTitle("Zen")
+        self.setWindowTitle("Zazen")
         self.logo = QPixmap(logo_png) if logo_png and os.path.exists(logo_png) else QPixmap()
         self.svg = None                    # the app's favicon ensō without its tile, so it sits on the card itself
         try:
@@ -160,7 +160,7 @@ class Splash(QWidget):
         f.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 135)
         p.setFont(f)
         p.setPen(INK)
-        p.drawText(QRectF(0, 110, self.W, 26), Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter, "ZEN")
+        p.drawText(QRectF(0, 110, self.W, 26), Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter, "ZAZEN")
 
         f2 = QFont("Segoe UI", 9)
         p.setFont(f2)

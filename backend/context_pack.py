@@ -448,7 +448,7 @@ def render_pack(chosen, query, note=""):
     return "\n\n".join(parts)
 
 
-# the measured second round (evals/context_pack/second_round.py: 68% -> 76% of needed pieces at 8K, Zen's backend
+# the measured second round (evals/context_pack/second_round.py: 68% -> 76% of needed pieces at 8K, Zazen's backend
 # 54% -> 69%): the model reads a first pack of 60% of the budget and names what is missing; exact names come first
 ASK_SHARE = 0.6
 ASK_PROMPT = ("You are helping find the code needed to answer a question about a codebase. Below are the question and "

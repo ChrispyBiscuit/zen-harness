@@ -1,4 +1,4 @@
-# Zen
+# Zazen
 
 A local AI agent for Windows: a desktop app that runs open-weight models on your own GPU through llama.cpp, with
 tools (files, shell, web, browser, documents, code debugging), a planning/checklist harness for long tasks, memory,
@@ -65,6 +65,6 @@ Run `git status` before every commit.
 ## License
 
 [PolyForm Shield 1.0.0](LICENSE): free for anyone to use, copy and change — personal or business use — except to
-provide a product that competes with Zen (for example, selling or redistributing a rebranded or modified
+provide a product that competes with Zazen (for example, selling or redistributing a rebranded or modified
 copy). It is source-available, not OSI open source. Bundled third-party components keep their own licenses
 (Help → About → Licences).

@@ -1,4 +1,4 @@
-# Building the Zen installer
+# Building the Zazen installer
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File packaging\build.ps1

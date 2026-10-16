@@ -17,12 +17,12 @@ import urllib.request
 import uuid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SERVER_INFO = {"name": "zen-headless-harness", "title": "Zen Headless", "version": "1.0.0"}
+SERVER_INFO = {"name": "zen-headless-harness", "title": "Zazen Headless", "version": "1.0.0"}
 PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
 
 TOOLS = [
     {"name": "run_task",
-     "description": "Give the Zen agent a task (research, files, commands, writing…) and get its final "
+     "description": "Give the Zazen agent a task (research, files, commands, writing…) and get its final "
                     "answer. Runs are queued and executed one at a time on the local GPU. If it is not finished "
                     "within wait_seconds you get the run_id and status instead; poll with get_run.",
      "inputSchema": {"type": "object", "properties": {
@@ -127,7 +127,7 @@ async def handle(msg):
         want = params.get("protocolVersion")
         return _ok(mid, {"protocolVersion": want if want in PROTOCOLS else PROTOCOLS[0],
                          "capabilities": {"tools": {"listChanged": False}}, "serverInfo": SERVER_INFO,
-                         "instructions": "Zen Headless: a local agent with web research, file and command tools. "
+                         "instructions": "Zazen Headless: a local agent with web research, file and command tools. "
                                          "Use run_task for whole tasks; it runs on this PC's GPU, one task at a time."})
     if method == "ping":
         return _ok(mid, {})
@@ -252,7 +252,7 @@ def stdio_main():
             except urllib.error.HTTPError as e:
                 detail = e.read().decode("utf-8", "replace")[:300]
                 if mid is not None:
-                    say(_error(mid, -32000, f"Zen Headless answered HTTP {e.code}: {detail}"))
+                    say(_error(mid, -32000, f"Zazen Headless answered HTTP {e.code}: {detail}"))
                 break
             except (urllib.error.URLError, ConnectionError, TimeoutError) as e:
                 if attempt == 1 and not started and not _healthy(port):
@@ -261,7 +261,7 @@ def stdio_main():
                         port, token = service_config()     # a first start creates the token
                         continue
                 if mid is not None:
-                    say(_error(mid, -32000, f"Zen Headless is not reachable on port {port}: {e}"))
+                    say(_error(mid, -32000, f"Zazen Headless is not reachable on port {port}: {e}"))
                 break
 
 

@@ -176,7 +176,7 @@ new QWebChannel(qt.webChannelTransport, function (ch) {
 
 
 def _custom_frame(view, agent_browser=None):
-    """Frameless window: the web UI draws its own title bar in the Zen theme (src/components/WindowFrame.tsx) and
+    """Frameless window: the web UI draws its own title bar in the Zazen theme (src/components/WindowFrame.tsx) and
     drives the window through QWebChannel as `window.zenWindow`. Moving and resizing go through the OS
     (startSystemMove / startSystemResize), so Windows snap and Win+arrow keys keep working."""
     from PySide6.QtCore import QEvent, QFile, QIODevice, QObject, Qt, Signal, Slot
@@ -343,7 +343,7 @@ def _install_notifier(app, view):
     from PySide6.QtCore import QObject, Signal
     from PySide6.QtWidgets import QSystemTrayIcon
     tray = QSystemTrayIcon(app.windowIcon() or view.windowIcon(), app)
-    tray.setToolTip("Zen")
+    tray.setToolTip("Zazen")
     tray.show()
     state = {"conv": None}
 
@@ -413,7 +413,7 @@ def main():
     except Exception:
         pass
     app = QApplication(sys.argv)
-    app.setApplicationName("Zen")
+    app.setApplicationName("Zazen")
     assets = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
     ico = next((p for p in (os.path.join(assets, "zen_harness.ico"), os.path.join(assets, "power_harness.ico"))
                 if os.path.exists(p)), "")
@@ -445,7 +445,7 @@ def main():
             s.setAttribute(getattr(QWebEngineSettings.WebAttribute, attr), True)
     if hasattr(QWebEngineSettings.WebAttribute, "PlaybackRequiresUserGesture"):   # read-aloud starts on its own
         s.setAttribute(QWebEngineSettings.WebAttribute.PlaybackRequiresUserGesture, False)
-    view.setWindowTitle("Zen")
+    view.setWindowTitle("Zazen")
     icon = os.path.join(DIST, "favicon.svg")
     if os.path.exists(icon):
         view.setWindowIcon(QIcon(icon))

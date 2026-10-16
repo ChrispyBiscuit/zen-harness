@@ -369,12 +369,12 @@ def test_commit_and_log():
         _w(os.path.join(r, "x.txt"), "1\n")
         gt.stage(r, "x.txt")
         s1 = gt.commit(r, "feat: first\n\nbody text")
-        s2 = gt.commit(r, "chore: empty", trailer="Co-Authored-By: Zen <zen@example.com>", allow_empty=True)
+        s2 = gt.commit(r, "chore: empty", trailer="Co-Authored-By: Zazen <zen@example.com>", allow_empty=True)
         lg = gt.log(r)
         assert [c["sha"] for c in lg] == [s2, s1]
         assert lg[0]["subject"] == "chore: empty" and lg[1]["subject"] == "feat: first"
         assert lg[0]["author"] == "Test User" and lg[0]["short"] == s2[:len(lg[0]["short"])] and "T" in lg[0]["date"]
-        assert "Co-Authored-By: Zen <zen@example.com>" in _git(r, "log", "-1", "--format=%B")
+        assert "Co-Authored-By: Zazen <zen@example.com>" in _git(r, "log", "-1", "--format=%B")
         assert len(gt.log(r, n=1)) == 1
         for bad in (lambda: gt.commit(r, "nothing staged"), lambda: gt.commit(r, "  ")):
             try:

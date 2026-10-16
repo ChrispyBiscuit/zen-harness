@@ -1,4 +1,4 @@
-"""BTE adapter: reuse Zen's registry, permissions, tool dispatch, UI events and recovery."""
+"""BTE adapter: reuse Zazen's registry, permissions, tool dispatch, UI events and recovery."""
 import copy
 import json
 import re

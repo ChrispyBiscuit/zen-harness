@@ -187,7 +187,7 @@ export function SettingsDialog() {
   return (
     <Dialog open={open} onOpenChange={(v) => set({ settingsOpen: v, ...(v ? {} : { settingsTab: undefined }) } as any)}>
       <DialogContent className="flex max-h-[min(88dvh,820px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
-        <DialogHeader className="shrink-0 px-6 pb-3 pt-5"><DialogTitle className="flex items-center gap-2"><span className="label-tech text-faint">Zen</span><span className="text-muted-foreground/30">/</span>Settings</DialogTitle></DialogHeader>
+        <DialogHeader className="shrink-0 px-6 pb-3 pt-5"><DialogTitle className="flex items-center gap-2"><span className="label-tech text-faint">Zazen</span><span className="text-muted-foreground/30">/</span>Settings</DialogTitle></DialogHeader>
         <Tabs key={String(open) + tab} defaultValue={tab} className="flex min-h-0 flex-1 flex-col">
           <TabsList className="mx-6 max-w-[calc(100%-3rem)] shrink-0 justify-start overflow-x-auto">
             <TabsTrigger value="general">General</TabsTrigger>
@@ -296,7 +296,7 @@ export function SettingsDialog() {
                   hint="Questions it can answer well are answered in seconds; anything that needs tools or work loads the full agent." />
                 <Toggle checked={!a.compact_prompt} onChange={(v) => { if (v) setA({ compact_prompt: false }) }}
                   label="Legacy compaction"
-                  hint="Use the previous, larger checkpoint policy. Off uses Zen's default evidence-linked compact policy; full older records remain retrievable." />
+                  hint="Use the previous, larger checkpoint policy. Off uses Zazen's default evidence-linked compact policy; full older records remain retrievable." />
                 <Toggle checked={!!a.execution_memory_test_mode}
                   onChange={(v) => setA({ execution_memory_test_mode: v })}
                   label="Test Mode (experimental)"

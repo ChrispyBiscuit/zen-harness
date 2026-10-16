@@ -70,8 +70,8 @@ export function WelcomeDialog() {
   return (
     <Dialog open={open} onOpenChange={(v) => !v && close(false)}>
       <DialogContent className="max-h-[min(90dvh,860px)] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader><DialogTitle className="flex items-center gap-2"><Sparkles className="size-4" /> Welcome to Zen</DialogTitle></DialogHeader>
-        <p className="text-ui text-muted-foreground">Zen runs AI models on your own PC. To start, it needs a model — pick one below (it downloads once and stays on your computer).</p>
+        <DialogHeader><DialogTitle className="flex items-center gap-2"><Sparkles className="size-4" /> Welcome to Zazen</DialogTitle></DialogHeader>
+        <p className="text-ui text-muted-foreground">Zazen runs AI models on your own PC. To start, it needs a model — pick one below (it downloads once and stays on your computer).</p>
         <div className="flex items-center gap-2 rounded-lg border border-line-1 bg-surface-1 px-3 py-2 text-ui">
           <Cpu className="size-4 text-muted-foreground" />
           {!about ? "Checking your hardware…" : <span>{gpu ? `${gpu.name} · ${(gpu.vram_mib / 1024).toFixed(0)} GB video memory` : "No NVIDIA graphics card found — models will run on the CPU (slower)"}

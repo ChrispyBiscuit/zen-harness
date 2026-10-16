@@ -1,4 +1,4 @@
-# Zen documentation
+# Zazen documentation
 
 1. [Getting started](getting-started.md) — install, first run, your first tasks
 2. [Models](models.md) — choosing, downloading and adding models; context and memory settings

@@ -28,7 +28,7 @@ _STATUS_WORD = {"M": "modified", "A": "added", "D": "deleted", "R": "renamed", "
                 "U": "unmerged"}
 _CONFLICT_WORD = {"DD": "both deleted", "AU": "added by us", "UD": "deleted by them", "UA": "added by them",
                   "DU": "deleted by us", "AA": "both added", "UU": "both modified"}
-DEFAULT_GITIGNORE = ("# added by Zen on git init\n"
+DEFAULT_GITIGNORE = ("# added by Zazen on git init\n"
                      "node_modules/\nvenv/\n.venv/\n__pycache__/\n*.pyc\ndist/\nbuild/\n.env\n.DS_Store\nThumbs.db\n")
 
 

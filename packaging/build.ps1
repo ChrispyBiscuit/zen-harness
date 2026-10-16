@@ -1,4 +1,4 @@
-# Builds the Zen installer: UI -> licences -> frozen app (PyInstaller) -> llama.cpp -> setup.exe (Inno Setup).
+# Builds the Zazen installer: UI -> licences -> frozen app (PyInstaller) -> llama.cpp -> setup.exe (Inno Setup).
 #   powershell -ExecutionPolicy Bypass -File packaging\build.ps1 [-SkipUi] [-SkipFreeze] [-LlamaDir C:\path\to\llama.cpp]
 # Output: packaging\out\ZenHarness-Setup-<version>.exe (+ .sha256)
 param(
@@ -12,7 +12,7 @@ $Out = Join-Path $PSScriptRoot "out"
 $Py = Join-Path $Root "backend\venv\Scripts\python.exe"
 $Version = (Get-Content (Join-Path $Root "VERSION") -Raw).Trim()
 New-Item -ItemType Directory -Force $Out | Out-Null
-Write-Host "== Zen $Version"
+Write-Host "== Zazen $Version"
 
 if (-not (Test-Path $Py)) { throw "backend\venv missing: py -3.13 -m venv backend\venv; backend\venv\Scripts\pip install -r backend\requirements-dev.txt" }
 if (-not (Test-Path (Join-Path $LlamaDir "llama-server.exe"))) { throw "llama-server.exe not found in $LlamaDir (set -LlamaDir or LLAMA_CPP_DIR)" }
@@ -36,9 +36,9 @@ $versionText = @"
 VSVersionInfo(
   ffi=FixedFileInfo(filevers=($tuple), prodvers=($tuple), mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),
   kids=[StringFileInfo([StringTable('040904B0', [
-    StringStruct('CompanyName', 'Zen'), StringStruct('FileDescription', 'Zen'),
-    StringStruct('FileVersion', '$Version'), StringStruct('ProductName', 'Zen'),
-    StringStruct('ProductVersion', '$Version'), StringStruct('LegalCopyright', 'Copyright (c) 2026 the Zen authors')])]),
+    StringStruct('CompanyName', 'Zazen'), StringStruct('FileDescription', 'Zazen'),
+    StringStruct('FileVersion', '$Version'), StringStruct('ProductName', 'Zazen'),
+    StringStruct('ProductVersion', '$Version'), StringStruct('LegalCopyright', 'Copyright (c) 2026 the Zazen authors')])]),
     VarFileInfo([VarStruct('Translation', [1033, 1200])])]
 )
 "@

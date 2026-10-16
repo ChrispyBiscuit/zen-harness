@@ -345,7 +345,7 @@ class AgentBrowser:
         from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QToolButton, QVBoxLayout, QWidget
         outer = self
         win = QWidget(None)
-        win.setWindowTitle("Zen — Browser")
+        win.setWindowTitle("Zazen — Browser")
         win.setWindowIcon(self.host.windowIcon())
         win.setStyleSheet(POPOUT_QSS)
         bar = QWidget(win)

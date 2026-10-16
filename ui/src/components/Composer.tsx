@@ -154,7 +154,7 @@ export function Composer() {
     { name: "agent", hint: "Switch to Agent mode", run: () => saveSettings({ ui: { ...settings!.ui, mode: "agent" } }) },
     { name: "chat", hint: "Switch to Chat mode", run: () => saveSettings({ ui: { ...settings!.ui, mode: "chat" } }) },
     { name: "speech", hint: "Switch to Speech mode (small fast model, read aloud)", run: () => saveSettings({ ui: { ...settings!.ui, mode: "speech" } as any }) },
-    { name: "about", hint: "About Zen and licences", run: () => useApp.getState().set({ helpOpen: true, helpPage: "about" } as any) },
+    { name: "about", hint: "About Zazen and licences", run: () => useApp.getState().set({ helpOpen: true, helpPage: "about" } as any) },
     { name: "docs", hint: "Open the help pages", run: () => useApp.getState().set({ helpOpen: true, helpPage: "getting-started" } as any) },
     { name: "help", hint: "List these commands", run: () => toast.message("Commands", {
       description: commands.filter((c) => c.name !== "help").map((c) => `/${c.name} — ${c.hint}`).join("\n"), duration: 9000 }) },
