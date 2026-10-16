@@ -228,7 +228,7 @@ function TopBar() {
           <DropdownMenuItem onClick={() => set({ helpOpen: true, helpPage: "getting-started" } as any)}><BookOpen /> Help</DropdownMenuItem>
           <DropdownMenuItem onClick={() => set({ helpOpen: true, helpPage: "connect-apps" } as any)}><Plug /> Connect other apps</DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => set({ helpOpen: true, helpPage: "about" } as any)}><Info /> About Zen Harness</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => set({ helpOpen: true, helpPage: "about" } as any)}><Info /> About Zen</DropdownMenuItem>
           <DropdownMenuItem onClick={() => set({ helpOpen: true, helpPage: "licenses" } as any)}><Scale /> Licences</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

@@ -1,4 +1,4 @@
-"""Offline regression suite for the Zen Harness (no model, no GPU, no app server).
+"""Offline regression suite for Zen (no model, no GPU, no app server).
 
 Pure-function and fake-engine tests of the harness guards added in Oct 2026. Every test is isolated:
 LWS_DATA_DIR, trackers, trash/backups and the agent log all point into a temp folder; agentic._log is a no-op.

@@ -187,7 +187,7 @@ export function SettingsDialog() {
   return (
     <Dialog open={open} onOpenChange={(v) => set({ settingsOpen: v, ...(v ? {} : { settingsTab: undefined }) } as any)}>
       <DialogContent className="flex max-h-[min(88dvh,820px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
-        <DialogHeader className="shrink-0 px-6 pb-3 pt-5"><DialogTitle className="flex items-center gap-2"><span className="label-tech text-faint">Zen Harness</span><span className="text-muted-foreground/30">/</span>Settings</DialogTitle></DialogHeader>
+        <DialogHeader className="shrink-0 px-6 pb-3 pt-5"><DialogTitle className="flex items-center gap-2"><span className="label-tech text-faint">Zen</span><span className="text-muted-foreground/30">/</span>Settings</DialogTitle></DialogHeader>
         <Tabs key={String(open) + tab} defaultValue={tab} className="flex min-h-0 flex-1 flex-col">
           <TabsList className="mx-6 max-w-[calc(100%-3rem)] shrink-0 justify-start overflow-x-auto">
             <TabsTrigger value="general">General</TabsTrigger>
@@ -251,7 +251,7 @@ export function SettingsDialog() {
                     })}
                   </div>
                 </Field>
-                <Field label="Text effects" hint="How a reply looks while it streams in: glyphs decode into words with a chromatic split, and the line glitches now and then. Full is louder; Calm keeps the decode without the glitches; Off shows a plain cursor. Reduced-motion settings always calm it.">
+                <Field label="Text effects" hint="How a reply looks while it streams in: glyphs decode into words with a chromatic split, and each paragraph glitches once as it is finished. Full is louder; Calm keeps the decode without the glitch; Off shows a plain cursor. Reduced-motion settings always calm it.">
                   <div role="radiogroup" aria-label="Text effects" className="inline-flex rounded-lg border border-line-1 bg-surface-1 p-0.5">
                     {TEXT_FX.map((v) => {
                       const on = (draft.ui as any).text_fx === v || (!(draft.ui as any).text_fx && v === storedTextFx())

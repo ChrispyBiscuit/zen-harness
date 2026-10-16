@@ -1,4 +1,4 @@
-"""Collect third-party licences for everything Zen Harness ships or downloads -> backend/licenses/.
+"""Collect third-party licences for everything Zen ships or downloads -> backend/licenses/.
 
   python packaging/gen_licenses.py [--venv backend/venv] [--ui ui] [--llama <llama.cpp dir>]
 
@@ -51,7 +51,7 @@ Copyright (c) NVIDIA Corporation. All rights reserved. Use of these files is sub
 
 QT_NOTE = """Qt for Python (PySide6 / shiboken6) and the Qt libraries, including Qt WebEngine (Chromium)
 
-Used under the GNU Lesser General Public License v3 (LGPL-3.0). Zen Harness uses the Qt libraries as separate,
+Used under the GNU Lesser General Public License v3 (LGPL-3.0). Zen uses the Qt libraries as separate,
 dynamically loaded files (the DLLs in the program folder); you may replace them with your own compatible build of the
 same Qt version. The corresponding Qt source code is available from https://download.qt.io/ (Qt 6, the version
 listed above) and https://code.qt.io/. Qt WebEngine contains Chromium and its third-party components, whose licences

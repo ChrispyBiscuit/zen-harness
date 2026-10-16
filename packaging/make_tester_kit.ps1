@@ -18,7 +18,7 @@ foreach ($f in "SPEC.md", "RUBRIC.md", "GRADES.md", "run_build_in_app.py") {
 foreach ($f in "README.md", "run.py", "serve.py", "suites.py", "mock_server.py", "requirements.txt", "setup.ps1") {
     Copy-Item (Join-Path $Be "evals\standard\$f") (Join-Path $Stage "standard")
 }
-Set-Content -LiteralPath (Join-Path $Stage "VERSION.txt") -Value "Zen Harness tester kit for $Version" -Encoding ascii
+Set-Content -LiteralPath (Join-Path $Stage "VERSION.txt") -Value "Zen tester kit for $Version" -Encoding ascii
 
 $Zip = Join-Path $PSScriptRoot "out\zen-harness-tester-kit-$Version.zip"
 if (Test-Path $Zip) { Remove-Item -LiteralPath $Zip -Force }

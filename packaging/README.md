@@ -1,4 +1,4 @@
-# Building the Zen Harness installer
+# Building the Zen installer
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File packaging\build.ps1

@@ -1,6 +1,6 @@
-# Build and test Zen Harness from source
+# Build and test Zen from source
 
-For a tester who would rather build Zen Harness themselves than download the installer. Windows 10/11 x64 with an
+For a tester who would rather build Zen themselves than download the installer. Windows 10/11 x64 with an
 NVIDIA GPU (8 GB or more) is assumed. Two ways:
 
 - **A. Build the installer** (recommended) — you get exactly what testers get: the installer downloads the three models
@@ -132,4 +132,4 @@ Then rebuild the installer (2A) or restart the app (2B). Your settings, chats an
 - **SmartScreen warns about the installer** — it isn't code-signed yet: More info → Run anyway.
 - **Something else** — Help → Diagnostics in the app has the logs; include them in your report.
 
-Zen Harness is source-available under the [PolyForm Shield 1.0.0](../LICENSE) license.
+Zen is source-available under the [PolyForm Shield 1.0.0](../LICENSE) license.

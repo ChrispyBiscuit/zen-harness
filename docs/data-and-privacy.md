@@ -11,7 +11,7 @@ when a tool reaches the internet:
   stuck; it asks before sending anything.
 - **Model downloads** come from Hugging Face.
 
-Zen Harness has no telemetry and no account.
+Zen has no telemetry and no account.
 
 ## Where files live
 

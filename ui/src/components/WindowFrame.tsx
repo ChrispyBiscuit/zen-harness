@@ -110,10 +110,10 @@ export function ResizeEdges() {
 export function TitleBar({ children }: { children?: React.ReactNode }) {
   const drag = useWindowDrag()
   return (
-    <div onPointerDown={drag} role="banner" aria-label="Zen Harness"
+    <div onPointerDown={drag} role="banner" aria-label="Zen"
       className={cn("flex h-10 shrink-0 select-none items-center gap-2 border-b border-line-1 bg-ground pl-3", drag ? "pr-0" : "pr-2")}>
       <LogoMark bold className="size-4 shrink-0" />
-      <span className="label-tech shrink-0 text-faint">Zen Harness</span>
+      <span className="label-tech shrink-0 text-faint">Zen</span>
       {children ?? <div className="h-full flex-1" />}
       <WindowControls className="ml-1" />
     </div>

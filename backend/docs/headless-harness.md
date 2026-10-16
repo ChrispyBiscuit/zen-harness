@@ -1,6 +1,6 @@
-# Zen Headless Harness: tray service, REST API, MCP
+# Zen Headless: tray service, REST API, MCP
 
-The Zen Headless Harness runs Zen Harness in the background, with no window, so other programs can give it tasks over HTTP or MCP.
+Zen Headless runs Zen in the background, with no window, so other programs can give it tasks over HTTP or MCP.
 Design and rationale: `plans/headless-harness-prd.md`.
 
 ## Start it
@@ -8,15 +8,15 @@ Design and rationale: `plans/headless-harness-prd.md`.
 | How | Command / place |
 |---|---|
 | Now | `venv\Scripts\pythonw.exe headless.py` (in this folder). A tray icon appears; no window. |
-| At every sign-in | Settings → Headless → **Start at sign-in** → Save. Adds `Zen Headless Harness.lnk` to your Startup folder (your account only, no admin). Remove it the same way, or in Task Manager → Startup apps. |
+| At every sign-in | Settings → Headless → **Start at sign-in** → Save. Adds `Zen Headless.lnk` to your Startup folder (your account only, no admin). Remove it the same way, or in Task Manager → Startup apps. |
 | On demand from an MCP client | the stdio bridge (below) starts the service if it is not running. |
 
 The service *is* the app's backend (same port, same chats, same settings). Opening the desktop app attaches to it,
 and closing the window leaves it running. If the app's own server is already running when the service starts, the
 service waits until it is idle and takes over. Only one service runs at a time.
 
-**Tray menu** (right-click the icon): status line (idle / running / queued / paused, port) · Open Zen Harness
-(double-click does the same) · Pause/Resume API runs · Copy API token · Open logs (`headless_service.log`) · Quit Zen Headless Harness.
+**Tray menu** (right-click the icon): status line (idle / running / queued / paused, port) · Open Zen
+(double-click does the same) · Pause/Resume API runs · Copy API token · Open logs (`headless_service.log`) · Quit Zen Headless.
 
 ## Authentication
 

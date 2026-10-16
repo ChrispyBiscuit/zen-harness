@@ -278,33 +278,42 @@ function useTypewriter(text: string, live: boolean) {
   return { shown, typing, tail }
 }
 
-/** Glitch bursts while a reply resolves (index.css .is-glitching): every second or two the decode tail slices into
- *  red/cyan copies and the line being written jumps a pixel or two, then snaps back; one last burst locks the reply
- *  in when it finishes. A class toggled on the message element through its ref, never React state, so a burst costs
- *  no re-render. Calm/Off, reduced motion or a hidden window: no bursts. */
+/** The glitch, once per passage: each paragraph (or list, table, code block) of a streaming reply glitches exactly
+ *  once, at the moment it is finished: when the next one starts, or, for the last, when the reply ends. The burst
+ *  (index.css .glitch-block) is a class put on that one element for ~150 ms through the DOM, never React state, so
+ *  it costs no re-render. A paragraph never glitches twice. Calm/Off, reduced motion or a hidden window: none. */
 function useGlitch(ref: React.RefObject<HTMLDivElement | null>, typing: boolean) {
-  const was = useRef(false)
+  const done = useRef(new WeakSet<Element>())
+  const count = useRef(0)
   useEffect(() => {
     const fx = textFx()
     const el = ref.current
     if (!el || REDUCED_MOTION || fx === "off" || fx === "calm") return
     const ms = fx === "full" ? 180 : 150
-    const burst = () => {
+    const burst = (block: Element | null | undefined) => {
+      if (!block || done.current.has(block) || document.hidden) return
+      done.current.add(block)
       el.style.setProperty("--glitch-dur", `${ms}ms`)
-      el.classList.add("is-glitching")
-      window.setTimeout(() => el.classList.remove("is-glitching"), ms + 40)
+      block.classList.add("glitch-block")
+      window.setTimeout(() => block.classList.remove("glitch-block"), ms + 40)
     }
-    if (!typing) {                                           // finished: one burst locks it in
-      if (was.current) burst()
-      was.current = false
+    const blocks = () => el.querySelector(".prose-chat")?.children
+    if (!typing) {                                           // the reply is finished: its last passage, once
+      const b = blocks()
+      if (b && count.current > 0) burst(b[b.length - 1])
       return
     }
-    was.current = true
-    const [lo, hi] = fx === "full" ? [600, 1800] : [900, 2600]
-    let timer = 0
-    const next = () => { timer = window.setTimeout(() => { if (!document.hidden) burst(); next() }, lo + Math.random() * (hi - lo)) }
-    next()
-    return () => window.clearTimeout(timer)
+    // while it streams: when a new passage starts, the one before it is finished
+    const watch = () => {
+      const b = blocks()
+      if (!b) return
+      if (b.length > count.current && count.current > 0) burst(b[count.current - 1])
+      count.current = Math.max(count.current, b.length)
+    }
+    watch()
+    const mo = new MutationObserver(watch)
+    mo.observe(el, { childList: true, subtree: true })
+    return () => mo.disconnect()
   }, [typing, ref])
 }
 

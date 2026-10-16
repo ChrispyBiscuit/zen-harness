@@ -44,7 +44,7 @@ export function prepMath(text: string) {
       // gets its own line instead of being squeezed between text lines
       .replace(/^([ \t]*(?:[-*+]|\d+[.)])?[ \t]*(?:\*\*[^*\n]{1,60}\*\*:?[ \t]*)?)\$([^$\n]*\\(?:d?frac|lim|int|sum|prod)[^$\n]*)\$[ \t]*$/gm,
         (_m, lead: string, x: string) => (lead.trim() ? `${lead}\n\n   $$\n   ${x.trim()}\n   $$\n` : `\n$$\n${x.trim()}\n$$\n`))
-      .replace(/(^|[^\\$])\$(?=\d[\d,]*(?:\.\d+)?(?:[kKmMbB]n?)?(?:[\s).,;:!?%/]|$))/g, "$1\\$")
+      .replace(/(^|[^\\$])\$(?=\d[\d,]*(?:\.\d+)?(?:[kKmMbB]n?)?(?:[\s).,;:!?%/*_\]\-–—+]|$))/g, "$1\\$")
   }).join("")
 }
 

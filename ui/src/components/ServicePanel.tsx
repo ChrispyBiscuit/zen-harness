@@ -4,7 +4,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Field, More, Section, Toggle, inputCls } from "@/components/SettingsDialog"
 
-/* Settings → Connect apps: let other programs use Zen Harness (REST API, MCP server, background tray service).
+/* Settings → Connect apps: let other programs use Zen (REST API, MCP server, background tray service).
    Backend: harness_api.py, harness_mcp.py, headless.py; user guide: docs/connect-apps.md. */
 
 export const HEADLESS_DEFAULTS = {
@@ -97,10 +97,10 @@ export function ServicePanel({ h, setH }: { h: Headless; setH: (p: Partial<Headl
           )}
         </div>
         <Toggle checked={!!h.autostart} onChange={(v) => setH({ autostart: v })} label="Run in the background at sign-in"
-          hint={"Runs the Zen Headless Harness in the tray when you sign in to Windows, with no window: other programs can use it any time. "
+          hint={"Runs the Zen Headless in the tray when you sign in to Windows, with no window: other programs can use it any time. "
             + "Adds one shortcut to your Startup folder (just your account, no admin; you can also turn it off in Task Manager → Startup apps)."
             + (st ? (st.autostart_registered ? " Currently on." : " Currently off.") : "")} />
-        <div className="text-caption text-muted-foreground">Without it, other apps can reach Zen Harness while this window is open; MCP over stdio starts it on demand.</div>
+        <div className="text-caption text-muted-foreground">Without it, other apps can reach Zen while this window is open; MCP over stdio starts it on demand.</div>
       </Section>
 
       <Section title="Access">

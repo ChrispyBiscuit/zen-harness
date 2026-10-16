@@ -141,7 +141,7 @@ export function HelpDialog() {
     <Dialog open={!!open} onOpenChange={(v) => set({ helpOpen: v, ...(v ? {} : { helpPage: undefined }) } as any)}>
       <DialogContent className="flex h-[min(88dvh,820px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
         <DialogHeader className="shrink-0 border-b border-line-1 px-6 pb-3 pt-5">
-          <DialogTitle className="flex items-center gap-2"><span className="label-tech text-faint">Zen Harness</span><span className="text-muted-foreground/30">/</span>Help</DialogTitle>
+          <DialogTitle className="flex items-center gap-2"><span className="label-tech text-faint">Zen</span><span className="text-muted-foreground/30">/</span>Help</DialogTitle>
         </DialogHeader>
         <div className="flex min-h-0 flex-1">
           <nav className="w-56 shrink-0 space-y-0.5 overflow-y-auto border-r border-line-1 p-3">
