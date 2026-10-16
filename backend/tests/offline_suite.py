@@ -1700,7 +1700,8 @@ def masking_condenses_old_file_copies_and_old_narration():
     view = e._masked_view(msgs)
     first_call = view[1]["tool_calls"][0]["function"]["arguments"]
     second_call = view[3]["tool_calls"][0]["function"]["arguments"]
-    assert "content_omitted" in first_call and "content" in json.loads(second_call), "older copy condensed, newer kept"
+    # every write older than the last few steps drops its text (on disk; the working set re-adds the current file)
+    assert "content_omitted" in first_call and "content_omitted" in second_call, "older writes condensed"
     assert "older narration condensed" in view[1]["content"], view[1]["content"][:120]
     assert view[-2]["content"] == talk, "the latest narration stays whole"
     assert e._apply_mask(msgs) == view, "the summary request sends the same view"

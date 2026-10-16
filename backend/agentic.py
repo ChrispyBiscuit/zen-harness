@@ -2079,6 +2079,9 @@ class AgentEngine:
         return blocks, used
 
     def _working_set_budget(self, room):
+        if self._slow():
+            # a smaller compaction target must not squeeze out the files being worked on: they stay whole
+            return int(min(self.WS_MAX_TOKENS, max(0, room) // 2))
         return int(min(self.WS_MAX_TOKENS, max(0, room) * self.WS_SHARE))
 
     # ---------------------------------------------------------------- re-reads of unchanged files
@@ -3261,8 +3264,9 @@ class AgentEngine:
                     continue
                 path = str(a.get("path") or "")
                 norm = os.path.abspath(path).lower() if path else ""
-                if old and norm in later and fn.get("name") in ("write_file", "edit_file", "artifact_create",
-                                                                "artifact_edit"):
+                # every older write/edit drops the text it carried, not only superseded ones: the file is on disk,
+                # the working set re-adds the current version, and these arguments were a third of a 27B's history
+                if old and fn.get("name") in ("write_file", "edit_file", "artifact_create", "artifact_edit"):
                     import copy
                     tc2 = copy.deepcopy(tc)
                     _slim_call_args(tc2)
@@ -5596,7 +5600,22 @@ class AgentEngine:
         n = int(self.cfg.get("num_ctx") or 16384)
         if self.cfg.get("compact_at"):
             return int(n * float(self.cfg["compact_at"]))
-        return max(int(n * 0.75), n - self.REPLY_RESERVE)
+        base = max(int(n * 0.75), n - self.REPLY_RESERVE)
+        return min(base, self.SLOW_COMPACT_AT) if self._slow() else base
+
+    # a model generating under SLOW_TPS tokens/s keeps a smaller working context: every token costs attention over the
+    # whole history (a 27B fell from 32 tok/s at 7K to 15 at 50K), and small models lose their place in long contexts
+    # (the 27B re-read files it could already see). Measured once per engine and then kept, so budgets don't flap.
+    SLOW_TPS, SLOW_COMPACT_AT, SLOW_COMPACT_TARGET = 20.0, 35000, 22000
+
+    def _slow(self):
+        if getattr(self, "_slow_model", False):
+            return True
+        tps = float(getattr(self, "_last_tps", 0) or 0)
+        if 0 < tps < self.SLOW_TPS:
+            self._slow_model = True
+            _log({"slow_model": round(tps, 1), "compact_at": self.SLOW_COMPACT_AT, "conv": self.ctx.conv_id})
+        return getattr(self, "_slow_model", False)
 
     COMPACT_TARGET_SHARE = 0.72     # auto target: the prompt right after a compaction, as a share of context_budget()
 
@@ -5605,7 +5624,10 @@ class AgentEngine:
         wins; 0 (the default) = 72% of the compaction point: 38K of a 53K budget (61K window) keeps ~20K of
         verbatim history and leaves ~15K to grow before the next compaction; it scales with bigger windows."""
         own = int(self.cfg.get("compact_target_tokens") or 0)
-        return own if own > 0 else int(self.context_budget() * self.COMPACT_TARGET_SHARE)
+        if own > 0:
+            return own
+        auto = int(self.context_budget() * self.COMPACT_TARGET_SHARE)
+        return min(auto, self.SLOW_COMPACT_TARGET) if self._slow() else auto
 
     def _history_tokens(self):
         fixed = _est_tokens([{"role": "system", "content": self.system_prompt()}]) + \
