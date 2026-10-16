@@ -51,15 +51,38 @@ function lightMap() {
 const MAP = typeof document !== "undefined" ? bandMap() : ""
 const LIGHT = typeof document !== "undefined" ? lightMap() : ""
 
-// a 6 s cycle: glide in from the left and ease to a stop three quarters across (2.3 s), hold (0.5 s), slide back out
-// to the left (2 s), rest off the row (1.2 s)
-const DUR = "6s"
-const X = { values: "-0.32;0.72;0.72;-0.32;-0.32", keyTimes: "0;0.38;0.46;0.8;1",
-  keySplines: "0.16 1 0.3 1;0 0 1 1;0.65 0 0.35 1;0 0 1 1" }
+// The motion is a spring, sampled once at start-up into the SMIL keyframes (linear between 50 ms samples).
+// A 5 s cycle: 3 s of motion, then 2 s off the row. In: released from off the left edge towards two thirds across,
+// it overshoots and wobbles to rest (an under-damped spring). Out: like a stretched rubber band let go, it snaps back
+// off the left edge. The colour split follows the speed: it flares while the band moves fast and calms as it settles.
+const START = -0.32, REST = 0.6
+const CYCLE = 5, ACTIVE = 3, STEP = 0.05
+function springPath() {
+  const xs: number[] = [], vs: number[] = []
+  let x = START, v = 0
+  const phase = (t: number) => (t < 2.3 ? { k: 42, c: 4.6, to: REST } : { k: 62, c: 8, to: START - 0.06 })
+  for (let t = 0; t <= CYCLE + 1e-9; t += STEP) {
+    if (t <= ACTIVE) {
+      for (let i = 0; i < 10; i++) {                 // 5 ms sub-steps (semi-implicit Euler)
+        const { k, c, to } = phase(t + i * STEP / 10)
+        v += (-k * (x - to) - c * v) * STEP / 10
+        x += v * STEP / 10
+      }
+    } else { x = START; v = 0 }                       // off the row until the next cycle
+    xs.push(Math.max(START - 0.06, x)); vs.push(Math.abs(v))
+  }
+  xs[xs.length - 1] = START
+  const vmax = Math.max(...vs) || 1
+  const keyTimes = xs.map((_, i) => Math.min(1, (i * STEP) / CYCLE).toFixed(4)).join(";")
+  const fringe = (base: number, spread: number) => vs.map((s2) => (base + spread * (s2 / vmax)).toFixed(4)).join(";")
+  return { x: xs.map((n) => n.toFixed(4)).join(";"), keyTimes, r: fringe(0.03, 0.012), b: fringe(0.024, -0.01) }
+}
+const PATH = springPath()
+const DUR = `${CYCLE}s`
 const W = 0.3         // the band's width, as a share of the row's width
 
 function Travel() {
-  return <animate attributeName="x" dur={DUR} repeatCount="indefinite" calcMode="spline" {...X} />
+  return <animate attributeName="x" dur={DUR} repeatCount="indefinite" values={PATH.x} keyTimes={PATH.keyTimes} />
 }
 
 export function RefractFilter() {
@@ -71,13 +94,13 @@ export function RefractFilter() {
         {/* outside the moving band the map is empty: fill it with neutral grey (no displacement) */}
         <feFlood floodColor="rgb(128,128,128)" result="grey" />
         <feComposite in="map" in2="grey" operator="over" result="field" />
-        {/* the same bulge at three strengths, one per channel: the fringe. The spread breathes as it travels. */}
+        {/* the same bulge at three strengths, one per channel: the fringe, wider the faster the band moves */}
         <feDisplacementMap in="SourceGraphic" in2="field" scale="0.03" xChannelSelector="R" yChannelSelector="G" result="dr">
-          <animate attributeName="scale" values="0.03;0.033;0.03;0.03" keyTimes="0;0.19;0.46;1" dur={DUR} repeatCount="indefinite" />
+          <animate attributeName="scale" values={PATH.r} keyTimes={PATH.keyTimes} dur={DUR} repeatCount="indefinite" />
         </feDisplacementMap>
         <feDisplacementMap in="SourceGraphic" in2="field" scale="0.027" xChannelSelector="R" yChannelSelector="G" result="dg" />
         <feDisplacementMap in="SourceGraphic" in2="field" scale="0.024" xChannelSelector="R" yChannelSelector="G" result="db">
-          <animate attributeName="scale" values="0.024;0.021;0.024;0.024" keyTimes="0;0.19;0.46;1" dur={DUR} repeatCount="indefinite" />
+          <animate attributeName="scale" values={PATH.b} keyTimes={PATH.keyTimes} dur={DUR} repeatCount="indefinite" />
         </feDisplacementMap>
         <feColorMatrix in="dr" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="r" />
         <feColorMatrix in="dg" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="g" />
