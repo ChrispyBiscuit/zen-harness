@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { Loader2, MoreHorizontal, Pencil, Search, SquarePen, Trash2, Workflow } from "lucide-react"
+import { MoreHorizontal, Pencil, Search, SquarePen, Trash2, Workflow } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { api } from "@/lib/api"
 import { deleteWithUndo } from "@/lib/undo"
@@ -34,7 +34,8 @@ function ThreadRow({ t, child }: { t: Thread; child?: boolean }) {
     return head.length >= 20 && s.threads.some((o) => o.id !== t.id && o.title.replace(/^⇢\s*/, "").slice(0, 28).toLowerCase() === head)
   })
   return (
-    <div className={cn("group relative flex min-h-(--row-h) items-center rounded-lg transition-ui", active ? "bg-surface-2" : "hover:bg-surface-1 active:bg-surface-2", child && "ml-4")}>
+    <div className={cn("group relative flex min-h-(--row-h) items-center rounded-lg transition-ui", active ? "bg-surface-2 shadow-(--hi)" : "hover:bg-surface-1 active:bg-surface-2", child && "ml-4",
+      t.running && !t.waiting && "zen-shine")}>
       {editing ? (
         <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)}
           onBlur={() => { setEditing(false); if (title.trim() && title !== t.title) api.rename(t.id, title.trim()) }}
@@ -48,7 +49,7 @@ function ThreadRow({ t, child }: { t: Thread; child?: boolean }) {
           </span>
           <span className="ml-auto flex shrink-0 items-center gap-1 pl-1">
             {t.waiting && <span data-tone="warning" className="tone-fill size-2 rounded-full" title="Needs your approval" />}
-            {t.running && !t.waiting && <Loader2 data-tone="info" className="tone-text size-3.5 animate-spin" />}
+            {t.running && !t.waiting && <span className="sr-only">running</span>}
           </span>
         </button>
       )}
@@ -108,7 +109,7 @@ export function Sidebar() {
   }, [threads, q])
 
   return (
-    <aside className="flex h-full w-[264px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
+    <aside className="flex h-full w-[264px] shrink-0 flex-col bg-ground">
       {/* the logo row lines up with the top bar and, in the desktop window, drags the window like it */}
       {/* the logo alone, centred (the sidebar's toggle lives at the top bar's left edge, mirroring the tray's) */}
       <div onPointerDown={drag} className="flex h-12 shrink-0 select-none items-center justify-center px-3">

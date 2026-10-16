@@ -112,7 +112,7 @@ function CardShell({ icon, title, right, children, className, tone, fold, after 
   const open = !fold || fold.force || opened
   const foldable = fold && !fold.force
   return (
-    <div data-tone={tone} className={cn("overflow-hidden rounded-card border bg-surface-1",
+    <div data-tone={tone} className={cn("surface-raised overflow-hidden rounded-card border bg-surface-1",
       tone ? "tone-edge" : "border-line-1", className)}>
       <div className={cn("flex min-h-9 items-center gap-2 px-(--card-px) py-(--card-py)",
         foldable && "transition-ui cursor-pointer select-none hover:bg-surface-2 active:bg-surface-3")}
@@ -204,7 +204,7 @@ function WebHitsCard({ d, k }: { d: Display; k: string }) {
   const count = pages.length ? `read ${pages.length} page${pages.length === 1 ? "" : "s"}` : `${(d as any).results ?? links.length} results`
   const secs = (d as any).seconds != null ? ` · ${Math.round((d as any).seconds)}s` : ""
   return (
-    <div className="overflow-hidden rounded-card border border-line-1 bg-surface-1">
+    <div className="overflow-hidden surface-raised rounded-card border border-line-1 bg-surface-1">
       <button onClick={() => toggle(k)} className="flex min-h-9 w-full items-center gap-2 px-(--card-px) py-(--card-py) text-left transition-ui hover:bg-surface-2 active:bg-surface-3">
         <span className="text-muted-foreground [&_svg]:size-4"><Search /></span>
         <span className="min-w-0 flex-1 truncate text-ui">{verb}{" "}
@@ -646,7 +646,7 @@ function ToolCardInner({ msg, convId, index }: { msg: Msg; convId: string; index
         Read document <span className="mono text-caption text-foreground/90">{basename(d.path)}</span></Row>
     case "image":
       return (
-        <div className="flex items-start gap-3 rounded-card border border-line-1 bg-surface-1 p-2">
+        <div className="flex items-start gap-3 surface-raised rounded-card border border-line-1 bg-surface-1 p-2">
           <img src={rawUrl(d.path)} className="max-h-40 max-w-60 cursor-pointer rounded-md object-contain" onClick={() => openFile(d.path)} />
           <div className="py-1 text-caption text-muted-foreground"><ImageIcon className="mb-1 size-4" />Viewed {basename(d.path)}<br />{d.width}×{d.height}</div>
         </div>
@@ -734,7 +734,7 @@ function ToolCardInner({ msg, convId, index }: { msg: Msg; convId: string; index
       if (tool.ok === false) break
       return (
         <div onClick={() => openFile(d.path)}
-          className="flex cursor-pointer items-center gap-2.5 rounded-card border border-line-1 bg-surface-1 px-3 py-2 text-ui hover:bg-surface-2">
+          className="flex cursor-pointer items-center gap-2.5 surface-raised rounded-card border border-line-1 bg-surface-1 px-3 py-2 text-ui hover:bg-surface-2">
           <span className="text-muted-foreground [&_svg]:size-4"><FileText /></span>
           <div className="min-w-0 flex-1">
             <div className="truncate font-medium text-foreground/90">{basename(d.path)}</div>
@@ -749,7 +749,7 @@ function ToolCardInner({ msg, convId, index }: { msg: Msg; convId: string; index
       if (tool.ok === false) break
       return (
         <div onClick={() => { useApp.getState().set({ artifactSel: d.id, artifactOpen: d.id } as any); showPanel("artifacts") }}
-          className="flex cursor-pointer items-center gap-2.5 rounded-card border border-line-1 bg-surface-1 px-3 py-2 text-ui hover:bg-surface-2">
+          className="flex cursor-pointer items-center gap-2.5 surface-raised rounded-card border border-line-1 bg-surface-1 px-3 py-2 text-ui hover:bg-surface-2">
           <span className={cn("[&_svg]:size-4", tool.result == null ? "text-info" : "text-muted-foreground")}>{tool.result == null ? <Loader2 className="animate-spin" /> : TYPE_ICON[d.atype] || <FileText />}</span>
           <div className="min-w-0 flex-1">
             <div className="truncate font-medium text-foreground/90">{d.title}</div>
@@ -770,7 +770,7 @@ export function ChangesCard({ msg, convId, index }: { msg: Msg; convId: string; 
   const openFile = useApp((s) => s.openFile)
   const files = Object.entries(msg.files || {})
   return (
-    <div className="rounded-card border border-line-1 bg-surface-1 px-(--card-px) py-2.5">
+    <div className="surface-raised rounded-card border border-line-1 bg-surface-1 px-(--card-px) py-2.5">
       <div className="mb-1.5 flex items-center justify-between">
         <span className="text-caption font-medium">Files changed <span className="text-muted-foreground">({files.length})</span></span>
         {msg.reverts?.length ? (msg.undone ? <StatusPill tone="muted">undone</StatusPill> : (

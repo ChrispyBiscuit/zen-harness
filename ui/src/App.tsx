@@ -129,7 +129,7 @@ function StatusBar() {
     : mode === "speech" ? `Speech mode · ${(settings?.ui as any)?.speech_model || "qwen3:1.7b"}`
     : a?.model?.split(/[\\/]/).pop()?.replace(/\.gguf$/i, "")
   return (
-    <footer className="@container flex h-7 shrink-0 select-none items-center gap-3 border-t border-line-1 bg-sidebar px-2 text-meta text-muted-foreground">
+    <footer className="@container flex h-7 shrink-0 select-none items-center gap-3 bg-ground px-2 text-meta text-muted-foreground">
       {!sidebarOpen && (
         <button onClick={() => useApp.getState().set({ sidebarOpen: true })} title="Show sidebar (Ctrl+B)" aria-label="Show sidebar"
           className="grid size-5 place-items-center rounded text-muted-foreground transition-ui hover:bg-surface-2 hover:text-foreground"><PanelLeftOpen className="size-3.5" /></button>
@@ -211,7 +211,7 @@ function TopBar() {
   const connected = useApp((s) => s.connected)
   return (
     // the top bar is also the window's title bar: empty space drags the window, the controls sit at the right end
-    <header onPointerDown={drag} className={cn("@container flex h-12 shrink-0 select-none items-center gap-2 border-b border-border bg-surface-0 pl-3",
+    <header onPointerDown={drag} className={cn("@container flex h-12 shrink-0 select-none items-center gap-2 bg-ground pl-3",
       drag ? "pr-0" : "pr-3")}>
       <div className="min-w-0 flex-1 truncate text-ui font-medium" title={current ? (thread?.title || conv?.title || "") : undefined}>{current ? (thread?.title || conv?.title || "") : "New chat"}</div>
       {!connected && <span className="flex items-center gap-1 text-caption text-destructive"><WifiOff className="size-3.5" /> reconnecting</span>}
@@ -335,7 +335,7 @@ export default function App() {
   )
   return (
     <TooltipProvider delay={300}>
-      <div className="flex h-full flex-col overflow-hidden bg-background text-foreground">
+      <div className="flex h-full flex-col overflow-hidden bg-ground text-foreground">
         <ResizeEdges />
         <div className="relative flex min-h-0 flex-1 overflow-hidden">
           {sideMounted && (

@@ -205,9 +205,9 @@ export function Composer() {
           </div>
         </div>
       )}
-      <div className={cn("@container rounded-panel border bg-surface-1 shadow-[0_10px_34px_-14px_rgb(0_0_0/0.6)] transition-[border-color,box-shadow] duration-200",
+      <div className={cn("@container rounded-panel border bg-surface-1 shadow-[inset_0_1px_0_oklch(1_0_0/5%),0_10px_34px_-14px_rgb(0_0_0/0.6)] transition-[border-color,box-shadow] duration-200",
         running ? "border-info/30"
-          : "border-border focus-within:border-[color-mix(in_oklab,var(--brand-a)_40%,transparent)] focus-within:shadow-[0_10px_34px_-14px_rgb(0_0_0/0.6),0_0_0_3px_color-mix(in_oklab,var(--brand-b)_12%,transparent)]")}>
+          : "border-border focus-within:border-[color-mix(in_oklab,var(--brand-a)_40%,transparent)] focus-within:shadow-[inset_0_1px_0_oklch(1_0_0/5%),0_10px_34px_-14px_rgb(0_0_0/0.6),0_0_0_3px_color-mix(in_oklab,var(--brand-b)_12%,transparent)]")}>
         {atts.length > 0 && (
           <div className="flex flex-wrap gap-1.5 px-3 pt-3">
             {atts.map((a) => {
