@@ -195,6 +195,9 @@ INFO_JS = r"""
 """
 
 
+_LOCAL_URL = re.compile(r"^(file:|https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(/|$))", re.I)
+
+
 class BrowserManager:
     def __init__(self):
         self.jobs = queue.Queue()
@@ -371,7 +374,7 @@ class BrowserManager:
         if not hasattr(self, "console"):
             self.console = []
 
-        def keep(kind, text):
+        def keep(kind, text, prefer=False):
             if page is not self.page:
                 return
             line = f"{kind}: {' '.join(str(text).split())[:300]}"
@@ -382,7 +385,9 @@ class BrowserManager:
                 base = norm(line)
                 for i, old in enumerate(self.console):
                     if old.startswith("uncaught error") and norm(old) == base:
-                        if " (" in line and " (" not in old:
+                        # the page error's location is the project's own frame (engine.js:83); the window error's
+                        # is where it was thrown, often a library (three.module.js:3991)
+                        if (" (" in line and " (" not in old) or (prefer and " (" in line):
                             self.console[i] = line
                         return
             self.console.append(line)
@@ -401,9 +406,14 @@ class BrowserManager:
                 keep(f"console.{m.type}", m.text + where)
 
         def on_err(e):
-            frames = (getattr(e, "stack", "") or "").split("\n")[1:2]
-            at = re.search(r"([^/\\\s()]+\.\w+):(\d+):\d+\)?\s*$", frames[0]) if frames else None   # 0-based line
-            keep("uncaught error", f"{getattr(e, 'message', e)}" + (f" ({at.group(1)}:{int(at.group(2)) + 1})" if at else ""))
+            # the first stack frame in a local file (the project's code), else the first frame; stack lines are
+            # 1-based already (the old +1 put engine.js:83 at line 84)
+            frames = [m for m in (re.search(r"((?:file|https?)://[^\s()]*?([^/\\\s()]+\.\w+)):(\d+):\d+\)?\s*$", f)
+                                  for f in (getattr(e, "stack", "") or "").split("\n")[1:12]) if m]
+            mine = [m for m in frames if _LOCAL_URL.match(m.group(1))]
+            at = (mine or frames or [None])[0]
+            keep("uncaught error", f"{getattr(e, 'message', e)}" + (f" ({at.group(2)}:{at.group(3)})" if at else ""),
+                 prefer=True)
 
         def short(u):
             u = str(u or "")
@@ -455,6 +465,25 @@ class BrowserManager:
                          for i, p in enumerate(self.ctx.pages)] if self.ctx else []}
 
     # ---------------------------------------------------------------- operations (browser thread)
+    def _local_cache(self, url):
+        """Your own pages (file:, localhost) load without the HTTP cache: an edited module is what runs. Run 71a2ec62
+        spent ~50 steps on a ui.js the browser kept from before the fix (the server sent the new one; ?v=2 on the page
+        URL doesn't reach the files it imports). Websites keep their cache."""
+        local = bool(_LOCAL_URL.match(url))
+        if getattr(self.page, "_zen_nocache", None) == local:
+            return local
+        try:
+            cdp = getattr(self.page, "_zen_net_cdp", None)
+            if cdp is None:
+                cdp = self.page.context.new_cdp_session(self.page)
+                cdp.send("Network.enable")
+                self.page._zen_net_cdp = cdp
+            cdp.send("Network.setCacheDisabled", {"cacheDisabled": local})
+            self.page._zen_nocache = local
+        except Exception as e:
+            print("browser: cache switch failed:", str(e).splitlines()[0][:200] if str(e) else repr(e))
+        return local
+
     def _goto(self, url):
         self._start()
         if not re.match(r"^[a-z]+://", url, re.I):
@@ -462,7 +491,9 @@ class BrowserManager:
                 "https://duckduckgo.com/?q=" + re.sub(r"\s+", "+", url.strip())
         self._watch_console(self.page)
         self.console = []                         # messages belong to the page being opened
-        self.page.goto(url, wait_until="domcontentloaded", timeout=45000)
+        local = self._local_cache(url)
+        # your own page: wait for every script (module imports too) before its console is read
+        self.page.goto(url, wait_until="load" if local else "domcontentloaded", timeout=45000)
         self._settle(1200)
         return self._state()
 
@@ -608,8 +639,12 @@ class BrowserManager:
 
     def _history(self, which):
         self._start()
+        local = False
+        if which == "reload":
+            local = self._local_cache(self.page.url)
+            self.console = []                     # this load's messages
         {"back": self.page.go_back, "forward": self.page.go_forward, "reload": self.page.reload}[which](
-            wait_until="domcontentloaded", timeout=30000)
+            wait_until="load" if local else "domcontentloaded", timeout=30000)
         self._settle(800)
         return self._state()
 

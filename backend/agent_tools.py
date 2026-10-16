@@ -2393,6 +2393,13 @@ def t_update_tracker(a, c):
         ids = ", ".join(str(i) for i, *_r in still_open[:3])
         msg += (f". If several more items are already finished, tick them together in one call: done='{ids}' "
                 f"(any that aren't finished, leave out).")
+    if not cur and t["milestones"] and ledger is not None:
+        try:                                          # say it now, with the last tick, not after the answer is written
+            need = vl.ctx_run_needed(c)
+            if need:
+                msg += ". " + need[0]
+        except Exception:
+            pass
     if not t["milestones"]:
         msg += ". The checklist has no milestones yet: add them, each with subtasks."
     elif not cur and t.get("next") and not re.search(r"\b(none|nothing|n/a|report|answer|done)\b", t["next"], re.I):
@@ -3290,7 +3297,7 @@ def _record_test_run(c, name, args, text, p_, f_, started):
         if name != "run_tests" and not vl.TEST_CMD_RX.search(cmd):
             return
         ledger = vl.for_ctx(c)
-        if ledger is None or ledger.mode != "evidence":
+        if ledger is None:                            # (module mode too: it covers files for checklist ticks)
             return
         head = text.lstrip()[:200]
         ok = (head.startswith("tests: PASSED") if name == "run_tests"
@@ -3309,6 +3316,99 @@ def _record_test_run(c, name, args, text, p_, f_, started):
                                  started, targets)
     except Exception as e:
         print("test receipt failed:", repr(e))
+
+
+# a shell command that runs the program itself (not its tests, not an install)
+PROGRAM_CMD_RX = re.compile(
+    r"(\b(python[3w]?|py)(\.exe)?\s+(-[uBO]\s+)*(-m\s+(?!pip\b|pytest\b|venv\b|unittest\b|py_compile\b)[\w.]+|"
+    r"[^\s;|&'\"]+\.pyw?\b)|\bnode\s+(?!--test|-e\b|--check|-c\b)[^\s;|&'\"]+\.(m?js|cjs)\b|"
+    r"\b(npm|pnpm|yarn)\s+(run\s+)?(start|dev|serve|preview)\b|\bcargo\s+run\b|\bgo\s+run\b|\bdotnet\s+run\b|"
+    r"\bjava\s+-jar\b|\buvicorn\b|\bflask\s+run\b|\bnpx\s+(serve|http-server|vite)\b)", re.I)
+_CRASH_LINE_RX = re.compile(r"^\s*(?:Uncaught\s+)?(?:[\w.]*(?:Error|Exception)\b[:\s].*|panic: .*|Segmentation fault.*)$",
+                            re.M)
+_CONSOLE_HEAD = "JavaScript console (errors and warnings since the page was opened):\n"
+
+
+def _page_crash(text):
+    """The first uncaught error or failed file in a page view's console section, or ''."""
+    t = str(text)
+    i = t.find(_CONSOLE_HEAD)
+    if i < 0:
+        return ""
+    for line in t[i + len(_CONSOLE_HEAD):].split("\n\n", 1)[0].splitlines():
+        if line.startswith("uncaught error") or (line.startswith("network:") and
+                                                 re.search(r"failed|: [45]\d\d ", line + " ")):
+            return line[:240]
+    return ""
+
+
+def _record_program_run(c, name, args, text):
+    """The program itself ran (verification_ledger.run_needed): a local page opened or reloaded in the browser, a
+    server started or answered, a program command run in the shell. Ran cleanly = no uncaught error."""
+    try:
+        if name not in ("powershell", "bg_start", "browser_open", "browser_nav", "http_request"):
+            return
+        import verification_ledger as vl
+        ledger = vl.for_ctx(c)
+        if ledger is None:
+            return
+        t, a = str(text), (args if isinstance(args, dict) else {})
+        root = str(ledger.root)
+        if name in ("powershell", "bg_start"):
+            cmd = str(a.get("command") or "")
+            if not PROGRAM_CMD_RX.search(cmd) or vl.TEST_CMD_RX.search(cmd):
+                return
+            try:
+                cwd = os.path.abspath(c.resolve(a.get("cwd"), True)) if a.get("cwd") else os.path.abspath(shell_cwd(c))
+            except Exception:
+                cwd = ""
+            if not (os.path.normcase(cwd + os.sep).startswith(os.path.normcase(root + os.sep))
+                    or os.path.normcase(root) in os.path.normcase(cmd)):
+                return                                 # another folder's program
+            # an error line counts only with a traceback/panic: a program may print "ValueError: bad input" and go on
+            m = _CRASH_LINE_RX.findall(t[:6000]) if re.search(r"Traceback \(most recent call last\)|^panic: |"
+                                                             r"^\s+at .+:\d+:\d+\)?$", t[:6000], re.M) else []
+            crash = m[-1].strip()[:240] if m else ""
+            head = t.lstrip()[:200]
+            if name == "powershell":
+                stayed = head.startswith("still running") or "[BLOCKED" in t
+                kind = "server" if stayed else "cli"
+                ok = (stayed or head.startswith("exit code 0")) and not crash
+                if not ok and not crash:
+                    crash = head.split("\n", 1)[0][:160]
+            else:
+                kind = "server"
+                bad = "already exited" in t[:400] or "not listening on" in t[:600]
+                ok = not bad and not crash
+                if not ok and not crash:
+                    crash = "it exited or never listened: " + head.split("\n", 1)[0][:160]
+        elif name == "http_request":
+            m = re.match(r"HTTP (\d{3})", t)
+            if not m:
+                return
+            kind, ok = "server", int(m.group(1)) < 500
+            crash = "" if ok else f"the server answered {m.group(1)}"
+        else:                                          # browser_open / browser_nav: a local page
+            url = str(a.get("url") or "") if name == "browser_open" else \
+                (re.search(r"\((\S+)\)\s*$", t.split("\n", 1)[0]) or [None, ""])[1]
+            if not _LOCAL_PAGE.match(url) or (url.lower().startswith("file:") and
+                                               os.path.normcase(root) not in os.path.normcase(
+                                                   urllib_unquote(url).replace("/", os.sep))):
+                return
+            if _CONSOLE_HEAD not in t and "JavaScript console: no errors" not in t:
+                return
+            crash = _page_crash(t)
+            kind, ok = "page", not crash
+        with ledger.lock:
+            ledger.load()
+            ledger.note_program_run(getattr(c, "conv_id", None), kind, ok, crash)
+    except Exception as e:
+        print("program run receipt failed:", repr(e))
+
+
+def urllib_unquote(u):
+    import urllib.parse
+    return urllib.parse.unquote(u)
 
 
 def mark_progress(c, name, args, text):
@@ -4354,7 +4454,16 @@ def t_browser_nav(a, c):
         raise ToolError("action must be back, forward or reload")
     st = _bwrap(lambda: _bm().history(which))
     _bdisplay(c, which, st.get("url", ""), st)
-    return f"{which}: {st.get('title', '')} ({st.get('url', '')})"
+    out = f"{which}: {st.get('title', '')} ({st.get('url', '')})"
+    if _LOCAL_PAGE.match(str(st.get("url") or "")):    # your own page: what its scripts did on this load
+        try:
+            con = _bm().snapshot(200).get("console")
+        except Exception:
+            con = None
+        if con is not None:
+            out += ("\n" + _CONSOLE_HEAD + "\n".join(con) if con
+                    else "\nJavaScript console: no errors or warnings since the page was opened.")
+    return out
 
 
 def t_browser_tabs(a, c):
@@ -5326,6 +5435,7 @@ class Registry:
                         text = str(text) + tick
         except Exception:
             pass
+        _record_program_run(self.ctx, name, args, str(text))
         capture = getattr(self.ctx, "capture_result", None)
         if callable(capture):
             capture(str(text), image)

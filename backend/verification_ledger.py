@@ -44,6 +44,20 @@ def is_runtime_data(rel):
     return name not in MANIFESTS and os.path.splitext(name)[1].lower() in RUNTIME_DATA
 
 
+def is_test_file(rel):
+    """A test file (its changes don't mean the program has to run again)."""
+    low="/"+str(rel).replace("\\","/").lower()
+    name=low.rsplit("/",1)[-1]
+    return (name.startswith(("test_","test-")) or name=="conftest.py" or "/tests/" in low or "/test/" in low
+            or "/__tests__/" in low or bool(re.search(r"(_test|\.test|\.spec)\.\w+$",name)))
+
+
+# a file that starts a server (the program is a server, or serves the page)
+SERVER_RX=re.compile(r"http\.server|HTTPServer|socketserver|Flask\(|FastAPI\(|uvicorn|aiohttp|bottle|django|"
+                     r"createServer|express\(\)|listen\(\s*\d",re.I)
+PORT_RX=re.compile(r"(?:\bport\b\s*[=:,]?\s*|PORT\D{0,24}?|['\"]\s*,\s*)(\d{4,5})\b",re.I)
+
+
 def sha(path): return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 def enabled(ctx): return bool(getattr(ctx,"build_test_record",False))
@@ -127,6 +141,9 @@ class Ledger:
                 ch.pop(p,None)                        # deleted: nothing left to test
             elif not is_runtime_data(p):
                 ch[p]={"t":time.time(),"conv":conv or ""}
+            if not is_runtime_data(p) and not is_test_file(p):
+                # the program as a whole changed: it has to run again before 'done' (run_needed)
+                self.state.setdefault("src_changed",{})[conv or ""]=time.time()
 
     def note_test_run(self,conv,command,passed,failed,full,started,targets=()):
         """A test run finished. A passing run covers what changed before it started: everything for a full run; for a
@@ -191,6 +208,88 @@ class Ledger:
                 "as pytest, npm test, cargo test or go test); once they pass, mark "+iid+" done again. If there is no "
                 "test for this yet, add one that exercises the change and run it. If it truly can't be tested "
                 "automatically, set "+iid+" to 'blocked' with the reason instead.")
+
+    # ---------------------------------------------------------------- program runs (both modes)
+    def note_program_run(self,conv,kind,ok,detail=""):
+        """The program ran: kind 'page' (a local page loaded in the browser), 'server' (a server started or answered)
+        or 'cli' (a program ran to its end or past the time limit); ok = without an uncaught error."""
+        runs=self.state.setdefault("program_runs",[])
+        runs.append({"t":time.time(),"conv":conv or "","kind":kind,"ok":bool(ok),"detail":str(detail)[:300]})
+        del runs[:-12]
+        self.save()
+
+    def entry_point(self):
+        """How this project's program is run -> {"kind", "how"} (how = the exact calls), or None for a library,
+        docs or a folder with nothing runnable."""
+        r=self.root
+        def text(n):
+            try:return (r/n).read_text(encoding="utf-8",errors="replace")[:20000]
+            except OSError:return ""
+        server=next((n for n in ("server.py","serve.py","app.py","main.py","manage.py","server.js","index.js")
+                     if (r/n).is_file() and SERVER_RX.search(text(n))),None)
+        port=None
+        if server:
+            m=PORT_RX.search(text(server));port=m.group(1) if m else None
+        run_server=(("node " if server and server.endswith(".js") else "python ")+server) if server else ""
+        page=next((n for n in ("index.html","public/index.html","src/index.html","web/index.html","static/index.html")
+                   if (r/n).is_file()),None)
+        if page:
+            if server:
+                return {"kind":"page","how":"bg_start(command='"+run_server+"', cwd='"+str(r)+"', wait_port="
+                        +(port or "<its port>")+") then browser_open(url='http://127.0.0.1:"+(port or "<port>")+"/"
+                        +("" if page=="index.html" else page)+"')"}
+            if re.search(r"type\s*=\s*['\"]?module",text(page),re.I):
+                # module scripts don't load from file:// (the browser blocks them): serve the folder
+                return {"kind":"page","how":"bg_start(command='python -m http.server 8000', cwd='"+str(r)
+                        +"', wait_port=8000) then browser_open(url='http://127.0.0.1:8000/"
+                        +("" if page=="index.html" else page)+"')"}
+            return {"kind":"page","how":"browser_open(url='"+(r/page).as_uri()+"')"}
+        if server:
+            return {"kind":"server","how":"bg_start(command='"+run_server+"', cwd='"+str(r)+"', wait_port="
+                    +(port or "<its port>")+")"}
+        try:scripts=(json.loads(text("package.json") or "{}").get("scripts") or {})
+        except ValueError:scripts={}
+        for s in ("start","dev","serve"):
+            if scripts.get(s):
+                return {"kind":"server","how":"bg_start(command='npm "+("start" if s=="start" else "run "+s)+"', cwd='"
+                        +str(r)+"', wait_port=<its port>)"}
+        for n in ("main.py","__main__.py","cli.py","app.py","run.py","game.py"):
+            if (r/n).is_file():
+                return {"kind":"cli","how":"powershell(command='python "+n+"', cwd='"+str(r)+"', timeout=30)"}
+        if (r/"Cargo.toml").is_file() and (r/"src"/"main.rs").is_file():
+            return {"kind":"cli","how":"powershell(command='cargo run', cwd='"+str(r)+"', timeout=120)"}
+        if (r/"go.mod").is_file() and re.search(r"^package main\b",text("main.go"),re.M):
+            return {"kind":"cli","how":"powershell(command='go run .', cwd='"+str(r)+"', timeout=60)"}
+        mains=[p.name for p in r.glob("*.py") if not is_test_file(p.name) and "__main__" in text(p.name)]
+        if len(mains)==1:
+            return {"kind":"cli","how":"powershell(command='python "+mains[0]+"', cwd='"+str(r)+"', timeout=30)"}
+        return None
+
+    def run_needed(self,conv):
+        """-> (reminder, label) when this chat changed the program's code and the program hasn't run cleanly since
+        (unit tests prove the parts; a run proves they are wired together: run 71a2ec62 passed 20/20 tests and
+        crashed on load), else None."""
+        t=(self.state.get("src_changed") or {}).get(conv or "")
+        if not t:return None
+        ep=self.entry_point()
+        if not ep:return None
+        kinds={"page":("page",),"server":("server","page"),"cli":("cli","server","page")}[ep["kind"]]
+        runs=[x for x in self.state.get("program_runs") or []
+              if x.get("t",0)>=t and x.get("kind") in kinds and x.get("conv")==(conv or "")]
+        if runs and runs[-1]["ok"]:return None
+        what={"page":"the page has to load with no uncaught JavaScript error and no failed file",
+              "server":"the server has to start and keep running (or answer a request)",
+              "cli":"the program has to run without an error"}[ep["kind"]]
+        if runs:
+            msg=("Before you finish: the program crashed the last time it ran — "+runs[-1]["detail"]+". Fix that, then "
+                 "run it again: "+ep["how"]+". "+what[0].upper()+what[1:]+".")
+            label="The program crashed on its last run: "+runs[-1]["detail"]
+        else:
+            msg=("Before you finish: run the program once, since your last code change, to check its parts work "
+                 "together — the tests check them one at a time. "+ep["how"]+": "+what+". If it can't run on this "
+                 "PC, say why in your answer.")
+            label="Not run since the last code change (tests only)."
+        return msg,label
 
     def confined(self, name):
         if not isinstance(name,str) or not name or Path(name).is_absolute() or ".." in Path(name).parts: raise PolicyError("Not recorded: "+repr(name)[:80]+" must be a path relative to the project folder (no drive letter, no '..'), e.g. 'src/app.py' or 'tests/test_*.py'.")
@@ -423,6 +522,9 @@ class Ledger:
             self.save()
             return changed
         for p in changed:(self.state.get("drafts") or {}).pop(p,None)
+        # also tracked here: a done tick on an item no module links to needs these covered (run 71a2ec62 ticked 7
+        # such items at once, unchecked), and the program has to run again before the answer
+        self.note_changes(changed,after,conv)
         made=kind not in ("write",None)
         for p in sorted(changed):
             owners=self.owners(p)
@@ -465,6 +567,7 @@ class Ledger:
                     raise PolicyError(self.evidence_message(iid,files))
             return
         self.refresh()
+        items={i:text for i,text,_s,_m in _tracker_items(tracker)}
         for u in updates or []:
             if not isinstance(u,dict):continue
             iid=str(u.get("id",""));status=str(u.get("status","")).lower()
@@ -473,6 +576,13 @@ class Ledger:
                 if status in ("done","complete","completed","finished"):
                     if linked and (self.state["unowned"] or any(m["state"]!="verified" for m in linked)):
                         raise PolicyError(self.completion_message(iid,linked))
+                    if not linked and not DOCS_ITEM_RX.search(str(items.get(iid,""))):
+                        # an item no module links to: the evidence-mode rule (changed files covered by a passing
+                        # verify_module or test run)
+                        files=self.pending(conv)
+                        if files:
+                            raise PolicyError(self.evidence_message(iid,files)+" (verify_module on the module that "
+                                              "owns "+("it" if len(files)==1 else "them")+" counts too.)")
                 elif linked and any(any(self.state["modules"][d]["state"]!="verified" for d in m["dependencies"]) for m in linked):raise PolicyError("Build gate: "+iid+" can't start yet: its module depends on modules not verified at the current code ("+", ".join(sorted({d for m in linked for d in m["dependencies"] if self.state["modules"][d]["state"]!="verified"}))+"). Run verify_module on them first.")
 
     def summary(self,conv=None):
@@ -548,7 +658,9 @@ class Ledger:
             status="passed" if passed else "uncovered_checks" if uncovered and tests else "interrupted" if stopped else "stale_during_test" if not stable else "no_tests" if not invalid and not tests else "failed" if failures else "execution_error"
             receipt={"id":rid,"module":mid,"status":status,"exit":proc.returncode,"tests":len(tests),"failures":failures,"test_names":[c.get("name") for c in tests],"uncovered_checks":uncovered,"command":argv,"report":str(report),"output":str(output),"time":time.time(),"fingerprint":before,"dependency_receipts":deps,"runtime":(argv if isinstance(argv,str) else argv[0]),"scope":"Executed declared tests; semantic adequacy and full gameplay not independently established"}
             self.state["receipts"].append(receipt);m["state"]="verified" if passed else "needs_verification" if stopped else "failing"
-            if passed:m.update(receipt=rid,fingerprint=before,dependency_receipts=deps)
+            if passed:
+                m.update(receipt=rid,fingerprint=before,dependency_receipts=deps)
+                for p in before["files"]:(self.state.get("changed") or {}).pop(p,None)   # covered by this pass
             self.save();self.refresh()
             ctx.display={"type":"terminal","shell":"verification","cwd":str(self.root),"command":(argv if isinstance(argv,str) else " ".join(argv)),"output":text[-20000:],"exit":proc.returncode}
             return json.dumps({k:v for k,v in receipt.items() if k!="fingerprint"},ensure_ascii=False)+"\n"+text[-7000:]
@@ -614,6 +726,15 @@ def ctx_summary(ctx):
     ledger=for_ctx(ctx)
     if ledger is None:return None
     with ledger.lock:return ledger.summary(getattr(ctx,"conv_id",None))
+
+
+def ctx_run_needed(ctx):
+    """-> (reminder, label) when the program must run before the answer (Ledger.run_needed), else None."""
+    ledger=for_ctx(ctx)
+    if ledger is None:return None
+    with ledger.lock:
+        ledger.load()
+        return ledger.run_needed(getattr(ctx,"conv_id",None))
 
 
 def ctx_brief(ctx):

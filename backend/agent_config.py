@@ -109,5 +109,6 @@ DEFAULT_AGENT["model_explanations"] = True
 # compaction (plans/compaction-revisions.md): each switch restores the behaviour before 2026-10-16
 DEFAULT_AGENT["compact_summary"] = "terse"        # "narrative": the old 500-word, four-section summary
 DEFAULT_AGENT["slow_compaction"] = True           # False: no smaller budget for models under 20 tok/s
+DEFAULT_AGENT["program_run_gate"] = True         # False: no "run the program before done" reminder or label
 DEFAULT_AGENT["trim_old_writes"] = "all"          # "superseded": strip only writes of files touched again later
 DEFAULT_AGENT["occ"] = {"enabled": False, "experimental": True, "max_pages_per_turn": 2}

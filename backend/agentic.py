@@ -4318,6 +4318,7 @@ class AgentEngine:
         self._open_nags, self._resets = 0, 0
         self._intent_nags, self._said, self._turn_calls = 0, set(), {}
         self._evidence_nagged = False                                  # one "run the tests first" reminder per turn
+        self._run_nagged = False                                       # one "run the program first" reminder per turn
         self._gather_job = None          # fan-out workers running in the background while the main model works
         self._gather_nudges = 0          # times it was sent back to keep working while the workers run
         self._fan_due, self._fan_gate_refusals = False, 0    # fan-out expected before its own research
@@ -4783,6 +4784,20 @@ class AgentEngine:
                             self.history.append({"role":"user","content":REMINDER_TAG+"\nBuild/test/record is incomplete. Finish relevant verification or report a concrete blocker using ask_user; do not claim completion from narration. module_status shows stale/failing/uncovered work.\n</system-reminder>"})
                             self._require_call=True
                             continue
+                    if (getattr(self.ctx, "build_test_record", False) and self.cfg.get("program_run_gate", True) is not False
+                            and not asks_user and not self._force_answer and not getattr(self, "_run_nagged", False)):
+                        # unit tests prove the parts; a run proves they're wired together (run 71a2ec62: 20/20 tests
+                        # green, "done", and the page crashed on load). Once; a second answer goes out labelled.
+                        import verification_ledger as vl
+                        need = vl.ctx_run_needed(self.ctx)
+                        if need:
+                            self._run_nagged = True
+                            self.emit("answer_retract", reason="program not run")
+                            self.history.append({"role": "user", "content": REMINDER_TAG + "\n" + need[0]
+                                                 + "\n</system-reminder>"})
+                            self._require_call = True
+                            _log({"program_run_gate": need[1], "conv": self.ctx.conv_id})
+                            continue
                     if final:
                         self._keep_servers_in_answer(final)
                     if final and self._math_rounds < 1 and not self._force_answer and self._verify():
@@ -4864,6 +4879,12 @@ class AgentEngine:
                     self.emit("answer_retract",reason="untested changes")
                     self.emit("ans_delta",text=final)
                 state=None
+            if self.cfg.get("program_run_gate", True) is not False:
+                need = vl.ctx_run_needed(self.ctx)
+                if need:
+                    final = need[1] + "\n\n" + final
+                    self.emit("answer_retract", reason="program not run")
+                    self.emit("ans_delta", text=final)
             outstanding=[m["id"]+" ("+m["state"]+")" for m in (state or {}).get("modules",[]) if m["state"]!="verified"]
             if outstanding or (state or {}).get("unowned_changes"):
                 final="Verification incomplete: "+", ".join(outstanding+(state or {}).get("unowned_changes",[]))+".\n\n"+final

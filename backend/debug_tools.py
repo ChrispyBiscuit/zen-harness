@@ -515,6 +515,17 @@ def _has_py_tests(folder):
     return False
 
 
+def _npm_test_script(pkg):
+    """package.json has a real scripts.test (not npm init's 'no test specified'). Run 71a2ec62's package.json had
+    "test" at the top level: the old text match picked npm, and npm said 'Missing script: "test"' on every run."""
+    try:
+        with open(pkg, encoding="utf-8", errors="replace") as f:
+            test = ((json.load(f) or {}).get("scripts") or {}).get("test")
+    except (OSError, ValueError, AttributeError):
+        return False
+    return bool(test) and "no test specified" not in str(test)
+
+
 def run_tests(a, c, resolve, ToolError):
     """The run_tests tool: pytest for Python, node's test runner or npm test for JavaScript."""
     target = resolve(a.get("path"), True) if a.get("path") else (c.cwd or c.roots[0])
@@ -528,7 +539,7 @@ def run_tests(a, c, resolve, ToolError):
     if fw == "auto":
         if target.lower().endswith((".js", ".mjs", ".cjs", ".ts")):
             fw = "node"
-        elif os.path.isfile(pkg) and '"test"' in open(pkg, encoding="utf-8", errors="replace").read():
+        elif _npm_test_script(pkg):
             fw = "npm"
         elif js_tests and not _has_py_tests(target):
             # JavaScript tests and no npm test script: node --test, not pytest (a browser game's tests/test_*.js
