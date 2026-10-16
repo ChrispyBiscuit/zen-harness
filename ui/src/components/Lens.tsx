@@ -51,33 +51,26 @@ function lightMap() {
 const MAP = typeof document !== "undefined" ? bandMap() : ""
 const LIGHT = typeof document !== "undefined" ? lightMap() : ""
 
-// The motion is a spring, sampled once at start-up into the SMIL keyframes (linear between 50 ms samples).
-// A 5 s cycle: 3 s of motion, then 2 s off the row. In: released from off the left edge towards two thirds across,
-// it overshoots and wobbles to rest (an under-damped spring). Out: like a stretched rubber band let go, it snaps back
-// off the left edge. The colour split follows the speed: it flares while the band moves fast and calms as it settles.
-const START = -0.32, REST = 0.6
+// The motion is a ball tossed in the air, sideways: thrown in from off the left edge, it slows as it rises to the top
+// of its arc (about three quarters across), hangs there for an instant, and falls back off the left edge, speeding up.
+// A parabola, x(t) = start + height * 4u(1 - u) over the 3 s throw, sampled once at start-up into the SMIL keyframes
+// (linear between 50 ms samples); then 2 s off the row. The colour split follows the speed: widest as the band
+// leaves and lands, nearly gone at the top of the arc.
+const START = -0.32, APEX = 0.74
 const CYCLE = 5, ACTIVE = 3, STEP = 0.05
-function springPath() {
-  const xs: number[] = [], vs: number[] = []
-  let x = START, v = 0
-  const phase = (t: number) => (t < 2.3 ? { k: 42, c: 4.6, to: REST } : { k: 62, c: 8, to: START - 0.06 })
+function tossPath() {
+  const xs: number[] = [], speed: number[] = []
   for (let t = 0; t <= CYCLE + 1e-9; t += STEP) {
-    if (t <= ACTIVE) {
-      for (let i = 0; i < 10; i++) {                 // 5 ms sub-steps (semi-implicit Euler)
-        const { k, c, to } = phase(t + i * STEP / 10)
-        v += (-k * (x - to) - c * v) * STEP / 10
-        x += v * STEP / 10
-      }
-    } else { x = START; v = 0 }                       // off the row until the next cycle
-    xs.push(Math.max(START - 0.06, x)); vs.push(Math.abs(v))
+    const u = Math.min(1, t / ACTIVE)
+    xs.push(t <= ACTIVE ? START + (APEX - START) * 4 * u * (1 - u) : START)
+    speed.push(t <= ACTIVE ? Math.abs(1 - 2 * u) : 0)           // |dx/dt|, normalised: 1 at the throw and the catch
   }
   xs[xs.length - 1] = START
-  const vmax = Math.max(...vs) || 1
   const keyTimes = xs.map((_, i) => Math.min(1, (i * STEP) / CYCLE).toFixed(4)).join(";")
-  const fringe = (base: number, spread: number) => vs.map((s2) => (base + spread * (s2 / vmax)).toFixed(4)).join(";")
+  const fringe = (base: number, spread: number) => speed.map((v) => (base + spread * v).toFixed(4)).join(";")
   return { x: xs.map((n) => n.toFixed(4)).join(";"), keyTimes, r: fringe(0.03, 0.012), b: fringe(0.024, -0.01) }
 }
-const PATH = springPath()
+const PATH = tossPath()
 const DUR = `${CYCLE}s`
 const W = 0.3         // the band's width, as a share of the row's width
 
