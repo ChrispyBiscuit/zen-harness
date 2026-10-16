@@ -41,7 +41,7 @@ function lightMap() {
   if (!g) return ""
   const l = g.createLinearGradient(0, 0, SIZE, 0)
   l.addColorStop(0, "rgba(255,255,255,0)")
-  l.addColorStop(0.5, "rgba(255,250,240,0.055)")
+  l.addColorStop(0.5, "rgba(255,250,240,0.035)")
   l.addColorStop(1, "rgba(255,255,255,0)")
   g.fillStyle = l
   g.fillRect(0, 0, SIZE, SIZE)
@@ -51,8 +51,8 @@ function lightMap() {
 const MAP = typeof document !== "undefined" ? bandMap() : ""
 const LIGHT = typeof document !== "undefined" ? lightMap() : ""
 
-// one pass: in from the left, across, out to the right in 1.9 s; then a rest; 3.4 s a cycle
-const DUR = "3.4s"
+// one pass: in from the left, across, out to the right in 2.8 s; then a rest; 5 s a cycle
+const DUR = "5s"
 const X = { values: "-0.32;1.02;1.02", keyTimes: "0;0.56;1", keySplines: "0.45 0 0.3 1;0 0 1 1" }
 const W = 0.3         // the band's width, as a share of the row's width
 
@@ -70,12 +70,12 @@ export function RefractFilter() {
         <feFlood floodColor="rgb(128,128,128)" result="grey" />
         <feComposite in="map" in2="grey" operator="over" result="field" />
         {/* the same bulge at three strengths, one per channel: the fringe. The spread breathes as it travels. */}
-        <feDisplacementMap in="SourceGraphic" in2="field" scale="0.048" xChannelSelector="R" yChannelSelector="G" result="dr">
-          <animate attributeName="scale" values="0.048;0.053;0.048;0.048" keyTimes="0;0.28;0.56;1" dur={DUR} repeatCount="indefinite" />
+        <feDisplacementMap in="SourceGraphic" in2="field" scale="0.03" xChannelSelector="R" yChannelSelector="G" result="dr">
+          <animate attributeName="scale" values="0.03;0.033;0.03;0.03" keyTimes="0;0.28;0.56;1" dur={DUR} repeatCount="indefinite" />
         </feDisplacementMap>
-        <feDisplacementMap in="SourceGraphic" in2="field" scale="0.042" xChannelSelector="R" yChannelSelector="G" result="dg" />
-        <feDisplacementMap in="SourceGraphic" in2="field" scale="0.036" xChannelSelector="R" yChannelSelector="G" result="db">
-          <animate attributeName="scale" values="0.036;0.031;0.036;0.036" keyTimes="0;0.28;0.56;1" dur={DUR} repeatCount="indefinite" />
+        <feDisplacementMap in="SourceGraphic" in2="field" scale="0.027" xChannelSelector="R" yChannelSelector="G" result="dg" />
+        <feDisplacementMap in="SourceGraphic" in2="field" scale="0.024" xChannelSelector="R" yChannelSelector="G" result="db">
+          <animate attributeName="scale" values="0.024;0.021;0.024;0.024" keyTimes="0;0.28;0.56;1" dur={DUR} repeatCount="indefinite" />
         </feDisplacementMap>
         <feColorMatrix in="dr" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="r" />
         <feColorMatrix in="dg" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="g" />
