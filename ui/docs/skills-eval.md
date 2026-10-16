@@ -3,6 +3,8 @@
 Evaluation of `ui/src` against [emilkowalski/skills](https://github.com/emilkowalski/skills) (all 16 skills and
 their reference files, read 2026-10-15). Evaluation only: no UI code was changed.
 
+> **2026-10-15 update:** the user decided to keep the sidebar slide and the scramble effect, enhanced with chromatic aberration and a glitch. Findings #1 and #4 below are superseded; see `backend/plans/visual-polish-v3.md`.
+
 **Method.** I read every `SKILL.md` and its references, swept `ui/src` for each rule (grep plus reading the
 components that matter), and looked at the live app at `http://127.0.0.1:8765` read-only at a 1280×800 viewport.
 I took screenshots and ran DOM measurements, and sent no chats or settings changes. Motion feel (easing, springs) was judged from
