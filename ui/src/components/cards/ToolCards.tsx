@@ -82,8 +82,16 @@ function LastLine({ text }: { text: string }) {
 }
 
 export function StatusPill({ tone, children, spin }: { tone: Tone; children: React.ReactNode; spin?: boolean }) {
+  // a step that fails while you watch glitches once as it turns red (index.css .glitch-once); old failures don't
+  const prev = useRef(tone)
+  const [glitch, setGlitch] = useState(false)
+  useEffect(() => {
+    if (tone === "destructive" && prev.current !== "destructive") setGlitch(true)
+    prev.current = tone
+  }, [tone])
   return (
-    <span data-tone={tone} className="tone-text tone-soft inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-meta font-medium">
+    <span data-tone={tone} onAnimationEnd={() => setGlitch(false)}
+      className={cn("tone-text tone-soft inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-meta font-medium", glitch && "glitch-once")}>
       {spin && <Loader2 className="size-3 animate-spin" />}
       {children}
     </span>

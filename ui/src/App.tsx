@@ -4,7 +4,7 @@ import { filesIn } from "@/components/ArtifactsPanel"
 import { latestChecklist } from "@/components/Checklist"
 import { Toaster } from "sonner"
 import { Button } from "@/components/ui/button"
-import { TooltipProvider } from "@/components/ui/tooltip"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Sidebar } from "@/components/Sidebar"
 import { Workspace } from "@/components/Workspace"
 import { isVisible, onDockChange, resetLayout, showPanel, toggleTray } from "@/lib/dock"
@@ -17,6 +17,7 @@ import { ResizeEdges, WindowControls, WindowFrame, useWindowDrag } from "@/compo
 import { useApp } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import { MeterBar } from "@/components/MeterBar"
+import { Decode } from "@/components/Decode"
 import { levelTone, type Tone } from "@/lib/tone"
 import { applyDensity, storedDensity, type Density } from "@/lib/density"
 import { applyTextFx, storedTextFx, TEXT_FX, type TextFx } from "@/lib/textfx"
@@ -135,7 +136,7 @@ function StatusBar() {
       {!connected && <span className="flex items-center gap-1 text-destructive"><WifiOff className="size-3" /> reconnecting</span>}
       <span className="flex min-w-0 items-center gap-2" title="Model · context window · how full this chat's context is">
         <Cpu className="size-3.5 shrink-0 text-faint" />
-        <span className="mono hidden min-w-0 truncate text-foreground/80 @xl:inline">{model}</span>
+        <span className="mono hidden min-w-0 truncate text-foreground/80 @xl:inline"><Decode text={model || ""} ms={320} /></span>
         {mode !== "chat" && a && <span className="mono shrink-0 text-faint">{Math.round(configuredCtx(a) / 1024)}k</span>}
         <ContextGauge />
       </span>
@@ -212,7 +213,12 @@ function TopBar() {
       drag ? "pr-0" : "pr-3")}>
       <div className="min-w-0 flex-1 truncate text-ui font-medium" title={current ? (thread?.title || conv?.title || "") : undefined}>{current ? (thread?.title || conv?.title || "") : "New chat"}</div>
       {!connected && <span className="flex items-center gap-1 text-caption text-destructive"><WifiOff className="size-3.5" /> reconnecting</span>}
-      <Button variant="ghost" size="icon-sm" onClick={() => { if (confirm("Reset the panel layout to the default?")) resetLayout() }} title="Reset panel layout" aria-label="Reset panel layout"><LayoutGrid /></Button>
+      <Tooltip>
+        <TooltipTrigger render={<Button variant="ghost" size="icon-sm" onClick={() => { if (confirm("Reset the panel layout to the default?")) resetLayout() }} aria-label="Reset panel layout" />}>
+          <LayoutGrid />
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Reset panel layout</TooltipContent>
+      </Tooltip>
       <DropdownMenu>
         <DropdownMenuTrigger title="Help" aria-label="Help" className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground"><CircleHelp className="size-4" /></DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
@@ -223,7 +229,12 @@ function TopBar() {
           <DropdownMenuItem onClick={() => set({ helpOpen: true, helpPage: "licenses" } as any)}><Scale /> Licences</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <Button variant="ghost" size="icon-sm" onClick={() => set({ settingsOpen: true })} title="Settings" aria-label="Settings"><Settings2 /></Button>
+      <Tooltip>
+        <TooltipTrigger render={<Button variant="ghost" size="icon-sm" onClick={() => set({ settingsOpen: true })} aria-label="Settings" />}>
+          <Settings2 />
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Settings</TooltipContent>
+      </Tooltip>
       <WindowControls className="ml-1" />
     </header>
   )

@@ -6,6 +6,8 @@ import { latestChecklist, progress } from "@/components/Checklist"
 import { closeAnimated, isVisible, onDockChange, togglePanel, toggleTray, trayCollapsed, type PanelId } from "@/lib/dock"
 import { useApp } from "@/lib/store"
 import { cn } from "@/lib/utils"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { Kbd } from "@/components/ui/kbd"
 
 /** The right tray's own controls, down its left edge (its tab strip; when the tray folds, this column is the rail):
  *  one icon per panel with its live badge (checklist progress, artifacts, running tasks). A click shows that
@@ -31,14 +33,17 @@ function IconButton({ on, label, onClick, children, badge, tone, onClose }: {
   return (
     <div className="group/tb relative w-full">
       {on && <span aria-hidden="true" className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-foreground/80" />}
-      <button onClick={onClick} title={label} aria-label={label} aria-pressed={on}
-        className={cn("mx-auto flex w-7 flex-col items-center gap-0.5 rounded-md py-1.5 transition-ui [&_svg]:size-4",
-          on ? "bg-surface-2 text-foreground" : "text-muted-foreground hover:bg-surface-2 hover:text-foreground")}>
-        {children}
-        {badge != null && badge !== "" && (
-          <span data-tone={tone} className={cn("mono text-[10px] leading-none tabular-nums", tone ? "tone-text" : "text-muted-foreground")}>{badge}</span>
-        )}
-      </button>
+      <Tooltip>
+        <TooltipTrigger render={<button onClick={onClick} aria-label={label} aria-pressed={on}
+          className={cn("mx-auto flex w-7 flex-col items-center gap-0.5 rounded-md py-1.5 transition-ui [&_svg]:size-4",
+            on ? "bg-surface-2 text-foreground" : "text-muted-foreground hover:bg-surface-2 hover:text-foreground")} />}>
+          {children}
+          {badge != null && badge !== "" && (
+            <span data-tone={tone} className={cn("mono text-[10px] leading-none tabular-nums", tone ? "tone-text" : "text-muted-foreground")}>{badge}</span>
+          )}
+        </TooltipTrigger>
+        <TooltipContent side="left">{label}</TooltipContent>
+      </Tooltip>
       {onClose && (
         <button onClick={onClose} aria-label={`Close ${label}`} title={`Close ${label}`}
           className="absolute -right-0.5 -top-0.5 hidden size-3.5 place-items-center rounded-full bg-surface-3 text-muted-foreground hover:text-foreground group-hover/tb:grid">
@@ -91,11 +96,13 @@ export function TrayFold(props: IDockviewHeaderActionsProps) {
   const folded = trayCollapsed()
   return (
     <div className="flex w-full items-center justify-center py-1.5">
-      <button onClick={() => toggleTray()} aria-label={folded ? "Show side panels" : "Hide side panels"} aria-pressed={!folded}
-        title={folded ? "Show side panels (Ctrl+Alt+B)" : "Hide side panels (Ctrl+Alt+B)"}
-        className="grid size-7 place-items-center rounded-md text-muted-foreground transition-ui hover:bg-surface-2 hover:text-foreground">
-        {folded ? <PanelRightOpen className="size-4" /> : <PanelRightClose className="size-4" />}
-      </button>
+      <Tooltip>
+        <TooltipTrigger render={<button onClick={() => toggleTray()} aria-label={folded ? "Show side panels" : "Hide side panels"} aria-pressed={!folded}
+          className="grid size-7 place-items-center rounded-md text-muted-foreground transition-ui hover:bg-surface-2 hover:text-foreground" />}>
+          {folded ? <PanelRightOpen className="size-4" /> : <PanelRightClose className="size-4" />}
+        </TooltipTrigger>
+        <TooltipContent side="left">{folded ? "Show side panels" : "Hide side panels"} <Kbd>Ctrl+Alt+B</Kbd></TooltipContent>
+      </Tooltip>
     </div>
   )
 }

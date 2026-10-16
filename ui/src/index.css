@@ -400,6 +400,12 @@ select optgroup { color: var(--muted-foreground); font-weight: 600; }
 .is-glitching .scramble::before { color: var(--ca-r); }
 .is-glitching .scramble::after { color: var(--ca-c); animation-delay: 30ms; }
 .is-glitching .prose-chat > :last-child { animation: zen-glitch-shift var(--glitch-dur, 150ms) steps(3, end) both; }
+/* a label decoding in (components/Decode.tsx) wears the same split; a tool card that just failed glitches once */
+.decoding { text-shadow: calc(-1 * var(--ca-x)) 0 var(--ca-r), var(--ca-x) 0 var(--ca-c); }
+:root[data-text-fx="off"] .decoding { text-shadow: none; }
+.glitch-once { animation: zen-glitch-shift 160ms steps(3, end) 1 both; }
+:root:is([data-text-fx="off"], [data-text-fx="calm"]) .glitch-once { animation: none; }
+@media (prefers-reduced-motion: reduce) { .glitch-once { animation: none; } }
 
 /* ===================================================================== open / close motion (polish v2)
    Transform and opacity only (cheap in the embedded Qt window); timings and easings from the motion tokens;

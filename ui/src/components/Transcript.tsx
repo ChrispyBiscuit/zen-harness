@@ -5,6 +5,7 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "rea
 import { ArrowDown, BookOpen, Lightbulb, CheckCircle2, ChevronRight, CircleDot, Loader2, ShieldAlert, XCircle, Compass, FileSpreadsheet, FileText, Image as ImageIcon, Presentation, Paperclip, ScanSearch, ShieldCheck } from "lucide-react"
 import { Markdown, SCR_CLOSE, SCR_OPEN } from "./Markdown"
 import { textFx } from "@/lib/textfx"
+import { Decode } from "./Decode"
 import { ChangesCard, CompactedDivider, TaskDoneCard, ToolCard } from "./cards/ToolCards"
 import { useApp } from "@/lib/store"
 import { InkRing } from "./Logo"
@@ -58,7 +59,7 @@ function Thinking({ text, live, k }: { text: string; live?: boolean; k: string }
     <div className="text-ui">
       <button onClick={() => toggle(k)} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground">
         <Lightbulb className="size-3.5" />
-        <span className={cn(live && "shimmer-text")}>{live ? "Thinking" : "Reasoning"}</span>
+        <span className={cn(live && "shimmer-text")}><Decode text={live ? "Thinking" : "Reasoning"} /></span>
         <ChevronRight className={cn("size-3.5 transition-transform", show && "rotate-90")} />
       </button>
       {show && (
@@ -170,7 +171,7 @@ function PlanCard({ msg, k }: { msg: Msg; k: string }) {
     <div className="overflow-hidden rounded-card border border-line-1 bg-surface-1">
       <button onClick={() => toggle(k)} className="flex w-full items-center gap-2 min-h-9 px-(--card-px) py-(--card-py) transition-ui hover:bg-surface-2 active:bg-surface-3 text-left text-ui">
         <Compass className={cn("size-4", msg.streaming ? "animate-pulse text-info" : "text-muted-foreground")} />
-        <span className={cn("font-medium", msg.streaming && "shimmer-text")}>{msg.streaming ? "Planning the approach" : "Approach"}</span>
+        <span className={cn("font-medium", msg.streaming && "shimmer-text")}><Decode text={msg.streaming ? "Planning the approach" : "Approach"} /></span>
         <span className="text-caption text-muted-foreground">
           {msg.streaming ? `up to ${((msg.budget || 0) / 1000).toFixed(0)}k tokens` : `${msg.tokens ?? "?"} tokens · ${Math.round(msg.seconds || 0)}s`}
         </span>
