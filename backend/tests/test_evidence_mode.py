@@ -241,3 +241,25 @@ def test_runtime_data_named_in_a_build_answer_is_not_a_missing_file():
     e._build_profile = True
     text = "Done. Expenses are stored in data/expenses.json and the report is saved to report.md."
     assert e._missing_claimed_files(text) == ["report.md"]          # the document claim is still checked
+
+
+def test_a_run_covers_the_conftest_pytest_loads_and_the_refusal_says_run_the_folder(tmp_path):
+    root = tmp_path / "repo"
+    (root / "tests").mkdir(parents=True)
+    (root / "app.py").write_text("X = 1\n")
+    (root / "tests" / "test_app.py").write_text("import app\n\ndef test_x():\n    assert app.X == 1\n")
+    (root / "tests" / "conftest.py").write_text("import sys\n")
+    led = ledger_for(root, tmp_path)
+    before = led.inventory()
+    for f in ("app.py", "tests/conftest.py"):
+        (root / f).write_text((root / f).read_text() + "# changed\n")
+    led.record_changes(before, "write", "c1")
+    msg = led.evidence_message("2.1", led.pending("c1"))
+    led.note_test_run("c1", "run_tests tests/test_app.py", 1, 0, False, started=9e18, targets=["tests/test_app.py"])
+    assert led.pending("c1") == []                                    # conftest.py covered with the run
+    (root / "util.py").write_text("Y = 2\n")
+    before = led.inventory()
+    (root / "util.py").write_text("Y = 3\n")
+    led.record_changes(before, "write", "c1")
+    msg = led.evidence_message("2.2", led.pending("c1"))
+    assert "Run the whole suite once" in msg and "run_tests(path=" in msg

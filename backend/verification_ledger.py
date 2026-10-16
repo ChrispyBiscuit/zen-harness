@@ -156,6 +156,14 @@ class Ledger:
             try:rel=p.resolve().relative_to(self.root).as_posix()
             except (ValueError,OSError):continue
             out.add(rel)
+            # pytest loads conftest.py files from the test's folder up to the root without an import: a run covers
+            # them too (run b178328a: 15/15 green, every tick refused over tests/conftest.py)
+            d=Path(rel).parent
+            while True:
+                cf=(d/"conftest.py").as_posix().lstrip("./") if str(d)!="." else "conftest.py"
+                if (self.root/cf).is_file():out.add(cf)
+                if str(d) in (".",""):break
+                d=d.parent
             try:src=p.read_text(encoding="utf-8",errors="replace")
             except OSError:continue
             names=set(re.findall(r"^\s*(?:from|import)\s+([\w.]+)",src,re.M))
@@ -171,6 +179,13 @@ class Ledger:
 
     def evidence_message(self,iid,files):
         shown=", ".join(files[:6])+(" and "+str(len(files)-6)+" more" if len(files)>6 else "")
+        last=(self.state.get("test_runs") or [{}])[-1]
+        if last.get("passed") and not last.get("failed") and not last.get("full"):
+            # the last green run was aimed at particular files: say how to make it cover everything
+            return ("Not marked done: "+iid+" — your last passing run covered only the test files it named, and "+shown
+                    +" changed since a run covered "+("it" if len(files)==1 else "them")+". Run the whole suite once: "
+                    "run_tests(path='"+str(self.root)+"') (the project folder, not a single test file). Once it "
+                    "passes, mark "+iid+" done again.")
         return ("Not marked done: "+iid+" — "+shown+" changed since a passing test run last covered "
                 +("it" if len(files)==1 else "them")+". Run the project's tests (run_tests, or its own command such "
                 "as pytest, npm test, cargo test or go test); once they pass, mark "+iid+" done again. If there is no "
