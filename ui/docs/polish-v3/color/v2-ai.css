@@ -1,0 +1,3 @@
+/* Ai-zome (indigo ink): navy-tinted ground, one iris accent; info moves to cyan to stay distinct */
+:root.dark { --n-h: 272; --n-c: 0.016; --acc: oklch(0.7 0.13 278); --acc-on: oklch(0.98 0.01 278);
+  --info: oklch(0.78 0.1 220); --wash: 9%; }
