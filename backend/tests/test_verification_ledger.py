@@ -213,3 +213,27 @@ def test_adoption_is_reported_in_the_write_result(ledger,monkeypatch):
 def test_gate_refusal_without_active_module_says_how_to_start(ledger):
  with pytest.raises(PolicyError) as e:ledger.preflight('write_file',{'path':str(ledger.root/'app.py')},'write')
  assert 'No module owns it yet' in str(e.value) and 'begin_module' in str(e.value)
+
+
+def test_a_refused_write_is_kept_and_written_when_its_module_begins(ledger,monkeypatch):
+ # 27B run 95fc5c3e: server.py and client.py generated in full before any module, refused, generated again
+ import agent_tools as at
+ import verification_ledger as vl
+ c=at.Ctx([str(ledger.root)]);c.cwd=str(ledger.root);c.build_test_record=True;c.verification_root=str(ledger.root)
+ c.conv_id='verification-fixture'
+ monkeypatch.setattr(vl,'for_ctx',lambda ctx:ledger)
+ r=at.Registry(c,enabled={'module_contract','begin_module','write_file'})
+ with pytest.raises(at.ToolError) as e:r.call('write_file',{'path':'server.py','content':'PORT = 8000'})
+ assert 'is kept' in str(e.value) and not (ledger.root/'server.py').exists()
+ with pytest.raises(at.ToolError):r.call('write_file',{'path':'client.py','content':'URL = 1'})
+ r.call('module_contract',contract('server',sources=['server.py'],tests=['test_server.py'],framework='pytest'))
+ text,_=r.call('begin_module',{'id':'server'})
+ assert 'Wrote your kept write_file for server.py' in text
+ assert (ledger.root/'server.py').read_text()=='PORT = 8000'
+ assert not (ledger.root/'client.py').exists() and 'client.py' in ledger.state['drafts']   # not this module's file
+
+
+def test_writing_the_file_directly_drops_its_draft(ledger):
+ l=ledger;l.keep_draft('app.py','write_file',{'path':'app.py','content':'x'})
+ before=l.inventory();(l.root/'app.py').write_text('y');l.record_changes(before)
+ assert 'app.py' not in l.state.get('drafts',{})

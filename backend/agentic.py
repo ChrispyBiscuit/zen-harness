@@ -5435,7 +5435,11 @@ class AgentEngine:
             self.turn["failed_calls"] = self.turn.get("failed_calls", 0) + 1
         self._fail_streak = self._fail_streak + 1 if failed else 0
         broken = self._run_broken(name, text)
-        if failed or broken:
+        # Debugging (the larger thinking budget on every step until a clean run) is for a broken PROGRAM: a traceback
+        # or failing tests. A failed CALL (a refusal, a missing file, a bad argument) gets extra thought on the next
+        # step only, through _fail_streak. It used to set debugging too, and nothing but a clean test run cleared it:
+        # one build-gate refusal at step 3 gave a 27B the 2048-token budget on every step after (PRD, contracts).
+        if broken:
             self._debugging = True
         elif broken is False:
             self._debugging = False              # a clean test/program run: the bug hunt is over

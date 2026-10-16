@@ -37,6 +37,7 @@ def for_ctx(ctx):
 class Ledger:
     def __init__(self, root, storage):
         self.adopted=None
+        self.refused_rel=None
         self.root=Path(root).resolve()
         key=hashlib.sha256(os.path.normcase(str(self.root)).encode()).hexdigest()[:24]
         self.folder=Path(storage)/key; self.folder.mkdir(parents=True,exist_ok=True)
@@ -175,6 +176,25 @@ class Ledger:
         self.adopted=(rel,mid,key)
         self.save()
 
+    def keep_draft(self,rel,name,args):
+        """A write the gate refused is kept, not lost: a 27B generated server.py and client.py in full before declaring
+        a module, both were refused, and it had to generate them again (minutes of output on an 8 GB card). The latest
+        refused call per file is kept and replayed when a module that owns the file begins."""
+        drafts=self.state.setdefault("drafts",{})
+        drafts.pop(rel,None)
+        drafts[rel]={"name":name,"args":args}
+        while len(drafts)>8:drafts.pop(next(iter(drafts)))
+        self.save()
+
+    def due_drafts(self):
+        """-> [(rel, name, args)] kept writes that the active module now owns (removed from the store)."""
+        active=self.state.get("active");drafts=self.state.get("drafts") or {}
+        if not active:return []
+        due=[(rel,d["name"],d["args"]) for rel,d in drafts.items() if active in self.owners(rel)]
+        for rel,_n,_a in due:drafts.pop(rel,None)
+        if due:self.save()
+        return due
+
     def preflight(self,name,args,kind):
         self.refresh()
         if kind=="write" and args.get("path"):
@@ -184,12 +204,15 @@ class Ledger:
             if p.is_relative_to(self.root) and (p.suffix.lower() in CODE or p.name in MANIFESTS or self.owners(p.relative_to(self.root).as_posix())):
                 rel=p.relative_to(self.root).as_posix();active=self.state["active"]
                 if active and not self.owners(rel):self.adopt(active,rel)
-                if not active or active not in self.owners(rel):raise PolicyError(self.gate_message(rel,active))
+                if not active or active not in self.owners(rel):
+                    self.refused_rel=rel
+                    raise PolicyError(self.gate_message(rel,active))
                 if any(self.state["modules"][d]["state"]!="verified" for d in self.state["modules"][active]["dependencies"]):raise PolicyError("Build gate: prerequisite verification changed; reverify before dependent edits")
         return self.inventory()
 
     def record_changes(self,before):
         after=self.inventory();changed={p for p in before.keys()|after.keys() if before.get(p)!=after.get(p)}
+        for p in changed:(self.state.get("drafts") or {}).pop(p,None)
         for p in changed:
             owners=self.owners(p)
             if not owners and p in after:self.state["unowned"]=sorted(set(self.state["unowned"]+[p]))
@@ -268,16 +291,45 @@ class Ledger:
             return json.dumps({k:v for k,v in receipt.items() if k!="fingerprint"},ensure_ascii=False)+"\n"+text[-7000:]
 
 
+DRAFT_TOOLS={"write_file","edit_file"}
+
+
+def _replay_drafts(registry,ledger,out):
+    """After begin_module: write the kept drafts this module owns, through the normal tool path (code check, backup,
+    diff), and say what happened in the begin_module result."""
+    with ledger.lock:
+        ledger.refresh();due=ledger.due_drafts()
+    if not due or not (isinstance(out,tuple) and out and isinstance(out[0],str)):return out
+    notes=[]
+    for rel,name,args in due:
+        try:
+            text,_img=registry.call(name,args)
+            notes.append("Wrote your kept "+name+" for "+rel+": "+str(text).split("\n",1)[0])
+        except Exception as exc:          # a stale edit, a changed file: say so; the model writes it again
+            notes.append("Your kept "+name+" for "+rel+" could not be applied ("+str(exc)[:200]+"); write it again.")
+    return (out[0]+"\n"+"\n".join(notes),)+tuple(out[1:])
+
+
 def invoke(registry,name,args):
     ledger=for_ctx(registry.ctx)
     if ledger is None:return registry._call_unchecked(name,args)
     t=registry.get(name) or {};kind=t.get("kind")
     # One shared policy around every actual mutation, including native batches/prefetch.
-    if name in {"module_contract","begin_module","verify_module","module_status"} or kind not in {"write","exec","input","mcp"}:
+    if name=="begin_module":
+        out=registry._call_unchecked(name,args)
+        return _replay_drafts(registry,ledger,out)
+    if name in {"module_contract","verify_module","module_status"} or kind not in {"write","exec","input","mcp"}:
         return registry._call_unchecked(name,args)
     with ledger.lock:
-        ledger.adopted=None
-        before=ledger.preflight(name,args,kind)
+        ledger.adopted=None;ledger.refused_rel=None
+        try:before=ledger.preflight(name,args,kind)
+        except PolicyError as exc:
+            rel=ledger.refused_rel
+            if kind=="write" and rel and isinstance(args,dict) and name in DRAFT_TOOLS:
+                ledger.keep_draft(rel,name,args)
+                raise PolicyError(str(exc)+" Your "+name+" for "+rel+" is kept: when a module that owns it begins "
+                                  "(begin_module), it is written then automatically, so there is no need to write it again.") from exc
+            raise
         try:
             out=registry._call_unchecked(name,args)
             if ledger.adopted and isinstance(out,tuple) and out and isinstance(out[0],str):
