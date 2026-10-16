@@ -193,7 +193,7 @@ def test_gate_still_refuses_a_file_another_module_owns(ledger):
  l.begin('storage')
  with pytest.raises(PolicyError) as e:l.preflight('write_file',{'path':str(l.root/'logic.cjs')},'write')
  msg=str(e.value)
- assert 'logic.cjs was NOT written' in msg and "belongs to module 'math'" in msg
+ assert 'logic.cjs was not written yet' in msg and "belongs to module 'math'" in msg
  assert 'logic.cjs' not in l.state['modules']['storage']['sources']
 
 

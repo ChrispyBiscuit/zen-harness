@@ -315,7 +315,7 @@ class Ledger:
         the generic 'declare/begin a module owning X' as a dead end (a 9B wrote store.py into a module that owned
         data.py, was refused, never wrote data.py, then spent 35 steps fixing the imports of its tests)."""
         owners=self.owners(rel)
-        lines=["Build gate: "+rel+" was NOT written."]
+        lines=["Build gate: "+rel+" was not written yet."]
         if active:
             m=self.state["modules"][active]
             own=[p for p in m["sources"]+m["tests"]]
@@ -398,6 +398,10 @@ class Ledger:
         completion until a module claims it) — except when a COMMAND made it: runtime data a program or its tests
         write (expenses.json) is ignored, and code a command creates (a downloaded library, scaffolding) joins the
         active module. Downloaded three.js files and an npm package.json blocked whole builds as 'unowned'."""
+        # the state as saved now, not as loaded before the call: a test run's receipt is written by another Ledger
+        # object during the call, and saving this one's stale copy erased it (run 2405352c: 'Not marked done' after a
+        # passing 39-test run; three checklist updates refused, then the model stopped updating it)
+        self.load()
         after=self.inventory();changed={p for p in before.keys()|after.keys() if before.get(p)!=after.get(p)}
         if self.mode=="evidence":
             self.note_changes(changed,after,conv)
@@ -423,7 +427,7 @@ class Ledger:
         """Why checklist item `iid` can't be marked done yet, and the one step that does it. The old generic refusal
         ('requires current verify_module receipts') made a 27B stop ticking items for the rest of the build."""
         todo=[m["id"] for m in linked if m["state"]!="verified"]
-        msg="Build gate: "+iid+" was NOT marked done yet."
+        msg="Build gate: "+iid+" was not marked done yet."
         if self.state["unowned"]:
             msg+=(" Changed files no module owns: "+", ".join(self.state["unowned"][:6])+". Add them to a module "
                   "(module_contract with them in sources or tests), then verify it.")

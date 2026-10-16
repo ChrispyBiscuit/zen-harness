@@ -548,7 +548,7 @@ def powershell_timeout_says_still_running():
     d = tmpdir("ps")
     c = at.Ctx([d])
     out = at.t_powershell({"command": "Write-Output 'up'; Start-Sleep -Seconds 30", "timeout": 4}, c)
-    assert "STILL RUNNING" in out, out[-500:]
+    assert "still running" in out, out[-500:]
 
 
 # =====================================================================================================================
@@ -992,7 +992,7 @@ def gone_background_process_noted():
                  {"role": "user", "content": "open the page"}]
     e._turn_user_msg = e.history[-1]
     e._note_gone_processes()
-    assert "NOT running any more" in e.history[-1]["content"] and "bg7 'vite dev'" in e.history[-1]["content"]
+    assert "no longer running" in e.history[-1]["content"] and "bg7 'vite dev'" in e.history[-1]["content"]
     e2 = engine()
     e2.history = [{"role": "tool", "content": "started background process bg8 ('w', pid 1): running."},
                   {"role": "tool", "content": "stopped bg8 'w'"}, {"role": "user", "content": "hi"}]
@@ -1662,9 +1662,9 @@ def green_suite_is_the_evidence_in_the_work_state():
     h["last_tests"] = {"passed": 21, "failed": 0, "t": "23:48:47", "cmd": "tests", "failing": []}
     h["green"], h["green_t"], h["green_edits"] = {}, "23:48:47", 0
     ws = e._work_state()
-    assert "VERIFIED" in ws and "ONE live run" in ws and "no new scripts" in ws, ws
+    assert "Verified" in ws and "one live run" in ws and "no new scripts" in ws, ws
     h["green_edits"] = 2                                  # code changed since: run them again, no claim
-    assert "VERIFIED" not in e._work_state()
+    assert "Verified:" not in e._work_state()
 
 
 @test

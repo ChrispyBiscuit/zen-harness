@@ -208,3 +208,36 @@ def test_module_and_workbook_tools_load_only_when_in_use(tmp_path):
     e.ctx.project_build = False
     e._decide_turn_tools()
     assert not e._module_tools and "module_contract" not in e._core_names()
+
+
+def test_a_passing_run_through_the_registry_clears_the_changes(tmp_path, monkeypatch):
+    # run 2405352c: the gate wrapper's stale copy of the ledger overwrote the receipt the test run had just saved,
+    # so 'Not marked done' kept coming after a passing 39-test run
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "app.py").write_text("def add(a, b):\n    return a + b\n")
+    (root / "test_app.py").write_text("from app import add\n\ndef test_add():\n    assert add(1, 2) == 3\n")
+    store = tmp_path / "store"
+
+    def fresh(ctx):                                  # a new Ledger object per call, as in the app
+        led = Ledger(root, store)
+        led.decide_mode(ctx)
+        return led
+    monkeypatch.setattr(vl, "for_ctx", fresh)
+    c = at.Ctx([str(root)]); c.cwd = str(root); c.build_test_record = True; c.conv_id = "chat1"
+    r = at.Registry(c, enabled={"write_file", "run_tests"})
+    at.note_seen(c, str(root / "app.py"))
+    r.call("write_file", {"path": "app.py", "content": "def add(a, b):\n    return b + a\n"})
+    assert fresh(c).pending("chat1") == ["app.py"]
+    text, _ = r.call("run_tests", {"path": str(root)})
+    assert text.startswith("tests: PASSED")
+    assert fresh(c).pending("chat1") == []
+
+
+def test_runtime_data_named_in_a_build_answer_is_not_a_missing_file():
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from offline_suite import engine
+    e = engine()
+    e._build_profile = True
+    text = "Done. Expenses are stored in data/expenses.json and the report is saved to report.md."
+    assert e._missing_claimed_files(text) == ["report.md"]          # the document claim is still checked

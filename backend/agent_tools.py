@@ -1122,7 +1122,7 @@ def t_trace_symbol(a, c):
         other = [r for r in repomap.find_references(root, name, limit=200)
                  if (os.path.abspath(os.path.join(root, r["path"])).lower(), r["line"]) not in shown | defined_at]
         if other:
-            parts.append(f"SAME NAME, NOT RESOLVED to the definition(s) above ({len(other)}) — another '{word}' or a "
+            parts.append(f"Same name, not resolved to the definition(s) above ({len(other)}) — another '{word}' or a "
                          f"call on an object of unknown type; check before assuming they are related:\n"
                          + "\n".join(f"  {r['path']}:{r['line']}  {r['text']}" for r in other[:15])
                          + (f"\n  … {len(other) - 15} more" if len(other) > 15 else ""))
@@ -1130,7 +1130,7 @@ def t_trace_symbol(a, c):
         parts.append(f"{len(defs) - 4} more definitions named '{name}': " + ", ".join(
             f"{d['path']}:{d['line']}" for d in defs[4:12]) + " — pass file= to pick one")
     if more:
-        parts.append("NOT SHOWN (line budget) — read them with read_file or raise max_lines:\n  " + "\n  ".join(more[:30]))
+        parts.append("Not shown (line budget) — read them with read_file or raise max_lines:\n  " + "\n  ".join(more[:30]))
     return "\n\n".join(parts)
 
 
@@ -1286,7 +1286,7 @@ def _blocked_report(proc, c, cwd, watch):
         for p in _owned_bg(c):
             s = stackdump.dump(p.proc.pid, project_hint=p.cwd or cwd)
             if s and not s.startswith("(no stack"):
-                parts.append(f"YOUR BACKGROUND TASK {p.id} ({p.name}) — " + s)
+                parts.append(f"Your background task {p.id} ({p.name}) — " + s)
     except Exception:
         pass
     if parts:
@@ -1380,7 +1380,7 @@ def t_powershell(a, c):
                 bp = bg_tasks.MANAGER.adopt(proc, q, cmd, cwd, owner=getattr(c, "conv_id", None),
                                             prior=list(out), script=script)
                 script = None                          # the bg task removes it when the command ends
-                kept = (f"It is STILL RUNNING as background task {bp.id}: bg_output('{bp.id}') shows what it prints "
+                kept = (f"It is still running as background task {bp.id}: bg_output('{bp.id}') shows what it prints "
                         f"next, bg_stop('{bp.id}') ends it.")
             except Exception:
                 _kill_tree(proc)
@@ -1432,10 +1432,10 @@ def t_powershell(a, c):
         crashed = re.search(r"Traceback \(most recent call last\)|\bError\b|Exception", text)
         # a process killed by the timeout did not "exit 1": it was still running. For a program with a main loop
         # (a game, a GUI, a server) that is normal — reporting it as a silent crash sent agents hunting ghosts
-        note += (f"\n[{why_stopped}: the program was STILL RUNNING when it was stopped"
+        note += (f"\n[{why_stopped}: the program was still running when it was stopped"
                  + (". The output above shows an error from before that." if crashed else
                     " — no crash or error was seen. A program with a main loop (game, GUI, server, watcher) never "
-                    "exits on its own, so a timeout is NOT a failure. To test one: run it headless with a frame or "
+                    "exits on its own, so a timeout isn't a failure. To test one: run it headless with a frame or "
                     "time limit and scripted input (see read_guide('software')), test its logic with run_tests, or "
                     "start it with bg_start and read its output with bg_output. To SHOW it to the user, use show_user "
                     "(no timeout; it runs until they close it).") + "]")
@@ -1643,7 +1643,7 @@ def t_screen_size(a, c):
 def t_screenshot(a, c):
     png, w, h, scale = grab_screen(int(a.get("max_width") or 1280))
     c.shot_scale, c.shot_size = scale, (w, h)
-    return (f"screenshot {w}x{h}. Mouse tools use coordinates in THIS image "
+    return (f"screenshot {w}x{h}. Mouse tools use coordinates in this image "
             f"(x 0-{w - 1}, y 0-{h - 1}).", png)
 
 
@@ -2617,7 +2617,7 @@ def _sandbox_paths(code, files, c):
 def t_python_sandbox(a, c):
     _code = str(a.get("code") or "")
     if re.search(r"(localhost|127\.0\.0\.1|0\.0\.0\.0|192\.168\.\d+\.\d+|\b10\.\d+\.\d+\.\d+)(:\d+)?", _code):
-        raise ToolError("python_sandbox runs isolated (WebAssembly, no network) — it is NOT on this PC and cannot reach "
+        raise ToolError("python_sandbox runs isolated (WebAssembly, no network) — it isn't on this PC and can't reach "
                         "servers here. To call your server use http_request; to run Python on this PC use python_host "
                         "or powershell.")
     import sandbox
@@ -2734,7 +2734,7 @@ def t_query_data(a, c):
                 sample = con.execute(f"SELECT * FROM {t} LIMIT 5").df().to_string(max_colwidth=40)
                 parts.append(f"table {t}: {n:,} rows\ncolumns: " + ", ".join(f"{r[0]} ({r[1]})" for r in cols)
                              + f"\nfirst rows:\n{sample}")
-            return clip("\n\n".join(parts) + "\nSchema and preview only: the requested calculation has NOT run. "
+            return clip("\n\n".join(parts) + "\nSchema and preview only: the requested calculation hasn't run yet. "
                         "Next call query_data with the same files mapping and sql selecting the actual column "
                         "names above (for example SELECT SUM(units) FROM " + tables[0] + ").")
         df = con.execute(sql).df()
@@ -3441,7 +3441,7 @@ def port_owners(port):
                 rows.append({"pid": cn.pid, "name": q.name(), "addr": f"{cn.laddr.ip}:{cn.laddr.port}",
                              "cmd": " ".join(q.cmdline())[:200], "cwd": (lambda: q.cwd())() if True else "",
                              "started": time.strftime("%H:%M:%S", time.localtime(q.create_time())),
-                             "whose": "THIS APP (never stop it)" if cn.pid in app else mine.get(cn.pid, "another program")})
+                             "whose": "this app (leave it running)" if cn.pid in app else mine.get(cn.pid, "another program")})
             except Exception:
                 rows.append({"pid": cn.pid, "name": "?", "addr": f"{cn.laddr.ip}:{cn.laddr.port}", "cmd": "",
                              "cwd": "", "started": "?", "whose": "another program"})
@@ -3481,8 +3481,8 @@ def t_port_info(a, c):
         lines.append(f"- pid {r['pid']} {r['name']} on {r['addr']}, started {r['started']} — {r['whose']}\n"
                      f"  command: {r['cmd']}\n  folder: {r['cwd']}")
     if len(rows) > 1:
-        lines.append("MORE THAN ONE process holds this port (Windows allows it): requests may reach any of them — "
-                     "usually an OLD instance with old code. Stop the ones that are yours and not current (bg_stop).")
+        lines.append("More than one process holds this port (Windows allows it): requests may reach any of them — "
+                     "usually an old instance with old code. Stop the ones that are yours and not current (bg_stop).")
     return "\n".join(lines)
 
 
@@ -3660,7 +3660,7 @@ def t_bg_start(a, c):
     c.display = {"type": "bg", "id": p.id, "name": p.name, "command": cmd, "cwd": cwd}
     state = (_listen_note(p) if p.running else f"already exited with code {p.exit}")
     if want and p.running and not any(x.rsplit(":", 1)[-1].split(" ")[0] == str(want) for x in listening(p.proc.pid)):
-        state += f" — NOT listening on {want} after {limit:.0f}s: read its output below (an error or a different port)"
+        state += f" — not listening on {want} after {limit:.0f}s: read its output below (an error or a different port)"
     if p.running:                                  # the same port served twice: the old instance answers requests
         for port in {x.rsplit(":", 1)[-1].split(" ")[0] for x in listening(p.proc.pid)}:
             others = [h for h in holders(port) if not h.startswith(p.id + " ")]
@@ -3900,7 +3900,7 @@ def t_gather(a, c):
                 parts = [("OBJECTIVE", t.get("objective")), ("WHY IT MATTERS / CONTEXT", t.get("context")),
                          ("DONE WHEN", t.get("done_when")),
                          ("STARTING POINTS (suggestions only — use your judgment)", t.get("hints")),
-                         ("NOT YOURS (other workers cover this)", t.get("avoid"))]
+                         ("Not yours (other workers cover this)", t.get("avoid"))]
                 b = "\n".join(f"{k}: {str(v).strip()}" for k, v in parts if v and str(v).strip())
             else:
                 b = str(t.get("brief") or t.get("task") or t.get("description") or "").strip()
@@ -4520,7 +4520,7 @@ N = {"type": "number"}
 
 BUILTIN = [
     ("encyclopedia", READ, "Offline English Wikipedia — instant (under a second), every article's intro and infobox "
-     "(population, area, length, height, dates, founders, capitals…). Use it FIRST to check any fact you would "
+     "(population, area, length, height, dates, founders, capitals…). Use it first to check any fact you would "
      "otherwise state from memory: names, figures, dates, who/what/where, and the figures behind a ranking (look up "
      "each candidate). 'query' = a topic or question; 'n' = articles (default 3). Snapshot from a recent month: for "
      "anything current (prices, news, this year's figures) use web_search instead.",
@@ -4549,7 +4549,7 @@ BUILTIN = [
      t_read_document),
     ("find_files", READ, "Find files by name pattern, e.g. '*.py'.",
      _obj({"pattern": S, "root": S}, ["pattern"]), t_find_files),
-    ("focus_pack", READ, "The code a task needs from across a project, in ONE block: the functions and classes that "
+    ("focus_pack", READ, "The code a task needs from across a project, in one block: the functions and classes that "
      "best match `goal` (a question, a bug, an error or failing test), as numbered slices from several files, within a "
      "token budget (default 4000). Use it instead of reading whole files one by one when work spans files. Call it "
      "again with `names` (exact function/class/file names you still need) — it brings only slices not shown yet.",
@@ -4670,12 +4670,12 @@ BUILTIN = [
     ("begin_module", NOTE, "Begin the declared module. Switching from unfinished work or into a module with unverified prerequisites is blocked. Related implementation/tests can be edited together; inspection and setup remain available.",_obj({"id":S},["id"]),t_begin_module),
     ("verify_module", EXEC, "Run the module's tests (pytest, node --test, or its test_command) and record a receipt. Controller records exact source/test/config versions and prerequisites. Empty, skipped-only, plain-script Node runs or uncovered check names cannot verify a module. No experiment step cap.",_obj({"id":S},["id"]),t_verify_module),
     ("module_status", READ, "Show module contracts, current verification and exact execution receipts. Reads fresh project state; changed code/tests/dependencies invalidate old results. Supply receipt to retrieve its full version-bound record.",_obj({"receipt":S},[]),t_module_status),
-    ("update_tracker", NOTE, "Your task checklist (it keeps you on track). Create it FIRST for every "
+    ("update_tracker", NOTE, "Your task checklist (it keeps you on track). Create it first for every "
      "request: 'goal'; 'design' = the decisions the result depends on (the hard parts and how you will handle "
      "each; for a fix, the possible causes and what tells them apart); and 'milestones' = the major phases, each "
      "with 'done_when' (the observable evidence that it works: a test that passes, output or a screenshot showing "
      "X) and 'subtasks' (concrete steps). "
-     "Set new=true when starting a new request. Then keep it current with SHORT calls (or, quicker, add "
+     "Set new=true when starting a new request. Then keep it current with short calls (or, quicker, add "
      "progress='1.2 done, 1.3 started' to your next tool call instead): mark progress with 'updates' "
      "(e.g. [{id:'1.2', status:'done'}, {id:'1.3', status:'in_progress'}]; statuses pending / "
      "in_progress / done / blocked / skipped), add 'notes' (findings, decisions, paths, what failed) "
@@ -4833,11 +4833,11 @@ BUILTIN = [
      "preferences, details about them, their setup and projects, decisions, things they asked you to remember. "
      "One fact per call, written so it makes sense on its own later. Not for task progress (that is "
      "update_tracker).", _obj({"content": S, "tags": S}, ["content"]), t_memory_save),
-    ("playbook_note", NOTE, "Record ONE short reusable lesson for the current KIND of task (the playbook shown at "
+    ("playbook_note", NOTE, "Record one short reusable lesson for the current kind of task (the playbook shown at "
      "the start): a type of source that worked, a dead end to avoid, a check that caught an error. General, not "
      "task-specific: no names, paths or figures. Shown under the playbook next time such a task comes up.",
      _obj({"note": S, "pattern": S}, ["note"]), t_playbook_note),
-    ("history_search", READ, "Search THIS chat's archive and Test Mode action journal: earlier tool results, "
+    ("history_search", READ, "Search this chat's archive and Test Mode action journal: earlier tool results, "
      "code you wrote and earlier steps were moved here in full (stubs in the context name them, e.g. #E12). Give "
      "keywords to find them, or entry='E12' for one entry in full. Use it before redoing work you did earlier.",
      _obj({"query": S, "entry": S, "limit": I, "offset": I, "page_size": I}), t_history_search),
@@ -4878,7 +4878,7 @@ BUILTIN = [
      _obj({"path": S}), t_changes_since_green),
     ("undo_file", WRITE, "Put a file back as it was before your last change to it (steps=N to go back further). For "
      "undoing an experiment that made things worse.", _obj({"path": S, "steps": I}, ["path"]), t_undo_file),
-    ("trace_call", EXEC, "Run ONE call in a Python file and print every line it executes in your project's code with "
+    ("trace_call", EXEC, "Run one call in a Python file and print every line it executes in your project's code with "
      "the variables that changed on each line, plus arguments and return values — see exactly where a value goes "
      "wrong. file = the .py file, call = an expression using its names, e.g. \"verify_password('ann', 'pw1')\" or "
      "\"register_user('ann', 'pw1') and verify_password('ann', 'pw1')\".",
@@ -4893,7 +4893,7 @@ BUILTIN = [
      "independent research, investigating a separate folder, or long jobs while you continue. Give "
      "a complete task description with all paths and the expected deliverable: it cannot see this "
      "chat.", _obj({"task": S, "title": S, "context": S}, ["task"]), t_delegate_task),
-    ("gather", NET, "Fan-out: helper agents work in the BACKGROUND while you keep working; their reports plus the "
+    ("gather", NET, "Fan-out: helper agents work in the background while you keep working; their reports plus the "
      "raw results they read arrive here by themselves when done. They are agents, not tool calls: give each one an "
      "OBJECTIVE to own — a sub-question of the task — not a procedure. Split the work by sub-question or angle (e.g. "
      "the core figure, a related measure, how it varies, an independent cross-check), never one website per worker; "
