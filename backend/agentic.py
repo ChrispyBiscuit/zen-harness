@@ -2862,6 +2862,7 @@ class AgentEngine:
         self._project = bool(st.get("project"))
         self._build_profile = bool(st.get("build_profile"))   # an app restart mid-build keeps the build prompt
         self._code_work = bool(st.get("code_work"))           # and focus_pack
+        self.ctx.project_build = self._build_profile
         self._reads = {k: [tuple(r) for r in v] for k, v in (st.get("reads") or {}).items()}
 
     # ---------------------------------------------------------------- prompts
@@ -3063,7 +3064,14 @@ class AgentEngine:
             import verification_ledger as vl
             ledger_state=(vl.ctx_brief(self.ctx) if self.cfg.get("compact_prompt", False)
                           else vl.ctx_summary(self.ctx))
-            if ledger_state is not None:
+            if ledger_state is not None and ledger_state.get("mode") == "evidence":
+                if ledger_state.get("untested_changes"):
+                    # only while something is untested: no standing policy text for ordinary code work
+                    parts.append("Changed since a passing test run last covered them: "
+                                 + ", ".join(ledger_state["untested_changes"][:8])
+                                 + ". Run the project's tests (run_tests, or its own test command) before calling "
+                                   "this work done; add a test for a change nothing covers yet.")
+            elif ledger_state is not None:
                 parts.append("Software build policy: contract -> build -> verify_module before dependent work. "
                              "Verify integration against the original task; unit checks alone are insufficient. "
                              "Full contracts and receipts: module_status. Current durable workbook:\n"
@@ -4277,6 +4285,7 @@ class AgentEngine:
         self._plan_nags, self._open_nagged, self._repeat_nagged = 0, False, False
         self._open_nags, self._resets = 0, 0
         self._intent_nags, self._said, self._turn_calls = 0, set(), {}
+        self._evidence_nagged = False                                  # one "run the tests first" reminder per turn
         self._gather_job = None          # fan-out workers running in the background while the main model works
         self._gather_nudges = 0          # times it was sent back to keep working while the workers run
         self._fan_due, self._fan_gate_refusals = False, 0    # fan-out expected before its own research
@@ -4381,6 +4390,9 @@ class AgentEngine:
                 self._build_profile = True           # set before the first step: the prompt start stays fixed
             if getattr(self, "_build_profile", False) or self._CODE_REQ_RX.search(task_text):
                 self._code_work = True               # focus_pack loads (decided once: the tool list stays fixed)
+            # a build request: a from-scratch project folder gets the module workflow (verification_ledger decides,
+            # once per folder: only an empty one); everything else is evidence mode
+            self.ctx.project_build = bool(getattr(self, "_build_profile", False))
             need, decided = False, False
             if self._effort:
                 # the agent judged the effort itself (guideline in the lean prompt): plan size and thinking per step.
@@ -4718,6 +4730,20 @@ class AgentEngine:
                     if getattr(self.ctx,"build_test_record",False):
                         import verification_ledger as vl
                         state=vl.ctx_summary(self.ctx)
+                        if state and state.get("mode")=="evidence":
+                            untested=state.get("untested_changes") or []
+                            if untested and not asks_user and not self._force_answer and not getattr(self,"_evidence_nagged",False):
+                                # once: run the tests before answering; a second answer goes out labelled instead
+                                self._evidence_nagged=True
+                                self.emit("answer_retract",reason="untested changes")
+                                self.history.append({"role":"user","content":REMINDER_TAG+"\nBefore you finish: "
+                                    +", ".join(untested[:8])+" changed and no passing test run has covered them yet. "
+                                    "Run the project's tests now (run_tests, or its own test command). If nothing tests "
+                                    "this change, add a test for it; if it can't be tested automatically, say so in "
+                                    "your answer.\n</system-reminder>"})
+                                self._require_call=True
+                                continue
+                            state=None
                         blocked=bool(state and (state["unowned_changes"] or any(m["state"]!="verified" for m in state["modules"])))
                         if blocked and not asks_user and not self._force_answer:
                             self.emit("answer_retract",reason="build verification incomplete")
@@ -4798,6 +4824,13 @@ class AgentEngine:
         if getattr(self.ctx,"build_test_record",False) and final not in ("(stopped)",):
             import verification_ledger as vl
             state=vl.ctx_summary(self.ctx)
+            if (state or {}).get("mode")=="evidence":
+                untested=state.get("untested_changes") or []
+                if untested:
+                    final="Not yet covered by a passing test run: "+", ".join(untested[:8])+".\n\n"+final
+                    self.emit("answer_retract",reason="untested changes")
+                    self.emit("ans_delta",text=final)
+                state=None
             outstanding=[m["id"]+" ("+m["state"]+")" for m in (state or {}).get("modules",[]) if m["state"]!="verified"]
             if outstanding or (state or {}).get("unowned_changes"):
                 final="Verification incomplete: "+", ".join(outstanding+(state or {}).get("unowned_changes",[]))+".\n\n"+final
@@ -5956,7 +5989,8 @@ class AgentEngine:
     def _core_names(self):
         if self.cfg.get("compact_prompt", False):
             core = self.COMPACT_CORE_NAMES & set(self.reg.by_name)
-            if getattr(self.ctx, "build_test_record", False):
+            if getattr(self.ctx, "build_test_record", False) and getattr(self.ctx, "project_build", False):
+                # the module workflow is for from-scratch builds; other code work is checked by test evidence
                 core |= {"module_contract", "begin_module", "verify_module", "module_status"} & set(self.reg.by_name)
             if getattr(self, "_code_work", False):
                 # code work only: research, documents and chat never index code (still loadable: files group)
@@ -6009,7 +6043,7 @@ class AgentEngine:
         out = set(at.ALWAYS_ON)
         if not getattr(self.ctx, "problem_workbook", False):
             out -= self._WORKBOOK_TOOLS
-        if not getattr(self.ctx, "build_test_record", False):
+        if not (getattr(self.ctx, "build_test_record", False) and getattr(self.ctx, "project_build", False)):
             out -= self._MODULE_TOOLS
         return out
 

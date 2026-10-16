@@ -10,7 +10,8 @@ def ledger(tmp_path):
  root=tmp_path/'project';root.mkdir()
  (root/'logic.cjs').write_text('exports.add=(a,b)=>a+b;')
  (root/'logic.test.cjs').write_text("const test=require('node:test');const assert=require('node:assert/strict');const {add}=require('./logic.cjs');test('adds two inputs',()=>assert.equal(add(2,3),5));")
- return Ledger(root,tmp_path/'store')
+ l=Ledger(root,tmp_path/'store');l.state['mode']='modules';l.save()   # these tests cover module mode
+ return l
 
 def contract(mid='math',dependencies=None,**kwargs):
  a={'id':mid,'purpose':'Add numbers','inputs':'Two finite numbers','outputs':'Their sum','errors':'Reject invalid inputs','effects':'None','sources':['logic.cjs'],'tests':['logic.test.cjs'],'checks':['adds two inputs'],'dependencies':dependencies or [],'tracker_ids':['1.1'],'framework':'node'}

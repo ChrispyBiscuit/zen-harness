@@ -162,7 +162,7 @@ def test_unit_result_cannot_supply_integration_acceptance(env):
     experiment(w, r)
     eid = execute(w)
     record(w, eid)
-    with pytest.raises(pw.PolicyError, match="integration"):
+    with pytest.raises(pw.PolicyError, match="in its acceptance"):    # names the question and how to link it
         record(w, eid, "accept", "works")
 
 
@@ -334,6 +334,10 @@ def test_normal_registry_real_node_adapter_repeats_and_freshness(tmp_path, monke
     c.cwd = c.verification_root = str(root)
     c.conv_id = "real-node"
     c.problem_workbook = c.build_test_record = True
+    import verification_ledger as vl
+    led = vl.Ledger(root, Path(at.TRACKERS).parent / "verification_ledgers")
+    led.state["mode"] = "modules"                  # this test covers the module workflow (from-scratch builds)
+    led.save()
     r = at.Registry(c)
     r.call("module_contract", {"id":"math","purpose":"Add", "inputs":"Two numbers","outputs":"Sum",
         "errors":"None","effects":"None","sources":["math.cjs"],"tests":["math.test.cjs"],
