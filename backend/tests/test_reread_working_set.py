@@ -130,3 +130,15 @@ def test_working_set_can_be_turned_off():
     e._compact_req = True
     e._maybe_compact()
     assert "[Working set" not in e.history[0]["content"]
+
+
+def test_run_tests_says_when_the_imported_code_was_never_written():
+    import agent_tools as at
+    root = tmpdir("missing")
+    out = "tests: exit code 2 — 1 error\nE   ModuleNotFoundError: No module named 'data'"
+    tip = at._missing_module_tip(out, root)
+    assert "no data.py" in tip and "write data.py" in tip
+    with open(os.path.join(root, "data.py"), "w") as f:
+        f.write("x = 1\n")
+    assert at._missing_module_tip(out, root) == ""          # the file exists: a different problem, no tip
+    assert at._missing_module_tip("tests: PASSED — 3 passed", root) == ""

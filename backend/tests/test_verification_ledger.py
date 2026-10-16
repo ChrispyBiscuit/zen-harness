@@ -175,3 +175,19 @@ def test_normal_registry_contract_verify_and_tracker_roundtrip(ledger,monkeypatc
  report,_=r.call('module_status',{});assert json.loads(report)['modules'][0]['state']=='verified'
  receipt,_=r.call('module_status',{'receipt':ledger.state['receipts'][-1]['id']})
  assert json.loads(receipt)['fingerprint']['files']['logic.cjs']
+
+
+def test_gate_refusal_names_owned_files_and_the_fix(ledger):
+ # the 9B failure (e42759a0): module owns data.py, model writes store.py, never writes data.py
+ l=ledger;l.declare(contract('storage',sources=['data.py'],tests=['test_data.py'],framework='pytest'));l.begin('storage')
+ with pytest.raises(PolicyError) as e:l.preflight('write_file',{'path':str(l.root/'store.py')},'write')
+ msg=str(e.value)
+ assert 'store.py was NOT written' in msg and "owns only: data.py, test_data.py" in msg
+ assert 'Not written yet: data.py' in msg and 'write data.py instead' in msg
+ assert "module_contract again with id 'storage'" in msg
+ l.preflight('write_file',{'path':str(l.root/'data.py')},'write')        # the owned file is allowed
+
+
+def test_gate_refusal_without_active_module_says_how_to_start(ledger):
+ with pytest.raises(PolicyError) as e:ledger.preflight('write_file',{'path':str(ledger.root/'app.py')},'write')
+ assert 'No module owns it yet' in str(e.value) and 'begin_module' in str(e.value)

@@ -138,6 +138,27 @@ class Ledger:
             if m["state"]=="verified":m["state"]="building"
             self.save();return "Build active module "+mid+", run verify_module, then record is automatic."
 
+    def gate_message(self,rel,active):
+        """The refusal for a write outside the active module, saying exactly which step unblocks it: small models read
+        the generic 'declare/begin a module owning X' as a dead end (a 9B wrote store.py into a module that owned
+        data.py, was refused, never wrote data.py, then spent 35 steps fixing the imports of its tests)."""
+        owners=self.owners(rel)
+        lines=["Build gate: "+rel+" was NOT written."]
+        if active:
+            m=self.state["modules"][active]
+            own=[p for p in m["sources"]+m["tests"]]
+            missing=[p for p in m["sources"] if not any(self.root.glob(p))]
+            lines.append("The active module '"+active+"' owns only: "+", ".join(own)+".")
+            if missing:lines.append("Not written yet: "+", ".join(missing)+" — if "+rel+" was meant to be that file, write "+missing[0]+" instead.")
+            if owners:lines.append(rel+" belongs to module '"+owners[0]+"': verify_module('"+active+"') first, then begin_module('"+owners[0]+"').")
+            else:lines.append("To build "+rel+" as part of '"+active+"', call module_contract again with id '"+active+"' and the same fields, adding '"+rel+"' to sources, then write it.")
+        elif owners:
+            lines.append(rel+" belongs to module '"+owners[0]+"': call begin_module('"+owners[0]+"'), then write it.")
+        else:
+            lines.append("No module owns it yet: call module_contract(id=..., sources=['"+rel+"', ...], tests=[...]) and begin_module(id), then write it.")
+        lines.append("Read and test tools remain available.")
+        return " ".join(lines)
+
     def preflight(self,name,args,kind):
         self.refresh()
         if kind=="write" and args.get("path"):
@@ -146,7 +167,7 @@ class Ledger:
             p=p.resolve()
             if p.is_relative_to(self.root) and (p.suffix.lower() in CODE or p.name in MANIFESTS or self.owners(p.relative_to(self.root).as_posix())):
                 rel=p.relative_to(self.root).as_posix();active=self.state["active"]
-                if not active or active not in self.owners(rel):raise PolicyError("Build gate: declare/begin a module owning "+rel+". Read and test tools remain available.")
+                if not active or active not in self.owners(rel):raise PolicyError(self.gate_message(rel,active))
                 if any(self.state["modules"][d]["state"]!="verified" for d in self.state["modules"][active]["dependencies"]):raise PolicyError("Build gate: prerequisite verification changed; reverify before dependent edits")
         return self.inventory()
 

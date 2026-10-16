@@ -3517,12 +3517,46 @@ def t_run_tests(a, c):
         if text.startswith("tests: FAILED"):            # anything else (passed, nothing collected): the whole suite
             return (f"{SUBSET_HEAD}: {text[len('tests: '):]}\n(Only the {len(ids)} test(s) that failed last time "
                     f"were run; once they pass the whole suite runs. all=true runs everything now.)"
-                    + _server_tip(text, folder))
+                    + _tips(text, folder))
         full = dbg.run_tests(a, c, res, ToolError)
         return full + f"\n(The {len(ids)} test(s) that failed last time pass now; the result above is the whole suite.)" \
-            + _server_tip(full, folder)
+            + _tips(full, folder)
     text = dbg.run_tests(a, c, res, ToolError)
-    return text + _server_tip(text, folder)
+    return text + _tips(text, folder)
+
+
+_PY_MISSING_RX = re.compile(r"No module named '([A-Za-z_][\w.]*)'")
+_JS_MISSING_RX = re.compile(r"Cannot find module '(\.{1,2}/[^']+)'")
+
+
+def _missing_module_tip(text, folder):
+    """Tests that cannot import a module whose file does not exist -> say so plainly. A 9B wrote its tests, never wrote
+    the code they import (the build gate had refused it), and spent 35 steps rewriting the tests' import lines."""
+    if text.startswith("tests: PASSED"):
+        return ""
+    bases = [folder, os.path.join(folder, "src")]
+    if os.path.basename(folder.rstrip("/" + os.sep)).lower() in ("tests", "test"):     # tests/ beside the code
+        up = os.path.dirname(folder.rstrip("/" + os.sep))
+        bases += [up, os.path.join(up, "src")]
+    tips = []
+    for name in dict.fromkeys(_PY_MISSING_RX.findall(text)):
+        top = name.split(".")[0]
+        if any(os.path.isfile(os.path.join(b, top + ".py")) or os.path.isdir(os.path.join(b, top)) for b in bases):
+            continue
+        tips.append(f"the tests import '{name}', but no {top}.py or {top}/ package exists in {folder}. If it is your own "
+                    f"code, it has not been written yet: write {top}.py — changing the tests' import lines will not "
+                    f"help. If it is a third-party package, install it.")
+    for rel in dict.fromkeys(_JS_MISSING_RX.findall(text)):
+        stem = os.path.normpath(os.path.join(folder, rel))
+        if any(os.path.exists(stem + ext) for ext in ("", ".js", ".mjs", ".cjs", ".ts", "/index.js")):
+            continue
+        tips.append(f"the tests require '{rel}', but that file does not exist yet: write it — changing the tests' "
+                    f"require/import lines will not help.")
+    return "".join("\nMissing code: " + t for t in tips[:3])
+
+
+def _tips(text, folder):
+    return _missing_module_tip(text, folder) + _server_tip(text, folder)
 
 
 def _server_tip(text, folder):
