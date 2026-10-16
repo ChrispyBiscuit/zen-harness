@@ -80,3 +80,23 @@ def test_regression_note_names_the_writes_in_between():
     note = ci.regression({"passed": 12, "failed": 5, "failing": []}, {"passed": 0, "failed": 0, "failing": []},
                          ["test_client.py"])
     assert "12 tests passed before, 0 now" in note and "test_client.py" in note and "undo_file" in note
+
+
+def test_a_whole_file_sent_to_a_folder_lands_in_the_file_the_task_names(tmp_path):
+    # a 27B wrote its whole skateboard.html game with path='.', and the refusal dropped it
+    c = at.Ctx([str(tmp_path)]); c.cwd = str(tmp_path)
+    c.tracker = {"goal": "A single-file 3D skateboard game named skateboard.html in " + str(tmp_path), "notes": []}
+    game = "<!DOCTYPE html>\n<html><body><canvas></canvas></body></html>\n"
+    out = at.t_write_file({"path": ".", "content": game}, c)
+    assert (tmp_path / "skateboard.html").read_text() == game and "the file your task names" in out
+
+
+def test_a_folder_write_with_no_named_file_is_kept_for_use_kept(tmp_path):
+    c = at.Ctx([str(tmp_path)]); c.cwd = str(tmp_path)
+    c.tracker = {"goal": "a game with index.html and about.html", "notes": []}     # two names: no guess
+    game = "<!DOCTYPE html>\n<html></html>\n"
+    with pytest.raises(at.ToolError) as e:
+        at.t_write_file({"path": ".", "content": game}, c)
+    assert "use_kept=true" in str(e.value)
+    at.t_write_file({"path": "index.html", "use_kept": True}, c)
+    assert (tmp_path / "index.html").read_text() == game

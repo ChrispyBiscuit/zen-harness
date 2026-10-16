@@ -557,11 +557,31 @@ REWRITE_MIN_LINES = 40            # smaller files may be rewritten freely (cheap
 KEPT_SHOW_CHARS = 9000            # an unread-overwrite refusal shows the file up to this size (then it counts as read)
 
 
+_CONTENT_EXT = ((re.compile(r"^\s*(<!doctype html|<html)", re.I), (".html", ".htm")),
+                (re.compile(r"^\s*(#!.*python|import |from \w+ import |def |class )"), (".py",)),
+                (re.compile(r"^\s*[{\[]"), (".json",)))
+
+
+def _named_file_for(c, content):
+    """The one file name the task names (checklist goal, notes, chat title) that fits this content, or ''."""
+    exts = next((e for rx, e in _CONTENT_EXT if rx.search(content[:300])), None)
+    if not exts:
+        return ""
+    t = getattr(c, "tracker", None) or {}
+    text = " ".join([str(t.get("goal") or ""), " ".join(map(str, t.get("notes") or [])), str(getattr(c, "title", ""))])
+    names = {os.path.basename(m).strip("`'\"") for m in re.findall(r"[\w.\-\\/]+\.\w{2,5}\b", text)}
+    names = [n for n in names if n.lower().endswith(exts)]
+    return names[0] if len(names) == 1 else ""
+
+
 def t_write_file(a, c):
     p = c.resolve(a.get("path"))
     kept = c.__dict__.setdefault("_kept_writes", {})
     key = os.path.abspath(p).lower()
     if a.get("use_kept"):
+        folder_kept = kept.get("<folder>")
+        if key not in kept and folder_kept and not os.path.isdir(p):
+            kept[key] = kept.pop("<folder>")             # a write sent to a folder, now given its file name
         if key not in kept:
             raise ToolError(f"there is no kept write for {os.path.basename(p)}; send the content")
         a = {**a, "content": kept.pop(key)}
@@ -571,7 +591,17 @@ def t_write_file(a, c):
     if len(content) > 1_000_000:
         raise ToolError("content too large (1 MB limit)")
     if os.path.isdir(p):
-        raise ToolError("that path is a folder")
+        # a whole file sent with the folder as its path (a 27B wrote a full skateboard.html game to path='.'; the
+        # refusal dropped it and it had to be generated again, minutes on 8 GB). The task's own file name goes in
+        # directly when there's exactly one and it's new; otherwise the content is kept for use_kept.
+        name = _named_file_for(c, content)
+        if name and not os.path.exists(os.path.join(p, name)):
+            return t_write_file({**a, "path": os.path.join(p, name)}, c) + \
+                f"\n(The path you gave is a folder, so this was written as {name}, the file your task names.)"
+        kept["<folder>"] = content
+        raise ToolError(f"that path is a folder ({p}), so nothing was written. Your content is kept: send "
+                        f"write_file(path='<file name>', use_kept=true) with the file's name"
+                        + (f", e.g. path='{name}'" if name else "") + " — no need to send the content again.")
     existed = os.path.isfile(p)
     old = _read_text(p) if existed else ""
     new = old + content if a.get("append") else content
