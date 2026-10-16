@@ -89,7 +89,7 @@ function Lightbox({ list, start, onClose }: { list: AnswerImage[]; start: number
         <div className="mt-3 flex max-w-full gap-2 overflow-x-auto pb-1" onClick={(e) => e.stopPropagation()}>
           {list.map((im, j) => (
             <button key={im.src} onClick={() => setI(j)} aria-label={`Image ${j + 1}`}
-              className={cn("h-12 w-[72px] shrink-0 overflow-hidden rounded-lg ring-2 transition-all",
+              className={cn("h-12 w-[72px] shrink-0 overflow-hidden rounded-lg ring-2 transition-[opacity,box-shadow] duration-(--dur-fast)",
                 j === i ? "opacity-100 ring-white/80" : "opacity-50 ring-transparent hover:opacity-90")}>
               <img src={im.src} alt="" referrerPolicy="no-referrer" draggable={false} className="size-full object-cover" />
             </button>

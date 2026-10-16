@@ -60,7 +60,7 @@ function rehypeScramble() {
         const [before, rest] = ch.value.split(SCR_OPEN)
         const [inside, after = ""] = rest.split(SCR_CLOSE)
         if (before) out.push({ type: "text", value: before })
-        out.push({ type: "element", tagName: "span", properties: { className: ["scramble"] }, children: [{ type: "text", value: inside }] })
+        out.push({ type: "element", tagName: "span", properties: { className: ["scramble"], ariaHidden: "true", dataText: inside }, children: [{ type: "text", value: inside }] })
         if (after) out.push({ type: "text", value: after })
       } else {
         walk(ch)

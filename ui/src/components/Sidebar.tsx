@@ -27,6 +27,11 @@ function ThreadRow({ t, child }: { t: Thread; child?: boolean }) {
   const [editing, setEditing] = useState(false)
   const [title, setTitle] = useState(t.title)
   const active = current === t.id
+  // another chat starts with the same words: show two lines, or the rows look identical once truncated
+  const collides = useApp((s) => {
+    const head = t.title.replace(/^⇢\s*/, "").slice(0, 28).toLowerCase()
+    return head.length >= 20 && s.threads.some((o) => o.id !== t.id && o.title.replace(/^⇢\s*/, "").slice(0, 28).toLowerCase() === head)
+  })
   return (
     <div className={cn("group relative flex min-h-(--row-h) items-center rounded-lg transition-ui", active ? "bg-surface-2" : "hover:bg-surface-1 active:bg-surface-2", child && "ml-4")}>
       {editing ? (
@@ -35,9 +40,9 @@ function ThreadRow({ t, child }: { t: Thread; child?: boolean }) {
           onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") { setTitle(t.title); setEditing(false) } }}
           className="m-1 w-full rounded bg-background px-2 py-1 text-ui outline-none ring-1 ring-ring" />
       ) : (
-        <button onClick={() => select(t.id)} className="flex min-w-0 flex-1 items-center gap-2 self-stretch rounded-lg px-2 py-(--row-py) text-left">
+        <button onClick={() => select(t.id)} title={t.title.replace(/^⇢\s*/, "")} className="flex min-w-0 flex-1 items-center gap-2 self-stretch rounded-lg px-2 py-(--row-py) text-left">
           {child && <Workflow className="size-3.5 shrink-0 text-muted-foreground" />}
-          <span className={cn("truncate text-ui", active ? "text-sidebar-accent-foreground" : "text-sidebar-foreground/85")}>
+          <span className={cn(collides ? "line-clamp-2 break-words" : "truncate", "text-ui", active ? "text-sidebar-accent-foreground" : "text-sidebar-foreground/85")}>
             {t.title.replace(/^⇢\s*/, "")}
           </span>
           <span className="ml-auto flex shrink-0 items-center gap-1 pl-1">

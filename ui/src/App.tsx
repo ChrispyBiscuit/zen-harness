@@ -157,7 +157,7 @@ function TopBar() {
     // the top bar is also the window's title bar: empty space drags the window, the controls sit at the right end
     <header onPointerDown={drag} className={cn("@container flex h-12 shrink-0 select-none items-center gap-2 border-b border-border bg-surface-0 pl-3",
       drag ? "pr-0" : "pr-3")}>
-      <div className="min-w-0 flex-1 truncate text-ui font-medium">{current ? (thread?.title || conv?.title || "") : "New chat"}</div>
+      <div className="min-w-0 flex-1 truncate text-ui font-medium" title={current ? (thread?.title || conv?.title || "") : undefined}>{current ? (thread?.title || conv?.title || "") : "New chat"}</div>
       {!connected && <span className="flex items-center gap-1 text-caption text-destructive"><WifiOff className="size-3.5" /> reconnecting</span>}
       <Button variant="ghost" size="icon-sm" onClick={() => { if (confirm("Reset the panel layout to the default?")) resetLayout() }} title="Reset panel layout" aria-label="Reset panel layout"><LayoutGrid /></Button>
       <DropdownMenu>

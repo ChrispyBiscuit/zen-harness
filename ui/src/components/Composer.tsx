@@ -261,6 +261,8 @@ export function Composer() {
         />
         <div className="@container flex items-center gap-1 px-2 pb-2">
           <input ref={fileInput} type="file" multiple className="hidden" onChange={(e) => { addFiles(Array.from(e.target.files || [])); e.target.value = "" }} />
+          {/* the controls scroll sideways in a narrow chat rather than push the send button out of the box */}
+          <div className="-m-1.5 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto p-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <Tooltip>
             <TooltipTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Attach files" onClick={() => fileInput.current?.click()} />}>
               <Paperclip />
@@ -368,7 +370,7 @@ export function Composer() {
               {models.map((m) => <option key={m} value={m} className="bg-popover">{m}</option>)}
             </select>
           )}
-          <div className="flex-1" />
+          </div>
           <span className="mr-2 hidden whitespace-nowrap label-tech text-muted-foreground/50 @[720px]:inline">{running ? "" : "Enter ↵ send · Shift+Enter newline"}</span>
           {running && (
             <Button size="icon-sm" variant="secondary" onClick={() => current && api.stop(current)} title="Stop" aria-label="Stop">
