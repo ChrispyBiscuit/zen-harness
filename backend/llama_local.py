@@ -189,12 +189,39 @@ def ollama_blob(name):
     raise RuntimeError(f"No model weights found in the Ollama manifest for {name}")
 
 
+def _matching_projector(model_path):
+    """A projector beside a .gguf model that belongs to it: same model family in its file name, and an output width
+    (vision.projection_dim) equal to the model's embedding width. The first mmproj file in the folder was taken
+    before: LFM2.5 (text only, width 2048) was handed Gemma's projector (2560) and llama-server refused to start."""
+    d = os.path.dirname(model_path)
+    if not os.path.isdir(d):
+        return None
+    stem = os.path.basename(model_path).lower()
+    family = re.split(r"[-_.]", stem)[0]
+    try:
+        width = int(gguf_meta(model_path, keys=("embedding_length",)).get("embedding_length") or 0)
+    except Exception:
+        width = 0
+    cands = [f for f in os.listdir(d) if "mmproj" in f.lower() and f.lower().endswith(".gguf") and family in f.lower()]
+    # most of the model's name in common first (Bonsai-2-9B before Bonsai-2-27B for a 9B model)
+    cands.sort(key=lambda f: -len(os.path.commonprefix([f.lower(), stem])))
+    for f in cands:
+        p = os.path.join(d, f)
+        try:
+            meta = gguf_meta(p, keys=("projection_dim",))
+        except Exception:
+            continue
+        dim = int(meta.get("vision.projection_dim") or meta.get("projection_dim") or 0)
+        if width and dim and dim != width:
+            continue
+        return p
+    return None
+
+
 def ollama_projector(name):
     """Path of the vision projector (mmproj) Ollama stores with `name`, or None if it has none."""
     if str(name).lower().endswith(".gguf"):
-        d = os.path.dirname(str(name))
-        cands = [f for f in os.listdir(d) if "mmproj" in f.lower() and f.lower().endswith(".gguf")] if os.path.isdir(d) else []
-        return os.path.join(d, cands[0]) if cands else None
+        return _matching_projector(str(name))
     try:
         weights = ollama_blob(name)
     except Exception:
@@ -372,6 +399,15 @@ def kv_fixed_bytes(meta, kv_type):
     return sum(h for h, local in zip(heads, pat) if local) * (kl + vl) * win * KV_BYTES.get(kv_type, 2.0)
 
 
+def _head_dim(meta):
+    """Attention head size when the file doesn't state key_length: embedding width / query heads (else 128)."""
+    heads = meta.get("attention.head_count") or meta.get("head_count")
+    if isinstance(heads, (list, tuple)):
+        heads = max(heads) if heads else 0
+    emb = meta.get("embedding_length")
+    return int(emb) // int(heads) if emb and heads else 128
+
+
 def kv_bytes_per_token(meta, kv_type):
     sw = _swa_layers(meta)
     if sw:                          # only the global-attention layers grow with the context
@@ -380,10 +416,12 @@ def kv_bytes_per_token(meta, kv_type):
         vl = meta.get("attention.value_length") or kl
         return sum(h for h, local in zip(heads, pat) if not local) * (kl + vl) * KV_BYTES.get(kv_type, 2.0)
     attn = meta.get("attention.head_count_kv") or meta.get("head_count_kv") or 8
-    if isinstance(attn, (list, tuple)):
-        attn = max(attn)
-    kl = meta.get("attention.key_length") or 128
+    kl = meta.get("attention.key_length") or _head_dim(meta)
     vl = meta.get("attention.value_length") or kl
+    if isinstance(attn, (list, tuple)):
+        # per-layer KV heads: recurrent / convolution layers list 0 and keep no cache (LFM2, Granite-H, Nemotron-H).
+        # max(heads) x every layer overstated LFM2.5-24B-A2B's cache 8x and sent all its experts to system RAM
+        return sum(int(h) for h in attn) * (kl + vl) * KV_BYTES.get(kv_type, 2.0)
     layers = meta.get("block_count") or 32
     interval = meta.get("full_attention_interval")
     if interval:                    # hybrid models: only every n-th layer keeps a KV cache
