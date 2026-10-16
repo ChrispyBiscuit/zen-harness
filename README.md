@@ -184,7 +184,7 @@ Every third-party licence is listed in the app (Help → About → Licences) and
 
 ## License
 
-[PolyForm Shield 1.0.0](LICENSE): free for anyone to use, copy and change, for personal or business use, except to
-provide a product that competes with Zazen (for example, selling or redistributing a rebranded or modified copy).
-It is source-available, not OSI open source. Third-party components keep their own licences (Help → About →
-Licences). The model, Ternary Bonsai 2 27B by [PrismML](https://huggingface.co/prism-ml), is Apache 2.0.
+Zazen is open source under the [Apache License 2.0](LICENSE): use it, change it, share it and build on it, for
+personal or commercial work, keeping the copyright and [NOTICE](NOTICE). Third-party components keep their own
+licences (Help → About → Licences). The model, Ternary Bonsai 2 27B by [PrismML](https://huggingface.co/prism-ml),
+is Apache 2.0 too. Versions published before 2026-10-16 were released under PolyForm Shield 1.0.0.

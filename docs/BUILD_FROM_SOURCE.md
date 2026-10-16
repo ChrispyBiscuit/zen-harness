@@ -132,4 +132,4 @@ Then rebuild the installer (2A) or restart the app (2B). Your settings, chats an
 - **SmartScreen warns about the installer** — it isn't code-signed yet: More info → Run anyway.
 - **Something else** — Help → Diagnostics in the app has the logs; include them in your report.
 
-Zazen is source-available under the [PolyForm Shield 1.0.0](../LICENSE) license.
+Zazen is open source under the [Apache License 2.0](../LICENSE).

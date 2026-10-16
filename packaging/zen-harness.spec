@@ -26,6 +26,7 @@ datas = [
     (os.path.join(ROOT, "docs"), "docs"),
     (os.path.join(ROOT, "VERSION"), "."),
     (os.path.join(ROOT, "LICENSE"), "."),
+    (os.path.join(ROOT, "NOTICE"), "."),       # Apache 2.0: the NOTICE ships with the licence
 ]
 binaries = []
 hiddenimports = list(modules)

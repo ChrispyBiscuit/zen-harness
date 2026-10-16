@@ -149,7 +149,7 @@ def own_license():
                 return f.read()
         except OSError:
             pass
-    return "Zazen — PolyForm Shield License 1.0.0 (https://polyformproject.org/licenses/shield/1.0.0)"
+    return "Zazen — Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0)"
 
 
 def installed_model_licenses():
