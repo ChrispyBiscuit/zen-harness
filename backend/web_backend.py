@@ -319,6 +319,14 @@ class ConvWriter:
             self.msgs.append({"role": "assistant", "kind": "playbook", "content": d.get("title") or d.get("name") or "",
                               "name": d.get("name"), "also": d.get("also") or [], "notes": d.get("notes") or 0,
                               "sim": d.get("sim")})
+        elif kind == "title":
+            # the model's name for a new chat replaces the snippet of the first message: only on the chat's first
+            # request, and never over a name the user gave it
+            first = sum(1 for m in self.msgs if m.get("role") == "user") <= 1
+            if first and not self.conv.get("titled") and d.get("text"):
+                with STORE.lock:
+                    self.conv["title"], self.conv["titled"] = str(d["text"])[:80], True
+                STORE.touch(self.conv, meta=True)
         elif kind == "interpretation":
             self.finish_live()
             self.msgs.append({"role": "assistant", "kind": "interpretation", "content": d.get("goal") or "",
@@ -1362,6 +1370,7 @@ async def api_rename(req):
     if c:
         with STORE.lock:
             c["title"] = (b.get("title") or c["title"])[:80]
+            c["titled"] = True                     # the user's name wins over the model's
         STORE.touch(c, meta=True)
     return J({"ok": True})
 

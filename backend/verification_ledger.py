@@ -36,6 +36,7 @@ def for_ctx(ctx):
 
 class Ledger:
     def __init__(self, root, storage):
+        self.adopted=None
         self.root=Path(root).resolve()
         key=hashlib.sha256(os.path.normcase(str(self.root)).encode()).hexdigest()[:24]
         self.folder=Path(storage)/key; self.folder.mkdir(parents=True,exist_ok=True)
@@ -159,6 +160,21 @@ class Ledger:
         lines.append("Read and test tools remain available.")
         return " ".join(lines)
 
+    def adopt(self,mid,rel):
+        """A new file no module owns, written while a module is active, joins that module (a test file to its tests,
+        anything else to its sources) instead of being refused. A 9B run spent 9 of 29 calls on refusals for helper
+        and test files the contract hadn't listed, and looped re-declaring contracts. Files that another module owns
+        stay refused: that boundary is real."""
+        m=self.state["modules"][mid]
+        name=rel.rsplit("/",1)[-1]
+        key="tests" if (name.startswith("test_") or name.endswith(("_test.py",".test.js",".test.ts",".spec.js",".spec.ts"))
+                        or "/tests/" in "/"+rel or "/test/" in "/"+rel) else "sources"
+        m[key]=list(m[key])+[rel]
+        if m["state"]=="verified":m["state"]="needs_verification"
+        self.state["unowned"]=[x for x in self.state["unowned"] if x!=rel]
+        self.adopted=(rel,mid,key)
+        self.save()
+
     def preflight(self,name,args,kind):
         self.refresh()
         if kind=="write" and args.get("path"):
@@ -167,6 +183,7 @@ class Ledger:
             p=p.resolve()
             if p.is_relative_to(self.root) and (p.suffix.lower() in CODE or p.name in MANIFESTS or self.owners(p.relative_to(self.root).as_posix())):
                 rel=p.relative_to(self.root).as_posix();active=self.state["active"]
+                if active and not self.owners(rel):self.adopt(active,rel)
                 if not active or active not in self.owners(rel):raise PolicyError(self.gate_message(rel,active))
                 if any(self.state["modules"][d]["state"]!="verified" for d in self.state["modules"][active]["dependencies"]):raise PolicyError("Build gate: prerequisite verification changed; reverify before dependent edits")
         return self.inventory()
@@ -259,8 +276,14 @@ def invoke(registry,name,args):
     if name in {"module_contract","begin_module","verify_module","module_status"} or kind not in {"write","exec","input","mcp"}:
         return registry._call_unchecked(name,args)
     with ledger.lock:
+        ledger.adopted=None
         before=ledger.preflight(name,args,kind)
-        try:return registry._call_unchecked(name,args)
+        try:
+            out=registry._call_unchecked(name,args)
+            if ledger.adopted and isinstance(out,tuple) and out and isinstance(out[0],str):
+                rel,mid,key=ledger.adopted          # results are (text, image)
+                out=(out[0]+"\n(Build gate: "+rel+" was added to module '"+mid+"' "+key+"; verify_module('"+mid+"') covers it.)",)+tuple(out[1:])
+            return out
         finally:ledger.record_changes(before)
 
 

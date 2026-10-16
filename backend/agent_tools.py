@@ -711,39 +711,119 @@ def _closest_region(data, old):
     return "\nClosest match in the file (lines %d-%d):\n%s" % (bi + 1, bi + k, "\n".join(diff[:40]))
 
 
-def t_edit_file(a, c):
-    p = c.resolve(a.get("path"), True)
-    old, new = str(a.get("old", "")), str(a.get("new", ""))
+def _edit_new_text(op, c, nl):
+    """The new text of one edit: `new`, or `new_from` = {path, start_line, end_line} copied verbatim from another file
+    (a saved web page or result too) — no retyping, so nothing is mistyped."""
+    src = op.get("new_from")
+    if src is not None:
+        if op.get("new") not in (None, ""):
+            raise ToolError("give either 'new' or 'new_from', not both")
+        if not isinstance(src, dict) or not src.get("path"):
+            raise ToolError("new_from must be {path, start_line, end_line}")
+        sp = c.resolve(str(src["path"]), True)
+        src_lines = _read_text(sp).splitlines(keepends=True)
+        s = int(src.get("start_line") or 1)
+        e = int(src.get("end_line") or len(src_lines))
+        if not (1 <= s <= e <= len(src_lines)):
+            raise ToolError(f"new_from lines {s}-{e} are outside {os.path.basename(sp)} (1-{len(src_lines)})")
+        text = "".join(src_lines[s - 1:e])
+        return text.replace("\r\n", "\n").replace("\n", nl)
+    text = str(op.get("new", ""))
+    return text.replace("\r\n", "\n").replace("\n", nl) if nl == "\r\n" else text
+
+
+def _edit_spans(op, data, c, label):
+    """One edit -> [(start char, end char, new text, kind)] on the file as it was before this call."""
+    nl = "\r\n" if "\r\n" in data else "\n"
+    lines = data.splitlines(keepends=True)
+    offs = [0]
+    for ln in lines:
+        offs.append(offs[-1] + len(ln))
+
+    def whole_lines(text):                       # a line edit's new text is whole lines
+        return text if not text or text.endswith(("\n", "\r")) else text + nl
+
+    if op.get("start_line") not in (None, "") or op.get("insert_after") not in (None, ""):
+        new = whole_lines(_edit_new_text(op, c, nl))
+        if op.get("insert_after") not in (None, ""):
+            n = int(op["insert_after"])
+            if not (0 <= n <= len(lines)):
+                raise ToolError(f"{label}insert_after={n} is outside the file (0-{len(lines)})")
+            if not new:
+                raise ToolError(f"{label}nothing to insert: give 'new' or 'new_from'")
+            return [(offs[n], offs[n], new, "insert")]
+        s = int(op["start_line"])
+        e = int(op.get("end_line") or s)
+        if not (1 <= s <= e <= len(lines)):
+            raise ToolError(f"{label}lines {s}-{e} are outside the file (1-{len(lines)})")
+        expect = op.get("expect")
+        if expect not in (None, "") and lines[s - 1].strip() != str(expect).strip():
+            lo, hi = max(1, s - 3), min(len(lines), e + 3)
+            raise ToolError(f"{label}line {s} is not what you expected (the file changed since you read it). "
+                            f"Lines {lo}-{hi} now:\n" + _numbered([x.rstrip("\r\n") for x in lines[lo - 1:hi]], lo))
+        return [(offs[s - 1], offs[e], new, "lines")]
+    old = str(op.get("old", ""))
+    new = _edit_new_text(op, c, nl)
     if not old:
-        raise ToolError("'old' must be the exact text to replace (read_file first; leave out the "
-                        "line-number prefix)")
+        raise ToolError(f"{label}give the lines to change (start_line/end_line, numbers as read_file showed them), "
+                        f"insert_after, or 'old' = the exact text to replace")
     if old == new:
-        raise ToolError("'old' and 'new' are identical, so this edit would change nothing. If you suspect a typo, "
-                        "compare the two spellings character by character; for code, the automatic code check after "
-                        "each write already reports misspelled (undefined) names. If it reported none, there is "
+        raise ToolError(f"{label}'old' and 'new' are identical, so this edit would change nothing. If you suspect a "
+                        "typo, compare the two spellings character by character; for code, the automatic code check "
+                        "after each write already reports misspelled (undefined) names. If it reported none, there is "
                         "probably no typo: run the program and fix what actually fails.")
-    data = _read_text(p)
     n = data.count(old)
     if n == 0 and "\r\n" in data and "\r\n" not in old:      # model sent \n for a CRLF file
-        old, new = old.replace("\n", "\r\n"), new.replace("\n", "\r\n")
+        old, new = old.replace("\n", "\r\n"), new.replace("\r\n", "\n").replace("\n", "\r\n")
         n = data.count(old)
-    loose = ""
     if n == 0:
         # small models often get indentation or trailing spaces wrong: match line by line ignoring those, and
         # re-indent `new` by the same shift. Only a single unambiguous match is applied.
         found = _loose_match(data, old)
         if not found:
-            raise ToolError("the text to replace was not found; it must match the file exactly, including spaces "
-                            "and indentation." + _closest_region(data, old) + "\nread_file the region again and retry.")
+            raise ToolError(f"{label}the text to replace was not found; it must match the file exactly, including "
+                            "spaces and indentation." + _closest_region(data, old) +
+                            "\nEasier: edit by line numbers instead (start_line/end_line + new), no need to copy 'old'.")
         start, end, shift = found
-        old = data[start:end]
-        new = _reindent(new, shift, "\r\n" if "\r\n" in old else "\n")
-        n = 1
-        loose = " (matched ignoring indentation/trailing spaces)"
-    if n > 1 and not a.get("replace_all"):
-        raise ToolError(f"the text appears {n} times; include more surrounding lines to make it "
-                        f"unique, or pass replace_all=true")
-    result = data.replace(old, new) if a.get("replace_all") else data.replace(old, new, 1)
+        return [(start, end, _reindent(new, shift, "\r\n" if "\r\n" in data[start:end] else "\n"), "loose")]
+    if n > 1 and not op.get("replace_all"):
+        raise ToolError(f"{label}the text appears {n} times; include more surrounding lines to make it unique, pass "
+                        f"replace_all=true, or edit by line numbers (start_line/end_line)")
+    spans, i = [], data.find(old)
+    while i != -1:
+        spans.append((i, i + len(old), new, "text"))
+        if not op.get("replace_all"):
+            break
+        i = data.find(old, i + len(old))
+    return spans
+
+
+def t_edit_file(a, c):
+    """Change part of an existing file, by exact text, by line numbers, or with lines copied from another file;
+    `edits` makes several changes in one call (all positions refer to the file as it was before the call)."""
+    p = c.resolve(a.get("path"), True)
+    data = _read_text(p)
+    ops = a.get("edits")
+    if ops:
+        if not isinstance(ops, list) or not all(isinstance(o, dict) for o in ops):
+            raise ToolError("edits must be a list of objects, each like {start_line, end_line, new} or {old, new}")
+    else:
+        ops = [a]
+    spans = []
+    for k, op in enumerate(ops, 1):
+        spans += _edit_spans(op, data, c, f"edit {k}: " if len(ops) > 1 else "")
+    spans.sort(key=lambda s: (s[0], s[1]))
+    for (s1, e1, *_r1), (s2, e2, *_r2) in zip(spans, spans[1:]):
+        if s2 < e1:
+            raise ToolError("two of these edits overlap; merge them into one edit, or make them in separate calls")
+    result, pos, starts = [], 0, []
+    for s, e, new, _kind in spans:                       # rebuild front to back, noting where each new text lands
+        result.append(data[pos:s])
+        starts.append((sum(len(x) for x in result), new))
+        result.append(new)
+        pos = e
+    result.append(data[pos:])
+    result = "".join(result)
     bk = _backup(p)
     with open(p, "w", encoding="utf-8", newline="") as f:
         f.write(result)
@@ -752,12 +832,28 @@ def t_edit_file(a, c):
                  "backup": bk, "created": False}
     c.turn_diffs.append(c.display)
     c.changed[p] = "created" if c.changed.get(p) == "created" else "edited"
-    # show the edited region with line numbers so the model can check its work
-    first = result[:result.find(new)].count("\n") + 1 if new and new in result else 1
+    # show each edited region with line numbers so the model can check its work (and edit again by number)
     lines = result.splitlines()
-    lo, hi = max(1, first - 3), min(len(lines), first + new.count("\n") + 3)
-    return (f"edited {p}: replaced {n if a.get('replace_all') else 1} occurrence(s){loose}, +{add} -{rem}. "
-            f"Lines {lo}-{hi} now:\n" + _numbered(lines[lo - 1:hi], lo) + _note_change(c, p, data, result, True))
+    regions, shown = [], 0
+    for at, new in starts:
+        first = result[:at].count("\n") + 1
+        lo, hi = max(1, first - 2), min(len(lines), first + max(0, new.count("\n") - 1) + 2)
+        if regions and lo <= regions[-1][1] + 1:
+            regions[-1] = (regions[-1][0], max(hi, regions[-1][1]))
+        else:
+            regions.append((lo, hi))
+    parts = []
+    for lo, hi in regions:
+        block = _numbered(lines[lo - 1:hi], lo)
+        if shown + len(block) > 5000:
+            parts.append(f"(… {len(regions) - len(parts)} more changed region(s); read_file to see them)")
+            break
+        parts.append(f"Lines {lo}-{hi} now:\n{block}")
+        shown += len(block)
+    kinds = {k for *_x, k in spans}
+    loose = " (matched ignoring indentation/trailing spaces)" if "loose" in kinds else ""
+    return (f"edited {p}: {len(spans)} change(s){loose}, +{add} -{rem}.\n" + "\n".join(parts)
+            + _note_change(c, p, data, result, True))
 
 
 def t_make_dir(a, c):
@@ -4225,10 +4321,16 @@ BUILTIN = [
      "(append=true adds to the end). Folders are created as needed. For small changes to an "
      "existing file use edit_file instead.",
      _obj({"path": S, "content": S, "append": B}, ["path", "content"]), t_write_file),
-    ("edit_file", WRITE, "Change part of an existing file: replaces the exact text 'old' with 'new'. "
-     "'old' must match the file exactly (copy it from read_file without the line-number prefix) "
-     "and be unique, unless replace_all=true. Returns the edited lines.",
-     _obj({"path": S, "old": S, "new": S, "replace_all": B}, ["path", "old", "new"]), t_edit_file),
+    ("edit_file", WRITE, "Change part of an existing file. By line numbers (easiest: no need to copy the old "
+     "text): start_line + end_line + new replaces those lines, with numbers as read_file or focus_pack showed them "
+     "(expect = the first line's current text, optional check); insert_after=N inserts new after line N (0 = top). "
+     "By text: old + new replaces the exact text 'old' (copied without the line-number prefix; unique unless "
+     "replace_all=true). new_from={path, start_line, end_line} uses those lines of another file or saved page "
+     "verbatim instead of new. edits=[{...}, ...] makes several changes in one call (numbers refer to the file before "
+     "the call). Returns the edited lines.",
+     _obj({"path": S, "start_line": I, "end_line": I, "insert_after": I, "expect": S, "old": S, "new": S,
+           "new_from": {"type": "object", "properties": {"path": S, "start_line": I, "end_line": I}},
+           "replace_all": B, "edits": {"type": "array", "items": {"type": "object"}}}, ["path"]), t_edit_file),
     ("make_dir", WRITE, "Create a folder.", _obj({"path": S}, ["path"]), t_make_dir),
     ("move_path", WRITE, "Move or rename a file or folder.",
      _obj({"src": S, "dst": S}, ["src", "dst"]), t_move_path),
