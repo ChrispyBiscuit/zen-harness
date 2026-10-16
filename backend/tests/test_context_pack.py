@@ -115,3 +115,50 @@ def test_writing_code_starts_a_background_index(monkeypatch):
     started.clear()
     at.refresh_code_index(c, os.path.join(root, "notes.txt"))        # not code: nothing
     assert not started
+
+
+def test_two_round_pack_adds_what_the_model_names(monkeypatch):
+    root = _project()
+    asked = []
+
+    def ask(prompt):
+        asked.append(prompt)
+        return '{"missing": ["monthly_totals", "a CHECK constraint"]}'
+    text, chosen, items = cp.two_round_pack(root, "how is the amount validated on POST", 900, ask, embed=None)
+    assert asked and "CODE FOUND SO FAR" in asked[0]
+    assert items == ["monthly_totals", "a CHECK constraint"]
+    assert "monthly_totals" in {u["symbol"] for u in chosen} and "Second round" in text
+
+
+def test_tool_uses_two_rounds_when_the_engine_can_ask(monkeypatch):
+    import agent_tools as at
+    monkeypatch.setattr(cp, "_default_embed", None)
+    c = at.Ctx([_project()])
+    c.pack_ask = lambda prompt: '{"missing": ["humidity"]}'
+    out = at.t_focus_pack({"goal": "where is the amount validated", "budget": 800}, c)
+    assert "Second round: the model asked for humidity" in out
+
+
+def test_reading_code_files_one_by_one_points_at_focus_pack():
+    import agent_tools as at
+    root = _project()
+    c = at.Ctx([root])
+    c.conv_id = "pack-hint"
+    reg = at.Registry(c, None, None)
+    outs = [str(reg.call("read_file", {"path": os.path.join(root, f)})[0]) for f in ("client.py", "server.py", "db.py", "weather.py")]
+    assert "focus_pack(goal=" not in outs[0] + outs[1]
+    assert "focus_pack(goal=" in outs[2]
+    assert "focus_pack(goal=" not in outs[3]                       # once, then a cooldown
+
+
+def test_focus_pack_loads_only_for_code_work():
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from offline_suite import engine
+    import agentic
+    e = engine(tool_gate=True, tool_profiles=True, compact_prompt=True)
+    assert "focus_pack" not in e._active_names() and "focus_pack" not in e.system_prompt()
+    e._code_work = True
+    assert "focus_pack" in e._active_names() and "focus_pack(goal=" in e.system_prompt()
+    rx = agentic.AgentEngine._CODE_REQ_RX
+    assert rx.search("fix the bug in my server.py") and rx.search("refactor this repo")
+    assert not rx.search("summarise this PDF") and not rx.search("what is the class schedule at my gym")
