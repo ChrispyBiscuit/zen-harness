@@ -258,3 +258,35 @@ def test_a_passing_verify_ticks_the_linked_checklist_items(ledger,monkeypatch):
  st=[s['status'] for s in c.tracker['milestones'][0]['subtasks']]
  assert st==['done','done','pending']                 # the README is not this module's: untouched
  assert c.display and c.display.get('type')=='terminal'   # the verification output stays the call's card
+
+
+def test_a_failing_module_may_switch_to_a_verified_one_to_fix_it(ledger):
+ # 27B run 95fc5c3e: the client failed because the verified server returned too little; 'verify the client
+ # first, then begin the server' could never pass
+ l=ledger;verified(l)                                             # 'math' (logic.cjs) verified
+ (l.root/'client.js').write_text('x');(l.root/'client.test.js').write_text('y')
+ l.declare(contract('client',sources=['client.js'],tests=['client.test.js'],checks=['client works'],tracker_ids=[]))
+ l.begin('client');l.state['modules']['client']['state']='failing'
+ with pytest.raises(PolicyError) as e:l.preflight('edit_file',{'path':str(l.root/'logic.cjs')},'write')
+ msg=str(e.value)
+ assert "begin_module('math')" in msg and "module_contract again with id 'client'" in msg
+ assert "verify_module('client') and fix" not in msg               # no dead-end instruction
+ l.begin('math')                                                   # allowed while the client fails
+ assert l.state['active']=='math' and l.state['modules']['client']['state']!='verified'   # still blocks completion
+
+
+def test_a_failing_module_may_not_switch_to_unrelated_unverified_work(ledger):
+ l=ledger
+ (l.root/'a.js').write_text('a');(l.root/'b.js').write_text('b')
+ l.declare(contract('a',sources=['a.js'],tests=['a.test.js'],tracker_ids=[]))
+ l.declare(contract('b',sources=['b.js'],tests=['b.test.js'],tracker_ids=[]))
+ l.begin('a');l.state['modules']['a']['state']='failing'
+ with pytest.raises(PolicyError) as e:l.begin('b')
+ assert "verify_module('a')" in str(e.value) and 'already verified' in str(e.value)
+
+
+def test_adding_the_file_to_the_active_contract_lets_the_write_through(ledger):
+ l=ledger;verified(l)
+ l.declare(contract('client',sources=['client.js'],tests=['client.test.js'],tracker_ids=[]));l.begin('client')
+ l.declare(contract('client',sources=['client.js','logic.cjs'],tests=['client.test.js'],tracker_ids=[]))
+ l.preflight('edit_file',{'path':str(l.root/'logic.cjs')},'write')   # the route the refusal names

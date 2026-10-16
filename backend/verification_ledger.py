@@ -132,13 +132,25 @@ class Ledger:
             self.refresh()
             if mid not in self.state["modules"]:raise PolicyError("Declare module_contract first")
             active=self.state["active"]
-            if active and active!=mid and self.state["modules"][active]["state"]!="verified":raise PolicyError("Test and record active module "+active+" before switching")
+            if active and active!=mid and not self.may_switch(active,mid):
+                raise PolicyError("Build gate: module '"+active+"' is not verified, so you can't switch to '"+mid+"' yet. "
+                                  "Run verify_module('"+active+"') and fix what fails. You can switch while it fails only "
+                                  "to a module that is already verified or that '"+active+"' depends on (to fix it).")
             m=self.state["modules"][mid]
             if self.state["unowned"]:raise PolicyError("Declare ownership of changed sources: "+", ".join(self.state["unowned"][:8]))
             if any(self.state["modules"][d]["state"]!="verified" for d in m["dependencies"]):raise PolicyError("Verify prerequisite modules before dependent work")
             self.state["active"]=mid
             if m["state"]=="verified":m["state"]="building"
             self.save();return "Build active module "+mid+", run verify_module, then record is automatic."
+
+    def may_switch(self,active,mid):
+        """Leave the active module for `mid`? Always once the active one is verified. While it fails, only to a module
+        that is already verified (reopening it to fix something the active module needs) or one it depends on: a 27B's
+        client failed because the verified server returned too little, and 'verify the client first' could never pass.
+        The failing module stays unverified and still blocks completion of its checklist items."""
+        a=self.state["modules"][active]
+        if a["state"]=="verified":return True
+        return self.state["modules"][mid]["state"]=="verified" or mid in (a.get("dependencies") or [])
 
     def gate_message(self,rel,active):
         """The refusal for a write outside the active module, saying exactly which step unblocks it: small models read
@@ -152,7 +164,18 @@ class Ledger:
             missing=[p for p in m["sources"] if not any(self.root.glob(p))]
             lines.append("The active module '"+active+"' owns only: "+", ".join(own)+".")
             if missing:lines.append("Not written yet: "+", ".join(missing)+" — if "+rel+" was meant to be that file, write "+missing[0]+" instead.")
-            if owners:lines.append(rel+" belongs to module '"+owners[0]+"': verify_module('"+active+"') first, then begin_module('"+owners[0]+"').")
+            if owners:
+                o=owners[0]
+                if self.may_switch(active,o):
+                    lines.append(rel+" belongs to module '"+o+"'. To change it, either call begin_module('"+o+"'), fix it "
+                                 "there and verify_module('"+o+"'), then begin_module('"+active+"') again; or, if this "
+                                 "change is part of '"+active+"''s work, call module_contract again with id '"+active+
+                                 "' and the same fields, adding '"+rel+"' to sources, then write it.")
+                else:
+                    lines.append(rel+" belongs to module '"+o+"'. Either verify_module('"+active+"') and fix what fails, "
+                                 "then begin_module('"+o+"'); or, if this change is part of '"+active+"''s work, call "
+                                 "module_contract again with id '"+active+"' and the same fields, adding '"+rel+
+                                 "' to sources, then write it.")
             else:lines.append("To build "+rel+" as part of '"+active+"', call module_contract again with id '"+active+"' and the same fields, adding '"+rel+"' to sources, then write it.")
         elif owners:
             lines.append(rel+" belongs to module '"+owners[0]+"': call begin_module('"+owners[0]+"'), then write it.")
