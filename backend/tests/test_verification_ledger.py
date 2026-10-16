@@ -177,15 +177,37 @@ def test_normal_registry_contract_verify_and_tracker_roundtrip(ledger,monkeypatc
  assert json.loads(receipt)['fingerprint']['files']['logic.cjs']
 
 
-def test_gate_refusal_names_owned_files_and_the_fix(ledger):
- # the 9B failure (e42759a0): module owns data.py, model writes store.py, never writes data.py
+def test_gate_adopts_new_files_into_the_active_module(ledger):
+ # the 9B loops (e42759a0, 32d1c242): module owns data.py, model writes store.py / tests/test_store.py and was refused
  l=ledger;l.declare(contract('storage',sources=['data.py'],tests=['test_data.py'],framework='pytest'));l.begin('storage')
- with pytest.raises(PolicyError) as e:l.preflight('write_file',{'path':str(l.root/'store.py')},'write')
+ l.preflight('write_file',{'path':str(l.root/'store.py')},'write')
+ assert l.adopted==('store.py','storage','sources') and 'store.py' in l.state['modules']['storage']['sources']
+ l.preflight('write_file',{'path':str(l.root/'tests'/'test_store.py')},'write')
+ assert 'tests/test_store.py' in l.state['modules']['storage']['tests']
+ l.preflight('write_file',{'path':str(l.root/'data.py')},'write')        # the owned file is still allowed
+
+
+def test_gate_still_refuses_a_file_another_module_owns(ledger):
+ l=ledger;l.declare(contract());l.declare(contract('storage',sources=['data.py'],tests=['test_data.py'],framework='pytest'))
+ l.begin('storage')
+ with pytest.raises(PolicyError) as e:l.preflight('write_file',{'path':str(l.root/'logic.cjs')},'write')
  msg=str(e.value)
- assert 'store.py was NOT written' in msg and "owns only: data.py, test_data.py" in msg
- assert 'Not written yet: data.py' in msg and 'write data.py instead' in msg
- assert "module_contract again with id 'storage'" in msg
- l.preflight('write_file',{'path':str(l.root/'data.py')},'write')        # the owned file is allowed
+ assert 'logic.cjs was NOT written' in msg and "belongs to module 'math'" in msg
+ assert 'logic.cjs' not in l.state['modules']['storage']['sources']
+
+
+def test_adoption_is_reported_in_the_write_result(ledger,monkeypatch):
+ import agent_tools as at
+ import verification_ledger as vl
+ c=at.Ctx([str(ledger.root)]);c.cwd=str(ledger.root);c.build_test_record=True;c.verification_root=str(ledger.root)
+ c.conv_id='verification-fixture'
+ monkeypatch.setattr(vl,'for_ctx',lambda ctx:ledger)
+ r=at.Registry(c,enabled={'module_contract','begin_module','write_file'})
+ r.call('module_contract',contract('storage',sources=['data.py'],tests=['test_data.py'],framework='pytest'))
+ r.call('begin_module',{'id':'storage'})
+ text,_=r.call('write_file',{'path':'helpers.py','content':'X = 1'})
+ assert "helpers.py was added to module 'storage' sources" in text
+ assert (ledger.root/'helpers.py').exists()
 
 
 def test_gate_refusal_without_active_module_says_how_to_start(ledger):

@@ -163,7 +163,7 @@ plausible (not all zero), did the command do what the user wanted? If not, corre
 error message, or how others solve this problem (official docs, known issues, a working example) — then try \
 something fundamentally different, or explain what is blocking you.
 - Before editing a file, read_file the part you will change. When a task or a failure spans several files, focus_pack(goal=...) brings the relevant functions from all of them in one block (call it again with names=[...] for what is missing) instead of reading whole files one by one. Use edit_file for targeted changes \
-(copy 'old' exactly, without the line-number prefix) and write_file for new files or full rewrites. \
+— easiest by line numbers (start_line/end_line + new, numbers as shown; edits=[...] for several changes at once), or by exact 'old' text — and write_file only for new files, not to change a few lines. \
 Think briefly — just enough to choose the next action — then act: a tool result is worth more than more \
 deliberation, and you can think again after it. When you are unsure how a library, an API or your own code behaves, check it instead of reasoning it out: run a \
 few-line probe (python_sandbox, or debug_run to see real values) — seconds, where recalling it from memory takes \
@@ -207,6 +207,9 @@ try to change anything; such actions will be refused. Investigate, then present 
 
 WEB_OFF_NOTE = """
 - WEB ACCESS IS OFF: the user switched off web access in the app. There is no web search, page fetch or browser in this session — those tools are not available and calls to them fail. Offline Wikipedia (encyclopedia), local files and memory still work. If the request needs current or online information, answer from what you have, say plainly that web access is off and what you could not check; the user can turn it back on with the globe button by the message box."""
+
+EXPLAIN_NOTE = """
+- Keep the user informed as you work: with each tool call (or batch of calls), write one short plain sentence, two at most, saying what you are doing and why, e.g. "Reading database.py to see how expenses are stored." or "The test failed on the date format, so I'm fixing the parser." Don't repeat your previous sentence and don't restate the tool's arguments. The user sees these lines between the steps."""
 
 EXECUTOR_NOTE = """
 
@@ -371,6 +374,13 @@ def _slim_call_args(tc, ref=None):
     if not isinstance(a, dict):
         return
     changed = False
+    for op in a.get("edits") if isinstance(a.get("edits"), list) else []:     # several edits in one call
+        for k in _BULKY_ARGS:
+            v = op.get(k) if isinstance(op, dict) else None
+            if isinstance(v, str) and len(v) > 400:
+                del op[k]
+                op[k + "_omitted"] = f"[{len(v):,} chars omitted — already applied]"
+                changed = True
     for k in _BULKY_ARGS:
         v = a.get(k)
         if isinstance(v, str) and len(v) > 400:
@@ -1382,6 +1392,8 @@ GET_TOOLS = {"type": "function", "function": {
         # how the request is understood (this used to be a separate model call before this one)
         "workspace": {"type": "string", "description": "Absolute project folder explicitly selected by the user; copy exactly, or empty if none. Never invent a path."},
         "goal": {"type": "string", "description": "what the user wants and what 'done' looks like, one sentence"},
+        "title": {"type": "string", "description": "a name for this conversation, 2-6 words, like a document title "
+                                                   "(e.g. 'Roommate expense tracker'); no quotes"},
         "constraints": {"type": "array", "items": {"type": "string"}, "maxItems": 6,
                         "description": "the user's own limits or preferences, word for word; omit if none"},
         "conditions": {"type": "array", "items": {"type": "string"}, "maxItems": 8,
@@ -1397,7 +1409,7 @@ GET_TOOLS = {"type": "function", "function": {
                                       "news, health/legal/financial, anything for a report); light: recommendations and "
                                       "lists of places/products (even with names and addresses), how-tos, summaries of "
                                       "pages just read; none: conversation, opinions, code and work that is tested"}},
-        "required": ["why", "size", "depth", "plan", "think", "goal", "fact_check", "workspace"]}}}
+        "required": ["why", "size", "depth", "plan", "think", "goal", "title", "fact_check", "workspace"]}}}
 
 # The basic path: a mid-size prompt (~3-4k tokens with its tools instead of ~12k) — the lean identity plus only the
 # rules a short tool task needs. The extensive path loads the full harness (SYSTEM + every tool).
@@ -2355,21 +2367,21 @@ class AgentEngine:
             last += f"\n\n({self._interp_note})"
         if self.cfg.get("facts_need_source", True):
             # a 9B model hallucinates most specific facts it recalls (AA-Omniscience ~80%): on the lean path those
-            # come from the Reference below, or the tools â€” never from memory
-            system += ("\nSpecific facts a user relies on â€” figures, dates of events, rankings, claims about particular "
-                       "people, businesses or places, anything recent â€” must come from a source, not memory (common "
+            # come from the Reference below, or the tools — never from memory
+            system += ("\nSpecific facts a user relies on — figures, dates of events, rankings, claims about particular "
+                       "people, businesses or places, anything recent — must come from a source, not memory (common "
                        "knowledge, explanations and definitions are fine from memory): answer them from the Reference "
                        "when one is given with the message; if "
                        "there is none, or it doesn't contain the fact, look it up with encyclopedia (instant); if the "
-                       "encyclopedia doesn't have it either, call get_tools to search the web â€” never answer 'the "
+                       "encyclopedia doesn't have it either, call get_tools to search the web — never answer 'the "
                        "reference doesn't contain it' before searching. Only after the web search also finds nothing, "
                        "say you couldn't verify it rather than guessing. General "
                        "explanations, reasoning, advice and conversation need no source.")
             if self.cfg.get("quote_check", False):
                 system += "\n" + self.QUOTE_RULE
         ref = getattr(self, "_turn_ref", "")          # searched at the start of the turn (_supplement)
-        if ref:      # open book: a 9B model mis-recalls most facts but reads well â€” answer from the text, not memory
-            last += (f"\n\n{REMINDER_TAG}\nReference found automatically by the app (not from the user â€” they did not "
+        if ref:      # open book: a 9B model mis-recalls most facts but reads well — answer from the text, not memory
+            last += (f"\n\n{REMINDER_TAG}\nReference found automatically by the app (not from the user — they did not "
                      "send it and cannot see it; never mention it, \"the reference\" or \"the search results\"; if it "
                      "doesn't fit the message, ignore it silently). For any facts in your answer use its names and "
                      "figures, and link the source of "
@@ -2380,10 +2392,10 @@ class AgentEngine:
                      "like a population or a census count is fine to give from the Reference WITH its year (e.g. 'as "
                      f"of the 2021 census'); if web and Wikipedia disagree, say so.\n{ref}\n</system-reminder>")
         msgs = [{"role": "system", "content": system}] + convo[-12:] + [{"role": "user", "content": last}]
-        self.emit("status", text="Thinkingâ€¦")
+        self.emit("status", text="Thinking…")
         self._delta = "ans_delta"
         if self.cfg.get("backend", "llama") == "ollama":
-            return None                                   # (Ollama backend: no raw tool hook â€” full harness)
+            return None                                   # (Ollama backend: no raw tool hook — full harness)
         # the lean pass has the calculator too: exact arithmetic without loading the harness. Its calls run here;
         # the answer is then checked like any final answer (wrong equations, figures worked out in the head).
         raw = [GET_TOOLS] + ([LEAN_CALC] if self.reg is not None and "calculate" in self.reg.by_name else [])
@@ -2430,7 +2442,7 @@ class AgentEngine:
                     # shown in the chat like any tool call (it used to run invisibly: "it didn't use the calculator")
                     self.emit("tool_call", id=cid, name=name, args=largs, desc=self.reg.describe(name, largs),
                               kind=(self.reg.get(name) or {}).get("kind", "read"), display=None, by="")
-                    self.emit("status", text="Calculatingâ€¦" if name == "calculate" else "Checking Wikipediaâ€¦")
+                    self.emit("status", text="Calculating…" if name == "calculate" else "Checking Wikipedia…")
                     ok = True
                     try:
                         out, _img = self.reg.call(name, largs)
@@ -2477,16 +2489,16 @@ class AgentEngine:
                     msgs += [{"role": "assistant", "content": text}, {"role": "user", "content": (
                         f"{REMINDER_TAG}\nThese details in your answer are not supported by anything you were given: "
                         + "; ".join(bad[:6]) + ". Remove each one, or look it up with encyclopedia (or get_tools for "
-                        "something current), then give your answer again â€” complete and fresh; the earlier version is "
+                        "something current), then give your answer again — complete and fresh; the earlier version is "
                         "hidden from the user, so don't mention it or this note. This note is from the app, not the "
-                        "user: don't reply to it â€” begin with the answer itself, and answer every part of the "
+                        "user: don't reply to it — begin with the answer itself, and answer every part of the "
                         "user's message.\n</system-reminder>")}]
                     continue
             break
         if lean_trace:                       # its tool results join the history (the agent and later turns see them)
             self.history.extend(lean_trace)
         if text and not msg.get("tool_calls") and _is_narration(text):
-            # "Let me look at the artifactâ€¦": an intention, not an answer â€” hand the message to the agent
+            # "Let me look at the artifact…": an intention, not an answer — hand the message to the agent
             msg = dict(msg, content="")
             self._effort = self._effort or {"plan": "none", "think": "medium"}
             _log({"lean_announced": text[:160], "conv": self.ctx.conv_id})
@@ -2502,7 +2514,7 @@ class AgentEngine:
                 size = str(a.get("size") or "").lower()
                 if repair_sent:
                     # it answered directly first (it judged the request quick), the check flagged details, and the
-                    # repair asked for tools: verify those details â€” not a research project (a local pick became a
+                    # repair asked for tools: verify those details — not a research project (a local pick became a
                     # "deep" job with a full plan and hit the time limit)
                     size = "quick"
                 if size == "quick":                   # the size decides the ceiling: quick work stays quick
@@ -2522,13 +2534,13 @@ class AgentEngine:
             self._depth = depth
             if (msg.get("content") or "").strip() and not getattr(self, "_held_hidden", False):
                 self.emit("answer_retract", reason="loading the tools")
-            self.emit("status", text=f"Loading tools ({depth})" + (f": {why}" if why else "â€¦"))
+            self.emit("status", text=f"Loading tools ({depth})" + (f": {why}" if why else "…"))
             _log({"lean": "tools", "depth": depth, "why": str(why)[:160], "effort": getattr(self, "_effort", None),
                   "fact_check": getattr(self, "_check_level", None), "conv": self.ctx.conv_id})
             self.turn["lean"] = "tools"
             return None
         if self._verify() and text and not checked and not self._lean_facts_ok(msgs, raw, text):
-            # facts the sources don't contain (an invented name, a joke post read as consensus): not shown â€” the
+            # facts the sources don't contain (an invented name, a joke post read as consensus): not shown — the
             # full agent takes the message, researches it and runs the full fact check
             self.emit("answer_retract", reason="facts not supported by the sources: researching properly")
             self._depth = "basic"
@@ -2545,7 +2557,7 @@ class AgentEngine:
 
 
     def _prefetch_parallel(self, calls):
-        """Several read-only calls in one step (searches, fetches, file readsâ€¦) run at the same time, each with its
+        """Several read-only calls in one step (searches, fetches, file reads…) run at the same time, each with its
         own copy of the tool context. _run_tool then takes their results in order, so every check, the history and
         the cards stay exactly as with one-by-one calls. A call _run_tool refuses simply discards its result."""
         if getattr(self, "_batch_adapter", None):
@@ -2580,7 +2592,7 @@ class AgentEngine:
                 return tid, (False, f"Error: {e}", None, None)
             except Exception as e:
                 return tid, (False, f"Error: {type(e).__name__}: {e}", None, None)
-        self.emit("status", text=f"Running {len(jobs)} lookups at the same timeâ€¦")
+        self.emit("status", text=f"Running {len(jobs)} lookups at the same time…")
         t0 = time.time()
         with ThreadPoolExecutor(max_workers=min(6, len(jobs))) as ex:
             for tid, res in ex.map(one, jobs):
@@ -2907,6 +2919,8 @@ class AgentEngine:
             s = self._layer_prompt(s, set(self._active_names()))
         if getattr(self, "_build_profile", False):
             s = self._build_layer(s)
+        if self.cfg.get("model_explanations", True) and not self.ctx.is_subagent and self._role != "exec":
+            s += EXPLAIN_NOTE             # a one-line "what and why" beside each tool call, shown between the steps
         if self.ctx.is_subagent:
             s += SUBAGENT_NOTE
         if self.cfg.get("plan_mode"):
@@ -4363,7 +4377,7 @@ class AgentEngine:
                     self._start_project()
                 if getattr(self, "_project", False) or self._BUILD_REQ_RX.search(user_text or ""):
                     self._build_profile = True       # set before the first step: the prompt start stays fixed
-                if self._build_profile or self._CODE_REQ_RX.search(user_text or ""):
+                if getattr(self, "_build_profile", False) or self._CODE_REQ_RX.search(user_text or ""):
                     self._code_work = True           # focus_pack loads (decided once: the tool list stays fixed)
                 self.emit("status", text=f"Plan: {self._effort['plan']} · thinking: {self._effort['think']}")
             elif self._escalated and self._depth == "basic" and not self.should_stop():
@@ -6269,6 +6283,7 @@ Reply with JSON only: a few words of reason, then answer_directly, then needs_pl
 
     INTERPRET_PROMPT = """Before anyone works on the user's latest message, interpret it. Do NOT answer it.
 - goal: what the user actually wants and what "done" looks like (one sentence)
+- title: a name for this conversation, 2-6 words, like a document title (e.g. "Roommate expense tracker", "San Diego pizza picks"); no quotes, no trailing period
 - workspace: the absolute project folder explicitly selected by the user, copied exactly; empty if none
 - deliverable: answer / file / action / decision / plan / explanation
 - constraints: the user's own limits or preferences, quoted word for word ("in feet", "don't delete anything")
@@ -6284,14 +6299,14 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
 
     INTERPRET_SCHEMA = {"type": "object", "properties": {
         "workspace": {"type": "string"},
-        "goal": {"type": "string"}, "deliverable": {"type": "string"},
+        "goal": {"type": "string"}, "title": {"type": "string"}, "deliverable": {"type": "string"},
         "constraints": {"type": "array", "items": {"type": "string"}, "maxItems": 6},
         "conditions": {"type": "array", "items": {"type": "string"}, "maxItems": 8},
         "ambiguity": {"type": "string"}, "chosen_reading": {"type": "string"},
         "ask_first": {"type": "boolean"}, "question": {"type": "string"},
         "irreversible": {"type": "boolean"},
         "implicit": {"type": "array", "items": {"type": "string"}, "maxItems": 2}},
-        "required": ["workspace", "goal", "deliverable", "constraints", "conditions", "ambiguity", "chosen_reading",
+        "required": ["workspace", "goal", "title", "deliverable", "constraints", "conditions", "ambiguity", "chosen_reading",
                      "ask_first", "question", "irreversible", "implicit"],
         "additionalProperties": False}                   # OpenAI's strict schemas require it
 
@@ -6338,6 +6353,9 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
         self._bind_workspace(d.get("workspace"))
         goal, deliv = str(d.get("goal") or "").strip(), str(d.get("deliverable") or "").strip()
         cons, conds, impl = lst("constraints"), lst("conditions"), lst("implicit")
+        title = " ".join(str(d.get("title") or "").strip().strip("\"'").rstrip(".").split())
+        if 2 <= len(title) <= 60:
+            self.emit("title", text=title)        # the app names the chat with it (first request, never a rename)
         amb, reading = str(d.get("ambiguity") or "").strip(), str(d.get("chosen_reading") or "").strip()
         ask, question = bool(d.get("ask_first")), str(d.get("question") or "").strip()
         irrev = bool(d.get("irreversible"))

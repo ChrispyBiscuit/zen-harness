@@ -231,6 +231,8 @@ export function SettingsDialog() {
                 )}
                 <ResponseStyle a={a} setA={setA} />
                 <Toggle checked={!!a.vision} onChange={(v) => setA({ vision: v })} label="Vision" hint="Send screenshots and attached images to the model (when it can see)." />
+                <Toggle checked={(a as any).model_explanations !== false} onChange={(v) => setA({ model_explanations: v } as any)} label="Model explanations"
+                  hint="The model writes a short line between steps saying what it is doing and why. Off: it works silently and you see only the tool steps and the answer." />
                 {a.backend !== "openai" && (
                   <Toggle checked={!!(a as any).mtp_head} onChange={(v) => setA({ mtp_head: v } as any)} label="MTP head (faster generation)"
                     hint="Uses the model's built-in multi-token-prediction head to draft tokens ahead: typically 10-25% faster on code, less on prose. Costs about 0.6-1 GB of GPU memory, so on an 8 GB card the context shrinks by roughly 25-35K tokens. Only model files that include an MTP head use it; others ignore the switch." />

@@ -104,4 +104,6 @@ DEFAULT_AGENT["execution_memory_test_mode"] = False  # code-owned action journal
 DEFAULT_AGENT["working_set"] = True
 # the model's own MTP head for speculative decoding (Settings > General > Model): off by default, it costs ~0.6-1 GB of GPU memory
 DEFAULT_AGENT["mtp_head"] = False
+# a short "what I am doing and why" line from the model beside each tool call (Settings: Model explanations)
+DEFAULT_AGENT["model_explanations"] = True
 DEFAULT_AGENT["occ"] = {"enabled": False, "experimental": True, "max_pages_per_turn": 2}
