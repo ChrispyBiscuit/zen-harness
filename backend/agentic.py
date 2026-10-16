@@ -1730,8 +1730,10 @@ class AgentEngine:
                 if c.get("n_cpu_moe") is not None:          # a measured value in the profile beats the estimate
                     fit["n_cpu_moe"] = int(c["n_cpu_moe"])
                     fit["experts_gpu_layers"] = max(0, int(fit.get("layers") or 0) - fit["n_cpu_moe"])
-                args += ["--n-cpu-moe", str(fit["n_cpu_moe"]),
-                         "-ub", str(int(c.get("moe_ubatch") or 1024))]   # bigger batches: faster prompts
+                ub = int(c.get("moe_ubatch") or 1024)              # bigger batches: faster prompts
+                # -b equal to -ub: llama.cpp's default -b is 2048, and the Qwen3.6-35B-A3B REAP card reports perplexity
+                # 1402.95 with -b and -ub mismatched vs 2.72 matched — output that still looks coherent
+                args += ["--n-cpu-moe", str(fit["n_cpu_moe"]), "-ub", str(ub), "-b", str(ub)]
                 if fit.get("mtp") and c.get("mtp", True):
                     args += ["--spec-type", "draft-mtp", "--spec-draft-n-max", "3"]
                 self.emit("status", text=f"Mixture-of-experts: experts of {fit['experts_gpu_layers']}/{fit['layers']} "
@@ -1989,42 +1991,159 @@ class AgentEngine:
             used += len(block)
         return "\n".join(out)
 
+    # ---------------------------------------------------------------- working set carried through a compaction
+    # After every compaction a Bonsai 27B build spent its next 5-12 calls re-reading the files it had been editing
+    # (13 compactions in a084ff8b, each followed by read_file enemies.js / verify_ai.js / player.js in ~140-line
+    # chunks): the summary kept what it had done but not the code it was doing it in. The compaction re-reads the
+    # whole prompt anyway, so putting the current text of those files back costs prefill only — no extra steps.
+    WS_SHARE, WS_MAX_TOKENS, WS_MAX_FILES, WS_RECENT_STEPS = 0.18, 9000, 4, 40
+
+    def _working_set_files(self):
+        """The files the agent worked on most recently, newest first: edited ones before ones only read."""
+        asst = [m for m in self.history if m.get("role") == "assistant"][-self.WS_RECENT_STEPS:]
+        edited, read = [], []
+        for m in reversed(asst):
+            for tc in reversed(m.get("tool_calls") or []):
+                fn = tc.get("function") or {}
+                try:
+                    a = json.loads(fn.get("arguments") or "{}")
+                except ValueError:
+                    continue
+                if not isinstance(a, dict) or not a.get("path"):
+                    continue
+                name = fn.get("name")
+                bucket = edited if name in ("write_file", "edit_file", "undo_file") else \
+                    read if name == "read_file" else None
+                if bucket is None:
+                    continue
+                try:
+                    p = os.path.normcase(os.path.abspath(self.ctx.resolve(a["path"])))
+                except Exception:
+                    continue
+                if p not in edited and p not in read and os.path.isfile(p) and \
+                        os.path.splitext(p)[1].lower() in self.CODE_EXT and self.ctx.inside(p):
+                    bucket.append(p)
+        return (edited + [p for p in read if p not in edited])[:self.WS_MAX_FILES]
+
+    def _working_set(self, files, budget_tokens, skip_visible=False):
+        """-> (blocks [(norm, digest, total, text)], tokens): the current text of `files`, numbered as read_file shows
+        it, while they fit the budget. A file too big for the budget is left out (the work state's code map has it).
+        skip_visible: leave out a file whose whole current text is already visible in the conversation."""
+        blocks, used = [], 0
+        for p in files:
+            norm, digest, total = self._file_state(p)
+            if not norm or not total:
+                continue
+            if skip_visible and self._covered(norm, digest, (1, total)):
+                continue
+            try:
+                with open(p, encoding="utf-8", errors="replace") as f:
+                    lines = f.read().splitlines()
+            except OSError:
+                continue
+            body = at._numbered([ln if len(ln) <= 2000 else ln[:2000] + "…" for ln in lines], 1)
+            text = (f"[{os.path.basename(p)}: {len(lines)} lines — the whole file, current] {p}\n" + body)
+            n = len(text) // 3 + 8
+            if used + n > budget_tokens:
+                continue
+            blocks.append((norm, digest, len(lines), text))
+            used += n
+        return blocks, used
+
+    def _working_set_budget(self, room):
+        return int(min(self.WS_MAX_TOKENS, max(0, room) * self.WS_SHARE))
+
     # ---------------------------------------------------------------- re-reads of unchanged files
-    def _read_key(self, args):
+    # Coverage, not exact arguments: read_file widens small slices (a whole file up to 600 lines, 200+ lines otherwise),
+    # so a model asking for offset=87 limit=16, then 87/36, then 123/25 got the same lines three times — the old
+    # (path, offset, limit) key matched none of them. One 3D build read a 277-line file 39 times (a084ff8b, 2026-10-13).
+    _SHOWN_RX = re.compile(r"^\[[^\n]*?: (\d+) lines, [\d,]+ characters — (?:showing the whole file|"
+                           r"showing lines (\d+)-(\d+))")
+    READ_POINTER = "[unchanged — already in context]"
+
+    def _file_state(self, path):
+        """-> (normalised path, md5 of the bytes, line count) or (None, None, 0)."""
         try:
-            p = self.ctx.resolve(args.get("path"))
+            p = self.ctx.resolve(path)
             with open(p, "rb") as f:
-                digest = hashlib.md5(f.read()).hexdigest()
+                data = f.read()
         except Exception:
-            return None, None
-        return (os.path.normcase(p), int(args.get("offset") or 1), int(args.get("limit") or 400)), digest
+            return None, None, 0
+        return os.path.normcase(os.path.abspath(p)), hashlib.md5(data).hexdigest(),             len(data.decode("utf-8", "replace").splitlines())
 
     def _remember_read(self, args, tid, text):
-        key, digest = self._read_key(args)
-        if key:
-            self._reads = getattr(self, "_reads", {})
-            self._reads[key] = (digest, tid, len(text), self._step_no())
+        """Record which lines of which version of a file this read_file result showed (from its header)."""
+        m = self._SHOWN_RX.search(str(text or "")[:400])
+        norm, digest, _n = self._file_state(args.get("path"))
+        if not (m and norm):
+            return
+        a, b = (1, int(m.group(1))) if m.group(2) is None else (int(m.group(2)), int(m.group(3)))
+        self._note_shown(norm, digest, a, b, tid, len(str(text)))
+
+    def _note_shown(self, norm, digest, a, b, tid, n):
+        reads = self.__dict__.setdefault("_reads", {})
+        reads[norm] = (reads.get(norm, []) + [(digest, a, b, tid, self._step_no(), n)])[-12:]
 
     def _step_no(self):
         return sum(1 for m in self.history if m.get("role") == "assistant")
 
+    def _shown_visible(self, tid, n):
+        """Is that earlier text still whole in what the model sees (not compacted, stubbed or masked away)?"""
+        if str(tid).startswith("ws:"):              # the working set re-injected at the last compaction
+            marker = f"[Working set {tid[3:]}]"
+            return any(marker in str(m.get("content") or "") for m in self.history[:3])
+        if tid in ((self.__dict__.get("_mask") or {}).get("stubs") or {}):
+            return False
+        for m in self.history:
+            if m.get("role") == "tool" and m.get("tool_call_id") == tid:
+                c = str(m.get("content") or "")
+                return not c.startswith(self.READ_POINTER) and len(c) >= 0.9 * n
+        return False
+
+    def _covered(self, norm, digest, want):
+        """The visible earlier reads of this version of the file that together show lines want[0]..want[1], as
+        [(first, last, tool id, step)] — or None when some of those lines are not on screen."""
+        seen = [(a, b, tid, step) for d, a, b, tid, step, n in getattr(self, "_reads", {}).get(norm, [])
+                if d == digest and self._shown_visible(tid, n)]
+        got, used = want[0], []
+        for a, b, tid, step in sorted(seen):        # sweep: does the union of visible ranges cover want?
+            if a <= got <= b:
+                used.append((a, b, tid, step))
+                got = b + 1
+                if got > want[1]:
+                    return used
+        return None
+
     def _unchanged_read(self, args):
-        """'' unless this exact read already happened, the file hasn't changed since, and that result is still in the
-        conversation (not compacted away) -> a short pointer instead of the same text again."""
-        key, digest = self._read_key(args)
-        prev = getattr(self, "_reads", {}).get(key) if key else None
-        if not prev or prev[0] != digest:
+        """'' unless every line this read would show is already visible above, from the same version of the file ->
+        a short pointer instead of the same text again."""
+        norm, digest, total = self._file_state(args.get("path"))
+        if not norm or not total:
             return ""
-        _d, tid, n, step = prev
-        still = any(m.get("role") == "tool" and m.get("tool_call_id") == tid and len(str(m.get("content") or "")) >= 0.9 * n
-                    for m in self.history)
-        if not still:
+        if args.get("symbol"):
+            want = (1, total)                       # a definition by name: only when the whole file is visible
+        else:
+            start = max(1, int(args.get("offset") or 1))
+            want = (start, min(total, start + max(1, int(args.get("limit") or 400)) - 1))
+        if want[0] > total:
             return ""
-        ago = self._step_no() - step
-        return (f"{args.get('path')} is unchanged since you read it {ago} step{'s' if ago != 1 else ''} ago — that "
-                f"result is above (same lines). Use it instead of reading again; read a different range (offset/limit) "
-                f"or search_text for a name if you need something else. After an edit, the edit result shows the "
-                f"changed lines.")
+        used = self._covered(norm, digest, want)
+        if not used:
+            return ""
+        pointed = self.__dict__.setdefault("_pointed", {})
+        if pointed.get(norm) == (digest, want):
+            # asked again after a pointer: the model wants the text in front of it — give it, don't loop
+            pointed.pop(norm, None)
+            return ""
+        pointed[norm] = (digest, want)
+        now = self._step_no()
+        where = "; ".join(f"lines {a}-{b} " + ("in the working set at the start of the conversation" if
+                                               str(tid).startswith("ws:") else
+                                               f"from your read {now - step} step{'s' if now - step != 1 else ''} ago")
+                          for a, b, tid, step in used)
+        return (f"{self.READ_POINTER} {args.get('path')} has not changed since that text was shown: {where}. Use it — "
+                f"it is the current file. Read a different range, or search_text for a name, if you need something "
+                f"else; an edit's result shows the lines it changed.")
 
     def _closes_open_items(self, args):
         """Does this update_tracker call mark a still-open checklist item done / skipped / blocked?"""
@@ -3146,8 +3265,8 @@ class AgentEngine:
             cid = m.get("tool_call_id")
             name, a = calls.get(cid, ("", {}))
             k = key(name, a)
-            if k is None:
-                continue
+            if k is None or str(m.get("content") or "").startswith(self.READ_POINTER):
+                continue                       # a pointer to an earlier read must not make that read look superseded
             if k[0] == "write":
                 writes.add(k[1])
                 continue
@@ -4758,6 +4877,8 @@ class AgentEngine:
         seen = getattr(self, "_calls_seen", {}).get(key) if key else None
         if not seen or seen["seq"] != getattr(self, "_change_seq", 0):
             return ""
+        if str(seen.get("head") or "").startswith(self.READ_POINTER):
+            return ""              # the earlier answer was only a pointer: asking again means it wants the text
         _log({"repeat_blocked": name, "conv": self.ctx.conv_id})
         return (f"{name} did not run: it is identical to a call you already made this turn, and nothing has changed "
                 f"since, so the result would be the same. That result began:\n{seen['head']}\n"
@@ -4926,8 +5047,14 @@ class AgentEngine:
                 pre = self._prefetched.pop(tid, None)
                 if pre is not None:                    # already ran in parallel with its sibling calls
                     ok, text, image, display = pre
-                elif name == "read_file" and self._unchanged_read(args):
-                    ok, text, image, display = True, self._unchanged_read(args), None, None
+                    if name == "read_file" and ok:     # parallel reads get the same re-read check and bookkeeping
+                        pointer = self._unchanged_read(args)
+                        if pointer:
+                            text, image, display = pointer, None, None
+                        else:
+                            self._remember_read(args, tid, text)
+                elif name == "read_file" and (pointer := self._unchanged_read(args)):
+                    ok, text, image, display = True, pointer, None, None
                 else:
                     try:
                         text, image = self.reg.call(name, args)
@@ -5455,6 +5582,12 @@ class AgentEngine:
             # was ~3K tokens of real history, and a Bonsai build repeated 20-55% of its next 40 calls after each
             # compaction (mostly re-reading files it had just read).
             keep_tokens = max(2000, self._compact_target() - fixed - 4000)
+        # the working set put back after the cut (_working_set): its room comes out of the verbatim history, so the
+        # prompt right after a compaction stays the size it was
+        ws_files = self._working_set_files() if self.cfg.get("working_set", True) else []
+        ws_budget = self._working_set_budget(room)
+        ws_tokens = self._working_set(ws_files, ws_budget)[1] if ws_files else 0
+        keep_tokens = max(2000, keep_tokens - int(ws_tokens * self.ratio))
         cut, acc = None, 0
         for i in range(len(self.history) - 1, 0, -1):
             acc += int(_est_tokens([self.history[i]]) * self.ratio)
@@ -5550,6 +5683,20 @@ class AgentEngine:
             head.append({"role": "assistant", "content": "Understood. I have the summary and my tracker; "
                          "continuing from there."})
         self.history = head + self.history[cut:]
+        if ws_files:
+            # files whose whole current text is still in the kept part are not repeated
+            blocks, ws_tokens = self._working_set(ws_files, ws_budget, skip_visible=True)
+            if blocks:
+                gen = self.__dict__.get("_ws_gen", 0) + 1
+                self._ws_gen = gen
+                self.history[0]["content"] += (
+                    f"\n\n[Working set {gen}] The current text of the files you were working on, read from disk just "
+                    f"now and numbered as read_file shows them. Edit from this text; don't read these files again "
+                    f"unless they change:\n\n" + "\n\n".join(b[3] for b in blocks))
+                for norm, digest, total, text in blocks:
+                    self._note_shown(norm, digest, 1, total, f"ws:{gen}", len(text))
+                _log({"working_set": [os.path.basename(b[0]) for b in blocks], "tokens": ws_tokens,
+                      "budget": ws_budget, "conv": self.ctx.conv_id})
         self.turn["compactions"] = self.turn.get("compactions", 0) + 1
         self._exec_from = 0
         after = self._history_tokens()

@@ -1031,13 +1031,15 @@ def unchanged_reread_points_back():
     first = call(1, {"path": f})
     assert "return 1" in first
     again = call(2, {"path": f, "offset": 1})       # the same range, asked again
-    assert "unchanged since you read it" in again, again[:160]
-    other = call(3, {"path": f, "offset": 2})        # a different range really reads
-    assert "return 1" in other
+    assert again.startswith(e.READ_POINTER) and "lines 1-2" in again, again[:160]
+    other = call(3, {"path": f, "offset": 2})        # a sub-range of what is on screen: also a pointer
+    assert other.startswith(e.READ_POINTER), other[:160]
+    asked = call(4, {"path": f, "offset": 2})        # asked again right after the pointer: the real text, no loop
+    assert "return 1" in asked
     open(f, "w").write("def a():\n    return 2\n")   # changed: full read again
-    assert "return 2" in call(4, {"path": f})
-    e.history = [m for m in e.history if m.get("tool_call_id") != "r4"]   # that result compacted away
-    assert "return 2" in call(5, {"path": f}), "a read that is no longer in context reads again"
+    assert "return 2" in call(5, {"path": f})
+    e.history = [m for m in e.history if m.get("tool_call_id") != "r5"]   # that result compacted away
+    assert "return 2" in call(6, {"path": f}), "a read that is no longer in context reads again"
 
 
 @test

@@ -100,4 +100,6 @@ DEFAULT_AGENT["context_compaction_v2"] = True
 DEFAULT_AGENT["compact_prompt"] = True  # evidence-linked compact policy; legacy remains selectable
 DEFAULT_AGENT["compact_target_tokens"] = 0     # 0 = auto: 72% of the compaction point (agentic._compact_target)
 DEFAULT_AGENT["execution_memory_test_mode"] = False  # code-owned action journal and compact state view
+# after a compaction, put the current text of the files being worked on back into the prompt (agentic._working_set)
+DEFAULT_AGENT["working_set"] = True
 DEFAULT_AGENT["occ"] = {"enabled": False, "experimental": True, "max_pages_per_turn": 2}
