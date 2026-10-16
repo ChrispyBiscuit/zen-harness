@@ -1,10 +1,15 @@
 # Zazen
 
+> [!WARNING]
+> **Experimental software.** Zazen is an early alpha from a small independent project. It runs commands and edits files on your
+> PC (it asks before risky steps), its AI makes mistakes, and settings, file formats and features can change without
+> notice. Use it on files you have backed up, review what it builds, and don't rely on it for anything important.
+
 **A private AI agent that runs on your own Windows PC.** Zazen is a desktop app that runs a capable open model,
 Ternary Bonsai 2 27B, on an ordinary 8 GB graphics card, and gives it tools: files, a terminal, web search, a
 browser, offline Wikipedia, documents, and code it can test. Your chats and files stay on your computer.
 
-Status: **alpha**. It works, and it has rough edges. See [What it can and can't do](#what-it-can-and-cant-do).
+Status: **experimental alpha**. It works, and it has rough edges. See [What it can and can't do](#what-it-can-and-cant-do).
 
 ## Who it's for
 
@@ -144,6 +149,38 @@ backend\venv\Scripts\python.exe backend\app_web.py
 - Installer: `powershell -File packaging\build.ps1` (see `packaging/README.md`).
 - `main` is always releasable; changes go through branches and pull requests. Never commit keys, `settings.json`,
   chats, models or build output.
+
+## Built with
+
+Zazen stands on a lot of other people's work.
+
+**The model:** [Ternary Bonsai 2 27B](https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf) by
+[PrismML](https://prismml.com), a ternary (1.58-bit) compression of Qwen3.8 27B, Apache 2.0.
+
+**Running it:** [llama.cpp](https://github.com/ggml-org/llama.cpp) (ggml-org, MIT), through
+[PrismML's fork](https://github.com/PrismML-Eng/llama.cpp), which adds the Bonsai formats and builds for CUDA, HIP,
+Vulkan and SYCL.
+
+**The app:**
+- Backend: Python, [aiohttp](https://github.com/aio-libs/aiohttp), [PySide6 / Qt](https://www.qt.io/qt-for-python)
+  for the window and its built-in browser, [Playwright](https://playwright.dev) for browser control, psutil, pywin32.
+- Front end: [React](https://react.dev), [Vite](https://vite.dev), [Tailwind CSS](https://tailwindcss.com),
+  [shadcn/ui](https://ui.shadcn.com) and [Base UI](https://base-ui.com), Zustand, CodeMirror, Shiki, KaTeX, MathLive,
+  [Mermaid](https://mermaid.js.org), [Leaflet](https://leafletjs.com), Dockview, Lucide icons, Geist fonts.
+- Documents and data: python-docx, python-pptx, openpyxl, xlrd, pypdf, pandas, DuckDB, NumPy, SciPy, SymPy, Pint,
+  Matplotlib, Pillow, NetworkX, Jupyter (the agent's Python sessions).
+- Search and reading: [ddgs](https://github.com/deedy5/ddgs) (keyless web search), trafilatura, lxml.
+- Memory and speech: [fastembed](https://github.com/qdrant/fastembed) with ONNX Runtime,
+  [faster-whisper](https://github.com/SYSTRAN/faster-whisper) and CTranslate2, [Kokoro](https://github.com/thewh1teagle/kokoro-onnx).
+- Offline knowledge: [Wikipedia](https://www.wikipedia.org) (CC BY-SA) packaged by [Kiwix](https://kiwix.org), read
+  with libzim. libzim is GPL, so it is downloaded separately on first use and never shipped in the installer.
+- Maps: [OpenStreetMap](https://www.openstreetmap.org) tiles and Nominatim place lookup.
+- Packaging: [PyInstaller](https://pyinstaller.org) and [Inno Setup](https://jrsoftware.org/isinfo.php).
+
+**Development:** designed and directed by its author, and written largely with
+[Claude Code](https://claude.com/claude-code), Anthropic's AI coding agent.
+
+Every third-party licence is listed in the app (Help → About → Licences) and in `backend/licenses/` of a build.
 
 ## License
 
