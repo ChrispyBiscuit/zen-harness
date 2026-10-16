@@ -4902,11 +4902,12 @@ BUILTIN = [
      "search_text instead; for a project's code use focus_pack.", _obj({"query": S, "folder": S, "limit": I}, ["query"]),
      t_search_documents),
     ("create_document", WRITE, "THE way to make Office files — PowerPoint decks, Word documents, Excel workbooks and "
-     "PDFs — professionally styled (themes: corporate, modern, minimal, warm, forest). pptx: JSON slides with layouts "
-     "(title, bullets, two_column, stats, quote, section, image, closing); docx/pdf: Markdown; xlsx: JSON sheets with "
-     "number formats and native charts, or CSV. Read the format first with read_guide('powerpoint' | 'word' | 'excel' "
-     "| 'pdf'). Never pip-install libraries or use python_sandbox for Office files. Only when the user asks for a file "
-     "or document: a table, list or comparison asked for in chat goes in your reply, not in a file.",
+     "PDFs — professionally styled. theme: corporate, slate, modern, minimal, warm or forest. pptx: JSON slides with "
+     "layouts (stats, chart, table, cards, timeline, bullets, two_column, section, quote, image, closing); docx/pdf: "
+     "Markdown with tables, ```chart blocks and > callouts; xlsx: JSON sheets with title, totals and native charts, "
+     "or CSV. Read the format first with read_guide('powerpoint' | 'word' | 'excel' | 'pdf'). Never pip-install "
+     "libraries or use python_sandbox for Office files. Only when the user asks for a file or document: a table, list "
+     "or comparison asked for in chat goes in your reply, not in a file.",
      _obj({"path": S, "type": S, "content": S, "title": S, "subtitle": S, "theme": S, "overwrite": B}, ["path", "content"]),
      t_create_document),
     ("show_user", EXEC, "Show your work to the user: launch a program, game or app for them with NO timeout (it runs "

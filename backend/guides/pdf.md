@@ -1,13 +1,13 @@
 # PDF and CSV files
 
 ## Make a PDF: `create_document`
-`path` ending in `.pdf`, `content` as Markdown (same format as Word: headings, lists, tables, bold/italic, quotes), optional `title`, `subtitle`, `theme`. It is built as a themed Word document and saved as PDF through Microsoft Word (installed on this PC). Use this for reports, letters, one-pagers and printable handouts.
+`path` ending in `.pdf`, `title`, optional `subtitle` and `theme`, and `content` as Markdown — exactly the same format as Word (read_guide('word')): headings, lists, tables, ` ```chart ` blocks, `>` callouts, images, `---` page breaks. It is laid out in the theme and printed by Microsoft Edge, with page numbers in the footer. Use it for reports, letters, one-pagers and handouts.
 
 ## Read a PDF
 `read_document` extracts the text (use `start`/`end` for page ranges on long files). Scanned PDFs without a text layer come back empty — say so rather than guessing the content.
 
 ## Edit / merge / split PDFs
-Use `python_host` (approval) with `pypdf` (already installed — never `pip install`):
+`python_host` (approval) with `pypdf` (installed — never `pip install`):
 ```python
 from pypdf import PdfReader, PdfWriter
 r = PdfReader(r"C:/path/in.pdf"); w = PdfWriter()

@@ -1458,8 +1458,8 @@ facts and earlier conversations.
 that print the information); bg_start runs a long-lived one (a dev server, a watcher) \
 and bg_output / bg_list / bg_stop manage it; edit_file / write_file change files; show_user opens your result for \
 the user. Word, Excel, PowerPoint and PDF files: create_document (one call, styled — don't write python-pptx/docx \
-code). PowerPoint content: use a # heading per slide followed by - bullets. Totals, counts and averages over a \
-data file: query_data (SQL) or python_sandbox.
+code). PowerPoint: JSON slides with layouts (stats, chart, table, cards) look best; a # heading per slide with \
+- bullets also works. Totals, counts and averages over a data file: query_data (SQL) or python_sandbox.
 - Independent lookups go in one step as several tool calls: they run at the same time.
 - If the task turns out bigger than it looked (several sources or items to cover, a comparison, a document or \
 software to build), call go_extensive: a plan, a checklist and parallel research workers take over, keeping what you found.
