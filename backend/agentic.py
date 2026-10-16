@@ -1491,6 +1491,7 @@ EFFORT_CAP = {"auto": -1, "minimal": 0, "low": 1024, "medium": 4096, "high": 122
 
 
 _THINK_FLAG_MOVES = {}            # (server, model) -> True when the template's OPENING depends on enable_thinking
+SAVED_TOOL_CHARS = 12000          # a tool result longer than this is cut when the engine state is saved
 NO_THINK_BUDGET = 32              # "don't think" on such a template: a tiny budget instead of switching thinking off
 
 
@@ -2787,13 +2788,20 @@ class AgentEngine:
             if isinstance(m.get("content"), list):
                 m["content"] = " ".join(p.get("text", "") for p in m["content"] if p.get("type") == "text") \
                     + " (image omitted)"
-            if m.get("role") == "tool" and len(m.get("content") or "") > 4000:
-                m["content"] = m["content"][:4000] + " …[trimmed when saved]"
+            # 12K keeps a whole read_file result (about 9K characters at most) for a resume after an app restart;
+            # at 4K the model came back missing the text of its larger reads
+            if m.get("role") == "tool" and len(m.get("content") or "") > SAVED_TOOL_CHARS:
+                m["content"] = m["content"][:SAVED_TOOL_CHARS] + " …[trimmed when saved]"
             hist.append(m)
         return {"history": hist, "summary": self.summary, "pins": getattr(self, "_pins", {}), "cwd": self.ctx.cwd, "workspace": self.ctx.workspace,
                 "enabled_tools": sorted(self.enabled_tools),
                 "verification_root": getattr(self.ctx,"verification_root",None), "tracker_path": self.ctx.tracker_path, "session_ok": sorted(self.session_ok),
                 "project": bool(getattr(self, "_project", False)),
+                "build_profile": bool(getattr(self, "_build_profile", False)),
+                "code_work": bool(getattr(self, "_code_work", False)),
+                # which lines of which file version each read showed: after a restart the read guard still answers
+                # "already in context" for text the model can still see, instead of the file again
+                "reads": {k: [list(r) for r in v] for k, v in (self.__dict__.get("_reads") or {}).items()},
                 "screen": "screenshot" in (self.reg.by_name if self.reg else {})}
 
     def _today(self):
@@ -2852,6 +2860,9 @@ class AgentEngine:
         self.enabled_tools = set(st.get("enabled_tools") or [])
         self._restore_screen = bool(st.get("screen"))
         self._project = bool(st.get("project"))
+        self._build_profile = bool(st.get("build_profile"))   # an app restart mid-build keeps the build prompt
+        self._code_work = bool(st.get("code_work"))           # and focus_pack
+        self._reads = {k: [tuple(r) for r in v] for k, v in (st.get("reads") or {}).items()}
 
     # ---------------------------------------------------------------- prompts
     def _instructions(self):
@@ -4357,6 +4368,14 @@ class AgentEngine:
                 self._escalated = True
                 if self.cfg.get("require_first_tool"):
                     self._require_call = True
+            # build prompt and code tools: decided from the TASK, not this message — after an app restart a fresh
+            # engine saw only "continue" and dropped both mid-build (the lean pass that used to decide them is skipped
+            # while a checklist is open)
+            task_text = self._task_text(user_text)
+            if getattr(self, "_project", False) or self._BUILD_REQ_RX.search(task_text):
+                self._build_profile = True           # set before the first step: the prompt start stays fixed
+            if getattr(self, "_build_profile", False) or self._CODE_REQ_RX.search(task_text):
+                self._code_work = True               # focus_pack loads (decided once: the tool list stays fixed)
             need, decided = False, False
             if self._effort:
                 # the agent judged the effort itself (guideline in the lean prompt): plan size and thinking per step.
@@ -4375,10 +4394,7 @@ class AgentEngine:
                 self._last_effort = dict(self._effort)
                 if self._effort["plan"] == "project" or re.match(r"\s*project\s*:", user_text or "", re.I):
                     self._start_project()
-                if getattr(self, "_project", False) or self._BUILD_REQ_RX.search(user_text or ""):
-                    self._build_profile = True       # set before the first step: the prompt start stays fixed
-                if getattr(self, "_build_profile", False) or self._CODE_REQ_RX.search(user_text or ""):
-                    self._code_work = True           # focus_pack loads (decided once: the tool list stays fixed)
+                    self._build_profile = self._code_work = True
                 self.emit("status", text=f"Plan: {self._effort['plan']} · thinking: {self._effort['think']}")
             elif self._escalated and self._depth == "basic" and not self.should_stop():
                 # the lean pass only knew get_tools: the plan decision (which sees the whole harness) has the last
@@ -4926,7 +4942,8 @@ class AgentEngine:
         sends = (name == "http_request" and isinstance(args, dict)
                  and str(args.get("method") or "GET").upper() not in ("GET", "HEAD", "OPTIONS"))
         if ok and t and (t["kind"] in (at.WRITE, at.EXEC, at.INPUT) or sends   # a refused or failed write changed nothing
-                         or name in ("artifact_create", "artifact_edit")):   # note tools that change what a read returns
+                         or name in ("artifact_create", "artifact_edit",     # note tools that change what a read returns
+                                     "module_contract", "begin_module")):  # a new contract changes what verify reports
             self._change_seq += 1                 # anything that may change files or state invalidates earlier results
         if key:
             head = "\n".join(ln for ln in (text or "").splitlines() if ln.strip())[:400]
@@ -6203,6 +6220,19 @@ Reply with JSON only: a few words of reason, then answer_directly, then needs_pl
     _CONTINUE_RX = re.compile(r"^\s*(continue|go on|go ahead|keep going|keep at it|proceed|carry on|resume|try again|retry|"
                               r"do it|finish it|fix it|yes(,?\s*(please|do it|go ahead|continue|proceed))?|ok(ay)?,?\s*"
                               r"(go|continue|proceed|do it))\b[\s\w,!.']{0,30}$", re.I)
+
+    def _task_text(self, user_text):
+        """The request this turn works on: the message itself, or for 'continue' / 'go on' the latest earlier user
+        request (the app's reminder blocks stripped)."""
+        if not self._CONTINUE_RX.match(user_text or ""):
+            return user_text or ""
+        for m in reversed(self.history):
+            if m.get("role") != "user":
+                continue
+            t = str(m.get("content") or "").split(REMINDER_TAG)[0].strip()
+            if t and not self._CONTINUE_RX.match(t):
+                return t
+        return user_text or ""
 
     def _continues_work(self, user_text):
         """'continue' / 'proceed' / 'yes, do it' right after a turn in which the agent used tools."""

@@ -552,8 +552,19 @@ def _seen_current(c, p):
     return k is not None and k == _fstamp(p)
 
 
+KEPT_SHOW_CHARS = 9000            # an unread-overwrite refusal shows the file up to this size (then it counts as read)
+
+
 def t_write_file(a, c):
     p = c.resolve(a.get("path"))
+    kept = c.__dict__.setdefault("_kept_writes", {})
+    key = os.path.abspath(p).lower()
+    if a.get("use_kept"):
+        if key not in kept:
+            raise ToolError(f"there is no kept write for {os.path.basename(p)}; send the content")
+        a = {**a, "content": kept.pop(key)}
+    elif "content" not in a:
+        raise ToolError("missing required argument(s): content")
     content = str(a.get("content", ""))
     if len(content) > 1_000_000:
         raise ToolError("content too large (1 MB limit)")
@@ -568,10 +579,18 @@ def t_write_file(a, c):
     if existed and not a.get("append"):
         if not _seen_current(c, p):
             # overwriting from memory loses work (a model rewrote a PRD section by section and wiped its own earlier
-            # sections); the agent must know the file as it is now
-            raise ToolError(f"{os.path.basename(p)} already exists and you haven't read its current version, so "
-                            f"overwriting it could lose content. read_file it first — or use append=true to add to "
-                            f"it, or edit_file for a targeted change.")
+            # sections); the agent must know the file as it is now. The refusal shows the file (that is the read) and
+            # keeps the new content: a 27B regenerated a 250-line test file after this refusal (~3 min on 8 GB).
+            kept[key] = content
+            shown = ""
+            if len(old) <= KEPT_SHOW_CHARS:
+                shown = "\nIts current content:\n" + _numbered(old.splitlines(), 1)
+                note_seen(c, p)
+            raise ToolError(f"{os.path.basename(p)} already exists and you hadn't read its current version, so it was "
+                            f"not overwritten. Your new content is kept: if it should replace the file as it is now, "
+                            f"call write_file(path, use_kept=true) — no need to send the content again. Otherwise "
+                            f"use edit_file for a targeted change or append=true to add to it."
+                            + (shown or " The file is large: read_file it first, then use_kept=true."))
         old_n, new_n = len(old.splitlines()), len(new.splitlines())
         sig = (os.path.abspath(p).lower(), hashlib.md5(new.encode("utf-8", "replace")).hexdigest())
         ok = c.__dict__.setdefault("_shrink_ok", set())
@@ -4320,7 +4339,7 @@ BUILTIN = [
     ("write_file", WRITE, "Create a new text file, or overwrite one with the full new content "
      "(append=true adds to the end). Folders are created as needed. For small changes to an "
      "existing file use edit_file instead.",
-     _obj({"path": S, "content": S, "append": B}, ["path", "content"]), t_write_file),
+     _obj({"path": S, "content": S, "append": B, "use_kept": B}, ["path"]), t_write_file),
     ("edit_file", WRITE, "Change part of an existing file. By line numbers (easiest: no need to copy the old "
      "text): start_line + end_line + new replaces those lines, with numbers as read_file or focus_pack showed them "
      "(expect = the first line's current text, optional check); insert_after=N inserts new after line N (0 = top). "
