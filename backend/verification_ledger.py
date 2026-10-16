@@ -1,5 +1,16 @@
-"""Project contracts and version-bound execution receipts for ordinary tool execution.
-This is a workflow policy, not an adversarial sandbox or proof of test sufficiency.
+"""Proof that software changes were tested, in one of two modes per project folder (state["mode"]):
+
+  evidence  (the default: existing repos, quick fixes, any language) — writes are never blocked. The ledger tracks
+            which code files this chat changed since a passing test run covered them, and a checklist item can't be
+            marked done (and the answer is labelled) while such untested changes remain. Any test runner counts:
+            run_tests, or the project's own command through the shell (pytest, cargo test, go test, npm test, …).
+  modules   (only for a project built from scratch in an empty folder) — the contract → build → verify_module
+            ceremony: code files are written inside an active module, and verify_module's receipts gate completion.
+            It keeps a small model organised on a large build; on ordinary work it only got in the way (every write
+            needed a 12-field contract, and only pytest/node projects could declare one).
+
+Every refusal names the exact call or change that clears it. This is a workflow policy, not an adversarial sandbox or
+proof of test sufficiency.
 """
 import copy
 import fnmatch
@@ -37,12 +48,30 @@ def sha(path): return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 def enabled(ctx): return bool(getattr(ctx,"build_test_record",False))
 
+# checklist items about documents or planning, not code: untested code changes don't block marking them done
+DOCS_ITEM_RX=re.compile(r"\b(readme|docs?|documentation|prd|design|plan|research|notes?|write-?up|report|changelog)\b",re.I)
+# a shell command that runs tests (any common runner)
+TEST_CMD_RX=re.compile(r"\b(pytest|unittest|npm(\s+run)?\s+test|pnpm\s+test|yarn\s+test|node\s+--test|jest|vitest|mocha|"
+                       r"go\s+test|cargo\s+(test|nextest)|dotnet\s+test|mvn\s+(-\S+\s+)*test|gradlew?\s+(\S+\s+)*test|"
+                       r"ctest|make\s+(check|test)|rspec|phpunit|deno\s+test|bun\s+test|swift\s+test)\b",re.I)
+# a test command aimed at particular files (a partial run): file names, pytest node ids, -k/-run filters
+PARTIAL_RX=re.compile(r"(\S+\.(py|js|mjs|cjs|ts|tsx|go|rs|rb|php)\b|::|\s-k\s|\s-run\s|--filter\b)",re.I)
+
+
+def _tracker_items(t):
+    import agent_tools
+    try:return agent_tools.tracker_items(t or {})
+    except Exception:return []
+
+
 def for_ctx(ctx):
     if not enabled(ctx): return None
     root=getattr(ctx,"verification_root",None) or getattr(ctx,"cwd",None)
     if not root: return None
     import agent_tools
-    return Ledger(root,Path(agent_tools.TRACKERS).parent/"verification_ledgers")
+    ledger=Ledger(root,Path(agent_tools.TRACKERS).parent/"verification_ledgers")
+    ledger.decide_mode(ctx)
+    return ledger
 
 class Ledger:
     def __init__(self, root, storage):
@@ -69,10 +98,89 @@ class Ledger:
         from context_checkpoint import atomic_save
         atomic_save(str(self.path),self.state)
 
+    # ---------------------------------------------------------------- mode
+    @property
+    def mode(self):
+        return self.state.get("mode") or ("modules" if self.state.get("modules") else "evidence")
+
+    def decide_mode(self,ctx):
+        """Once per project folder: the module ceremony only for a from-scratch build (a build request and a folder with
+        no code yet); everything else — existing repos, fixes, refactors, scripts — gets evidence mode. A ledger that
+        already has modules keeps them."""
+        if self.state.get("mode"):return self.state["mode"]
+        if self.state.get("modules"):mode="modules"
+        elif getattr(ctx,"project_build",False) and not self.inventory():mode="modules"
+        else:mode="evidence"
+        self.state["mode"]=mode;self.save()
+        return mode
+
+    # ---------------------------------------------------------------- evidence mode
+    def pending(self,conv=None):
+        """Code files changed (in this chat, when conv is given) that no passing test run has covered since."""
+        ch=self.state.get("changed") or {}
+        return sorted(p for p,v in ch.items() if conv is None or v.get("conv")==conv)
+
+    def note_changes(self,changed,after,conv):
+        ch=self.state.setdefault("changed",{})
+        for p in changed:
+            if p not in after:
+                ch.pop(p,None)                        # deleted: nothing left to test
+            elif not is_runtime_data(p):
+                ch[p]={"t":time.time(),"conv":conv or ""}
+
+    def note_test_run(self,conv,command,passed,failed,full,started,targets=()):
+        """A test run finished. A passing run covers what changed before it started: everything for a full run; for a
+        run aimed at particular test files, those files and the project modules they import."""
+        runs=self.state.setdefault("test_runs",[])
+        runs.append({"t":time.time(),"conv":conv or "","command":str(command)[:200],"passed":int(passed or 0),
+                     "failed":int(failed or 0),"full":bool(full)})
+        del runs[:-10]
+        if failed or not passed:
+            self.save();return []
+        ch=self.state.setdefault("changed",{})
+        if full:
+            covered=[p for p,v in ch.items() if v.get("t",0)<=started]
+        else:
+            scope=self._covered_by(targets)
+            covered=[p for p,v in ch.items() if v.get("t",0)<=started and p in scope]
+        for p in covered:ch.pop(p,None)
+        self.save()
+        return covered
+
+    def _covered_by(self,targets):
+        """Project files a partial test run covers: the test files it named and the modules they import."""
+        out=set();inv=None
+        for t in targets or ():
+            rel=str(t).replace("\\","/").split("::")[0]
+            p=(self.root/rel) if not Path(rel).is_absolute() else Path(rel)
+            try:rel=p.resolve().relative_to(self.root).as_posix()
+            except (ValueError,OSError):continue
+            out.add(rel)
+            try:src=p.read_text(encoding="utf-8",errors="replace")
+            except OSError:continue
+            names=set(re.findall(r"^\s*(?:from|import)\s+([\w.]+)",src,re.M))
+            names|={n.lstrip("./") for n in re.findall(r"(?:require\(|from\s+)['\"](\.{1,2}/[^'\"]+)['\"]",src)}
+            inv=inv if inv is not None else list(self.inventory())
+            for n in names:
+                stem=n.replace(".","/") if "/" not in n else n
+                for cand in inv:
+                    base=os.path.splitext(cand)[0]
+                    if base==stem or base.endswith("/"+stem) or base.rsplit("/",1)[-1]==stem.rsplit("/",1)[-1]:
+                        out.add(cand)
+        return out
+
+    def evidence_message(self,iid,files):
+        shown=", ".join(files[:6])+(" and "+str(len(files)-6)+" more" if len(files)>6 else "")
+        return ("Not marked done: "+iid+" — "+shown+" changed since a passing test run last covered "
+                +("it" if len(files)==1 else "them")+". Run the project's tests (run_tests, or its own command such "
+                "as pytest, npm test, cargo test or go test); once they pass, mark "+iid+" done again. If there is no "
+                "test for this yet, add one that exercises the change and run it. If it truly can't be tested "
+                "automatically, set "+iid+" to 'blocked' with the reason instead.")
+
     def confined(self, name):
-        if not isinstance(name,str) or not name or Path(name).is_absolute() or ".." in Path(name).parts: raise PolicyError("Use project-relative paths/patterns")
+        if not isinstance(name,str) or not name or Path(name).is_absolute() or ".." in Path(name).parts: raise PolicyError("Not recorded: "+repr(name)[:80]+" must be a path relative to the project folder (no drive letter, no '..'), e.g. 'src/app.py' or 'tests/test_*.py'.")
         p=(self.root/name).resolve()
-        if not p.is_relative_to(self.root): raise PolicyError("Path escapes project")
+        if not p.is_relative_to(self.root): raise PolicyError("Not recorded: "+repr(name)[:80]+" points outside the project folder "+str(self.root)+"; use a path inside it.")
         return p
 
     def inventory(self):
@@ -117,21 +225,18 @@ class Ledger:
 
     def declare(self,args):
         with self.lock:
-            self.refresh();mid=args["id"]
-            if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}",mid):raise PolicyError("Use a stable module ID")
-            for key in ("purpose","inputs","outputs","errors","effects"):
-                if not isinstance(args[key],str) or not args[key].strip():raise PolicyError("Describe "+key)
-            for key in ("sources","tests","checks","dependencies","tracker_ids"):
-                if not isinstance(args[key],list) or any(not isinstance(x,str) or not x.strip() for x in args[key]):raise PolicyError("Use string lists for "+key)
-            if not args["sources"] or not args["tests"] or not args["checks"]:raise PolicyError("Declare sources, test paths and behavioral checks")
-            if args["framework"] not in ("node","pytest"):raise PolicyError("Use node or pytest; these are the supported receipt adapters")
+            self.refresh();args=self._normal_contract(args);mid=args["id"]
             for p in args["sources"]+args["tests"]:self.confined(p)
-            if any(d not in self.state["modules"] or d==mid for d in args["dependencies"]):raise PolicyError("Declare prerequisite modules first; no self dependency")
+            bad=[d for d in args["dependencies"] if d not in self.state["modules"] or d==mid]
+            if bad:raise PolicyError("Not recorded: dependencies "+", ".join("'"+d+"'" for d in bad)+" are not declared modules"
+                                     +(" (a module can't depend on itself)" if mid in bad else "")+". Declared modules: "
+                                     +(", ".join(self.state["modules"]) or "none")+". Remove them from dependencies, or "
+                                     "declare those modules first with module_contract.")
             old=self.state["modules"].get(mid)
             candidate=dict(copy.deepcopy(args),state="needs_verification")
             graph={k:list(v["dependencies"]) for k,v in self.state["modules"].items()};graph[mid]=candidate["dependencies"]
             def visit(n,seen):
-                if n in seen:raise PolicyError("Dependency cycle; define a coherent change cohort or explicit interface")
+                if n in seen:raise PolicyError("Not recorded: dependencies form a cycle through '"+n+"'. Remove one of those dependencies (a module may only depend on modules declared before it), or merge the modules into one.")
                 for d in graph[n]:visit(d,seen|{n})
             visit(mid,set())
             if old and all(old.get(k)==v for k,v in args.items()):return "Contract unchanged; "+old["state"]
@@ -139,18 +244,59 @@ class Ledger:
             self.state["unowned"]=[p for p in self.state["unowned"] if not self.owners(p)]
             self.save();return "Contract recorded; begin this module before building. Existing code is unverified."
 
+    def _normal_contract(self,a):
+        """A contract with only id, sources and tests required (the other fields are optional notes). The framework is
+        inferred from the test files; other languages give test_command (e.g. 'cargo test'). Each refusal says what
+        to send instead."""
+        a=dict(a or {})
+        mid=a.get("id")
+        if not isinstance(mid,str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}",mid):
+            raise PolicyError("Not recorded: id must be a short name of letters, digits, _ or - (no spaces), e.g. '"
+                              +(re.sub(r"[^A-Za-z0-9_-]+","_",str(mid or "module")).strip("_")[:40] or "module")
+                              +"'; you sent "+repr(mid)[:60]+".")
+        for key in ("purpose","inputs","outputs","errors","effects"):
+            a[key]=str(a.get(key) or "").strip()
+        for key in ("sources","tests","checks","dependencies","tracker_ids"):
+            v=a.get(key)
+            if v in (None,""):v=[]
+            if isinstance(v,str):v=[v]
+            if not isinstance(v,list) or any(not isinstance(x,str) or not x.strip() for x in v):
+                raise PolicyError("Not recorded: "+key+" must be a list of strings, e.g. "+key+"=['"
+                                  +("app.py" if key=="sources" else "tests/test_app.py" if key=="tests" else "...")
+                                  +"']; you sent "+repr(v)[:80]+".")
+            a[key]=[x.strip() for x in v]
+        if not a["sources"]:
+            raise PolicyError("Not recorded: list the files this module builds in sources, e.g. sources=['app.py'].")
+        if not a["tests"]:
+            raise PolicyError("Not recorded: list its test files in tests, e.g. tests=['tests/test_"
+                              +os.path.splitext(os.path.basename(a["sources"][0]))[0]+".py'] (they may not exist yet).")
+        fw=str(a.get("framework") or "").strip().lower()
+        if not fw:
+            exts={os.path.splitext(t)[1].lower() for t in a["tests"]}
+            fw="pytest" if ".py" in exts else "node" if exts & {".js",".cjs",".mjs",".ts"} else ("command" if a.get("test_command") else "")
+        if fw=="command" and not str(a.get("test_command") or "").strip():
+            raise PolicyError("Not recorded: framework 'command' needs test_command, the shell command that runs this "
+                              "module's tests (e.g. 'cargo test', 'go test ./...', 'dotnet test').")
+        if fw not in ("pytest","node","command"):
+            raise PolicyError("Not recorded: can't tell how to run "+", ".join(a["tests"][:3])+". Use Python test files "
+                              "(pytest), JavaScript ones (node --test), or give test_command='<the shell command that "
+                              "runs them>' for any other language.")
+        a["framework"]=fw
+        a["test_command"]=str(a.get("test_command") or "").strip()
+        return a
+
     def begin(self,mid):
         with self.lock:
             self.refresh()
-            if mid not in self.state["modules"]:raise PolicyError("Declare module_contract first")
+            if mid not in self.state["modules"]:raise PolicyError("No module '"+mid+"' yet. Declared: "+(", ".join(self.state["modules"]) or "none")+". Declare it first: module_contract(id='"+mid+"', sources=[...], tests=[...]).")
             active=self.state["active"]
             if active and active!=mid and not self.may_switch(active,mid):
                 raise PolicyError("Build gate: module '"+active+"' is not verified, so you can't switch to '"+mid+"' yet. "
                                   "Run verify_module('"+active+"') and fix what fails. You can switch while it fails only "
                                   "to a module that is already verified or that '"+active+"' depends on (to fix it).")
             m=self.state["modules"][mid]
-            if self.state["unowned"]:raise PolicyError("Declare ownership of changed sources: "+", ".join(self.state["unowned"][:8]))
-            if any(self.state["modules"][d]["state"]!="verified" for d in m["dependencies"]):raise PolicyError("Verify prerequisite modules before dependent work")
+            if self.state["unowned"]:raise PolicyError("Not started: changed files no module owns: "+", ".join(self.state["unowned"][:8])+". Add them to a module's sources or tests with module_contract (same id, the files added), then call begin_module('"+mid+"') again.")
+            if any(self.state["modules"][d]["state"]!="verified" for d in m["dependencies"]):raise PolicyError("Not started: '"+mid+"' depends on "+", ".join("'"+d+"'" for d in m["dependencies"] if self.state["modules"][d]["state"]!="verified")+", not verified at the current code. Run verify_module on "+("it" if sum(self.state["modules"][d]["state"]!="verified" for d in m["dependencies"])==1 else "each")+" first (begin_module on it to fix what fails).")
             self.state["active"]=mid
             if m["state"]=="verified":m["state"]="building"
             self.save();return "Build active module "+mid+", run verify_module, then record is automatic."
@@ -231,6 +377,8 @@ class Ledger:
         return due
 
     def preflight(self,name,args,kind):
+        if self.mode=="evidence":
+            return self.inventory()                   # writes are never blocked: changes are tracked afterwards
         self.refresh()
         if kind=="write" and args.get("path"):
             p=Path(args["path"])
@@ -242,15 +390,19 @@ class Ledger:
                 if not active or active not in self.owners(rel):
                     self.refused_rel=rel
                     raise PolicyError(self.gate_message(rel,active))
-                if any(self.state["modules"][d]["state"]!="verified" for d in self.state["modules"][active]["dependencies"]):raise PolicyError("Build gate: prerequisite verification changed; reverify before dependent edits")
+                if any(self.state["modules"][d]["state"]!="verified" for d in self.state["modules"][active]["dependencies"]):raise PolicyError("Build gate: not written — module '"+active+"' depends on "+", ".join("'"+d+"'" for d in self.state["modules"][active]["dependencies"] if self.state["modules"][d]["state"]!="verified")+", which changed since it was verified. Run verify_module on it again, then write this.")
         return self.inventory()
 
-    def record_changes(self,before,kind="write"):
+    def record_changes(self,before,kind="write",conv=None):
         """Files changed by a call. A new file no module owns becomes 'unowned' (it blocks begin_module and checklist
         completion until a module claims it) — except when a COMMAND made it: runtime data a program or its tests
         write (expenses.json) is ignored, and code a command creates (a downloaded library, scaffolding) joins the
         active module. Downloaded three.js files and an npm package.json blocked whole builds as 'unowned'."""
         after=self.inventory();changed={p for p in before.keys()|after.keys() if before.get(p)!=after.get(p)}
+        if self.mode=="evidence":
+            self.note_changes(changed,after,conv)
+            self.save()
+            return changed
         for p in changed:(self.state.get("drafts") or {}).pop(p,None)
         made=kind not in ("write",None)
         for p in sorted(changed):
@@ -282,7 +434,17 @@ class Ledger:
               "done automatically: there is no need to mark them again.")
         return msg
 
-    def check_tracker(self,updates,tracker):
+    def check_tracker(self,updates,tracker,conv=None):
+        if self.mode=="evidence":
+            files=self.pending(conv)
+            if not files:return
+            items={i:text for i,text,_s,_m in _tracker_items(tracker)}
+            for u in updates or []:
+                if not isinstance(u,dict):continue
+                iid=str(u.get("id",""));status=str(u.get("status","")).lower()
+                if status in ("done","complete","completed","finished") and not DOCS_ITEM_RX.search(str(items.get(iid,""))):
+                    raise PolicyError(self.evidence_message(iid,files))
+            return
         self.refresh()
         for u in updates or []:
             if not isinstance(u,dict):continue
@@ -292,28 +454,38 @@ class Ledger:
                 if status in ("done","complete","completed","finished"):
                     if linked and (self.state["unowned"] or any(m["state"]!="verified" for m in linked)):
                         raise PolicyError(self.completion_message(iid,linked))
-                elif linked and any(any(self.state["modules"][d]["state"]!="verified" for d in m["dependencies"]) for m in linked):raise PolicyError("Build gate: prerequisite checks are not verified")
+                elif linked and any(any(self.state["modules"][d]["state"]!="verified" for d in m["dependencies"]) for m in linked):raise PolicyError("Build gate: "+iid+" can't start yet: its module depends on modules not verified at the current code ("+", ".join(sorted({d for m in linked for d in m["dependencies"] if self.state["modules"][d]["state"]!="verified"}))+"). Run verify_module on them first.")
 
-    def summary(self):
+    def summary(self,conv=None):
+        if self.mode=="evidence":
+            return {"root":str(self.root),"mode":"evidence","untested_changes":self.pending(conv),
+                    "last_test_runs":[{k:r.get(k) for k in ("command","passed","failed","full")}
+                                      for r in (self.state.get("test_runs") or [])[-3:]]}
         self.refresh()
-        return {"root":str(self.root),"active":self.state["active"],"unowned_changes":self.state["unowned"],"modules":[{k:m.get(k) for k in ("id","purpose","inputs","outputs","errors","effects","checks","sources","tests","dependencies","tracker_ids","state","receipt")} for m in self.state["modules"].values()],"latest_receipts":[{k:r.get(k) for k in ("id","module","status","exit","tests","failures","uncovered_checks","report","output","time","scope")} for r in self.state["receipts"][-6:]]}
+        return {"root":str(self.root),"mode":"modules","active":self.state["active"],"unowned_changes":self.state["unowned"],"modules":[{k:m.get(k) for k in ("id","purpose","inputs","outputs","errors","effects","checks","sources","tests","dependencies","tracker_ids","state","receipt")} for m in self.state["modules"].values()],"latest_receipts":[{k:r.get(k) for k in ("id","module","status","exit","tests","failures","uncovered_checks","report","output","time","scope")} for r in self.state["receipts"][-6:]]}
 
     def verify(self,mid,ctx):
         with self.lock:
             self.refresh()
-            if mid not in self.state["modules"]:raise PolicyError("Declare module_contract first")
+            if mid not in self.state["modules"]:raise PolicyError("No module '"+mid+"' to verify. Declared: "+(", ".join(self.state["modules"]) or "none")+". Declare it with module_contract first.")
             m=self.state["modules"][mid]
-            if any(self.state["modules"][d]["state"]!="verified" for d in m["dependencies"]):raise PolicyError("Prerequisite verification is stale or missing")
+            stale=[d for d in m["dependencies"] if self.state["modules"][d]["state"]!="verified"]
+            if stale:raise PolicyError("Not run: '"+mid+"' depends on "+", ".join("'"+d+"'" for d in stale)+", not verified at the current code. Run verify_module('"+stale[0]+"') first.")
             paths=[]
             for pattern in m["tests"]:
                 paths.extend(str(p) for p in self.root.glob(pattern) if p.is_file() and p.resolve().is_relative_to(self.root))
-            if not paths:raise PolicyError("No declared test files exist; build behavioral tests before verify_module")
+            if not paths:raise PolicyError("Not run: none of '"+mid+"'s test files exist yet ("+", ".join(m["tests"][:4])+"). Write the tests there — or, if they live elsewhere, call module_contract again with their real paths in tests — then verify_module('"+mid+"').")
             rid=uuid.uuid4().hex;report=self.folder/(rid+".xml");output=self.folder/(rid+".log")
             before=self.fingerprint(m);deps={d:self.state["modules"][d].get("receipt") for d in m["dependencies"]}
             dependency_versions={d:self.fingerprint(self.state["modules"][d]) for d in m["dependencies"]}
-            if m["framework"]=="node":
+            shell=False
+            if m.get("framework")=="command":
+                argv=m["test_command"];shell=True      # any runner: exit code + counts parsed from its output
+            elif m["framework"]=="node":
                 node=shutil.which("node")
-                if not node:raise PolicyError("Node is unavailable; install/prepare the real runtime")
+                if not node:raise PolicyError("Not run: Node.js isn't installed on this PC, so node --test can't run "
+                                              "these tests. Install Node.js, or give this module a test_command that "
+                                              "runs its tests another way.")
                 argv=[node,"--test","--test-reporter=junit","--test-reporter-destination="+str(report),*sorted(set(paths))]
             else:
                 if getattr(sys,"frozen",False):
@@ -324,7 +496,7 @@ class Ledger:
                     py=[str(exe.with_name("python.exe")) if exe.name.lower()=="pythonw.exe" else str(exe)]
                 argv=[*py,"-m","pytest",*sorted(set(paths)),"--junitxml="+str(report),"-q","-p","no:cacheprovider"]
             import subprocess
-            proc=subprocess.Popen(argv,cwd=str(self.root),stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,encoding="utf-8",errors="replace",creationflags=0x08000000 if os.name=="nt" else 0)
+            proc=subprocess.Popen(argv,cwd=str(self.root),stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,encoding="utf-8",errors="replace",shell=shell,creationflags=0x08000000 if os.name=="nt" else 0)
             stopped=False
             while True:
                 try:text,_=proc.communicate(timeout=.5);break
@@ -336,21 +508,30 @@ class Ledger:
                         break
             output.write_text(text,encoding="utf-8")
             cases=[];invalid=False
-            try:cases=list(ET.parse(report).getroot().iter("testcase"))
-            except (OSError,ET.ParseError):invalid=True
-            tests=[c for c in cases if c.find("skipped") is None]
-            # Node treats a plain script as a passing file subtest: it is not a behavioral test.
-            if m["framework"]=="node":tests=[c for c in tests if not c.get("name","").endswith((".js",".cjs",".mjs",".ts"))]
-            failures=sum(c.find("failure") is not None or c.find("error") is not None for c in cases)
+            if m.get("framework")=="command":
+                import agent_tools
+                n_pass,n_fail=agent_tools.test_counts(text)
+                # no per-test report: stand-in cases from the counts, and checks are matched against the output
+                cases=[ET.Element("testcase",name="test "+str(i)) for i in range(max(n_pass,1 if proc.returncode==0 else 0))]
+                failures=n_fail or (0 if proc.returncode==0 else 1)
+                tests=cases
+                uncovered=[check for check in m["checks"] if check.casefold() not in text.casefold()]
+            else:
+                try:cases=list(ET.parse(report).getroot().iter("testcase"))
+                except (OSError,ET.ParseError):invalid=True
+                tests=[c for c in cases if c.find("skipped") is None]
+                # Node treats a plain script as a passing file subtest: it is not a behavioral test.
+                if m["framework"]=="node":tests=[c for c in tests if not c.get("name","").endswith((".js",".cjs",".mjs",".ts"))]
+                failures=sum(c.find("failure") is not None or c.find("error") is not None for c in cases)
+                uncovered=[check for check in m["checks"] if not any(check.casefold() in c.get("name","").casefold() for c in tests)]
             stable=before==self.fingerprint(m) and all(self.fingerprint(self.state["modules"][d])==v for d,v in dependency_versions.items())
-            uncovered=[check for check in m["checks"] if not any(check.casefold() in c.get("name","").casefold() for c in tests)]
             passed=not uncovered and proc.returncode==0 and not stopped and not invalid and bool(tests) and failures==0 and stable
             status="passed" if passed else "uncovered_checks" if uncovered and tests else "interrupted" if stopped else "stale_during_test" if not stable else "no_tests" if not invalid and not tests else "failed" if failures else "execution_error"
-            receipt={"id":rid,"module":mid,"status":status,"exit":proc.returncode,"tests":len(tests),"failures":failures,"test_names":[c.get("name") for c in tests],"uncovered_checks":uncovered,"command":argv,"report":str(report),"output":str(output),"time":time.time(),"fingerprint":before,"dependency_receipts":deps,"runtime":argv[0],"scope":"Executed declared tests; semantic adequacy and full gameplay not independently established"}
+            receipt={"id":rid,"module":mid,"status":status,"exit":proc.returncode,"tests":len(tests),"failures":failures,"test_names":[c.get("name") for c in tests],"uncovered_checks":uncovered,"command":argv,"report":str(report),"output":str(output),"time":time.time(),"fingerprint":before,"dependency_receipts":deps,"runtime":(argv if isinstance(argv,str) else argv[0]),"scope":"Executed declared tests; semantic adequacy and full gameplay not independently established"}
             self.state["receipts"].append(receipt);m["state"]="verified" if passed else "needs_verification" if stopped else "failing"
             if passed:m.update(receipt=rid,fingerprint=before,dependency_receipts=deps)
             self.save();self.refresh()
-            ctx.display={"type":"terminal","shell":"verification","cwd":str(self.root),"command":" ".join(argv),"output":text[-20000:],"exit":proc.returncode}
+            ctx.display={"type":"terminal","shell":"verification","cwd":str(self.root),"command":(argv if isinstance(argv,str) else " ".join(argv)),"output":text[-20000:],"exit":proc.returncode}
             return json.dumps({k:v for k,v in receipt.items() if k!="fingerprint"},ensure_ascii=False)+"\n"+text[-7000:]
 
 
@@ -400,7 +581,7 @@ def invoke(registry,name,args):
             if ledger.adopted and isinstance(out,tuple) and out and isinstance(out[0],str):
                 rel,mid,key=ledger.adopted          # results are (text, image)
                 out=(out[0]+"\n(Build gate: "+rel+" was added to module '"+mid+"' "+key+"; verify_module('"+mid+"') covers it.)",)+tuple(out[1:])
-        finally:ledger.record_changes(before,kind)
+        finally:ledger.record_changes(before,kind,getattr(registry.ctx,"conv_id",None))
         made=ledger.adopted_by_command
         if made and isinstance(out,tuple) and out and isinstance(out[0],str):
             mid=ledger.state.get("active")
@@ -413,13 +594,14 @@ def invoke(registry,name,args):
 def ctx_summary(ctx):
     ledger=for_ctx(ctx)
     if ledger is None:return None
-    with ledger.lock:return ledger.summary()
+    with ledger.lock:return ledger.summary(getattr(ctx,"conv_id",None))
 
 
 def ctx_brief(ctx):
     """Small recurring status view; module_status retrieves the full contracts."""
     state=ctx_summary(ctx)
     if state is None:return None
+    if state.get("mode")=="evidence":return state
     modules=state.get("modules") or []
     return {"active":state.get("active"),
             "unowned_changes":state.get("unowned_changes") or [],

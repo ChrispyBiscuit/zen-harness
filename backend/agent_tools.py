@@ -2036,8 +2036,17 @@ def _module_ledger(c):
     return ledger
 
 
+EVIDENCE_MODE_NOTE=("Not needed here: this project is checked by test evidence, not modules (the module workflow is "
+                    "only for projects built from scratch in an empty folder). Write and edit the code directly, then "
+                    "run the project's tests (run_tests, or its own test command); a passing run is the evidence, and "
+                    "it lets you mark checklist items done.")
+
+
 def t_module_contract(a,c):
-    return _module_ledger(c).declare(a)
+    ledger=_module_ledger(c)
+    if ledger.mode=="evidence":
+        return EVIDENCE_MODE_NOTE
+    return ledger.declare(a)
 
 
 def t_problem_plan(a, c):
@@ -2061,11 +2070,16 @@ def t_problem_status(a, c):
 
 
 def t_begin_module(a,c):
-    return _module_ledger(c).begin(a["id"])
+    ledger=_module_ledger(c)
+    if ledger.mode=="evidence":
+        return EVIDENCE_MODE_NOTE
+    return ledger.begin(a["id"])
 
 
 def t_verify_module(a,c):
     ledger=_module_ledger(c)
+    if ledger.mode=="evidence":
+        return EVIDENCE_MODE_NOTE
     out=ledger.verify(a["id"],c)
     return out+_tick_on_verified(c,ledger,a["id"])
 
@@ -2098,6 +2112,9 @@ def _tick_on_verified(c,ledger,mid):
 
 def t_module_status(a,c):
     ledger=_module_ledger(c)
+    if ledger.mode=="evidence":
+        with ledger.lock:
+            return json.dumps(ledger.summary(getattr(c,"conv_id",None)),ensure_ascii=False)
     with ledger.lock:
         summary=ledger.summary()
         if a.get("receipt"):
@@ -2210,7 +2227,7 @@ def t_update_tracker(a, c):
     import verification_ledger as vl
     ledger=vl.for_ctx(c)
     if ledger is not None:
-        with ledger.lock:ledger.check_tracker(ups,t)
+        with ledger.lock:ledger.check_tracker(ups,t,getattr(c,"conv_id",None))
     for u in ups if isinstance(ups, list) else []:
         iid = str((u or {}).get("id", "")).strip().rstrip(".")
         st = _norm_status((u or {}).get("status"))
@@ -2230,7 +2247,7 @@ def t_update_tracker(a, c):
     if ledger is not None:
         previous={iid:st for iid,_x,st,_m in tracker_items(c.tracker or {})}
         transitions=[{"id":iid,"status":st} for iid,_x,st,_m in tracker_items(t) if previous.get(iid)!=st]
-        with ledger.lock:ledger.check_tracker(transitions,t)
+        with ledger.lock:ledger.check_tracker(transitions,t,getattr(c,"conv_id",None))
     try:
         import obligations
         for iid, _x, st, _m in tracker_items(t):
@@ -3117,10 +3134,57 @@ def test_counts(text):
     if m and not p:                                   # unittest: "Ran 7 tests ... OK" / "FAILED (failures=2)"
         bad = sum(int(x) for x in re.findall(r"(?:failures|errors)=(\d+)", t))
         p, f = int(m.group(1)) - bad, bad
+    if not p and not f:                               # Maven / Gradle: "Tests run: 12, Failures: 1, Errors: 0"
+        runs = re.findall(r"Tests run:\s*(\d+),\s*Failures:\s*(\d+),\s*Errors:\s*(\d+)", t)
+        if runs:
+            n, fl, er = (int(x) for x in runs[-1])
+            p, f = n - fl - er, fl + er
+    if not p and not f:                               # dotnet: "Passed!  - Failed: 0, Passed: 12"
+        m = re.search(r"Failed:\s*(\d+),\s*Passed:\s*(\d+)", t)
+        if m:
+            f, p = int(m.group(1)), int(m.group(2))
+    if not p and not f:                               # ctest: "100% tests passed, 0 tests failed out of 12"
+        m = re.search(r"tests passed, (\d+) tests failed out of (\d+)", t)
+        if m:
+            f = int(m.group(1))
+            p = int(m.group(2)) - f
+    if not p and not f:                               # go test -v: "--- PASS: TestX" / "--- FAIL: TestY"
+        p = len(re.findall(r"^\s*--- PASS:", t, re.M))
+        f = len(re.findall(r"^\s*--- FAIL:", t, re.M))
     if not p and not f:
         p = len(re.findall(r"^\s*(?:PASS(?:ED)?\b|✓|\[PASS\]|ok\b)", t, re.M | re.I))
         f = len(re.findall(r"^\s*(?:FAIL(?:ED)?\b|✗|\[FAIL\]|ERROR\b)", t, re.M | re.I))
     return p, f
+
+
+def _record_test_run(c, name, args, text, p_, f_, started):
+    """A test run (run_tests, or any runner through the shell) is evidence for the changes it covers (evidence mode:
+    verification_ledger.note_test_run). Passed = the run reports success and nothing failed."""
+    try:
+        import verification_ledger as vl
+        cmd = str(args.get("command") or args.get("path") or name) if isinstance(args, dict) else name
+        if name != "run_tests" and not vl.TEST_CMD_RX.search(cmd):
+            return
+        ledger = vl.for_ctx(c)
+        if ledger is None or ledger.mode != "evidence":
+            return
+        head = text.lstrip()[:200]
+        ok = (head.startswith("tests: PASSED") if name == "run_tests"
+              else head.startswith("exit code 0") or (p_ and not f_ and not head.startswith("exit code")))
+        subset = text.startswith(SUBSET_HEAD) or (name == "run_tests" and bool(args.get("only_failed")))
+        targets = [m.group(1) for m in re.finditer(r"(\S+\.(?:py|js|mjs|cjs|ts|tsx|go|rs|rb|php))", cmd)]
+        if name == "run_tests":
+            path = args.get("path") if isinstance(args, dict) else None
+            one_file = bool(path) and os.path.isfile(c.resolve(path))
+            full = not subset and not one_file
+            targets = [path] if one_file else []
+        else:
+            full = not subset and not vl.PARTIAL_RX.search(" " + cmd + " ")
+        with ledger.lock:
+            ledger.note_test_run(getattr(c, "conv_id", None), cmd, p_ if ok else 0, f_ if not ok else f_, full,
+                                 started, targets)
+    except Exception as e:
+        print("test receipt failed:", repr(e))
 
 
 def mark_progress(c, name, args, text):
@@ -4478,13 +4542,18 @@ BUILTIN = [
      _obj({"seconds": N, "text": S}), t_browser_wait),
     ("browser_links", READ, "List the links on the current page (optionally only those containing some text).",
      _obj({"contains": S}), t_browser_links),
-    ("module_contract", NOTE, "Declare one module/coherent change cohort before building: public input/output contract, errors/side effects, owned sources and behavioral tests. sources/tests are project-relative file paths or glob patterns, checks must occur in executed test names. dependencies are previously declared module IDs; tracker_ids link completion to current receipts. Redefining a contract invalidates its verification.",
-     _obj({"id":S,"purpose":S,"inputs":S,"outputs":S,"errors":S,"effects":S,
-           "sources":{"type":"array","items":S},"tests":{"type":"array","items":S},"checks":{"type":"array","items":S},
-           "dependencies":{"type":"array","items":S},"tracker_ids":{"type":"array","items":S},"framework":{"type":"string","enum":["node","pytest"]}},
-          ["id","purpose","inputs","outputs","errors","effects","sources","tests","checks","dependencies","tracker_ids","framework"]),t_module_contract),
+    ("module_contract", NOTE, "Declare a module of a from-scratch project: the files it builds (sources) and its test "
+     "files (tests), as project-relative paths or globs. Only id, sources and tests are required; checks (names that "
+     "must appear in the executed tests), dependencies (earlier module ids), tracker_ids (checklist items it completes) "
+     "and purpose are optional. The test runner is inferred (pytest for .py, node --test for .js/.ts); for any other "
+     "language give test_command (e.g. 'cargo test'). Redefining a contract means verifying it again.",
+     _obj({"id":S,"sources":{"type":"array","items":S},"tests":{"type":"array","items":S},
+           "checks":{"type":"array","items":S},"dependencies":{"type":"array","items":S},
+           "tracker_ids":{"type":"array","items":S},"purpose":S,"inputs":S,"outputs":S,"errors":S,"effects":S,
+           "framework":{"type":"string","enum":["pytest","node","command"]},"test_command":S},
+          ["id","sources","tests"]),t_module_contract),
     ("begin_module", NOTE, "Begin the declared module. Switching from unfinished work or into a module with unverified prerequisites is blocked. Related implementation/tests can be edited together; inspection and setup remain available.",_obj({"id":S},["id"]),t_begin_module),
-    ("verify_module", EXEC, "Run declared behavioral tests using real Node/pytest and collect structured reports. Controller records exact source/test/config versions and prerequisites. Empty, skipped-only, plain-script Node runs or uncovered check names cannot verify a module. No experiment step cap.",_obj({"id":S},["id"]),t_verify_module),
+    ("verify_module", EXEC, "Run the module's tests (pytest, node --test, or its test_command) and record a receipt. Controller records exact source/test/config versions and prerequisites. Empty, skipped-only, plain-script Node runs or uncovered check names cannot verify a module. No experiment step cap.",_obj({"id":S},["id"]),t_verify_module),
     ("module_status", READ, "Show module contracts, current verification and exact execution receipts. Reads fresh project state; changed code/tests/dependencies invalidate old results. Supply receipt to retrieve its full version-bound record.",_obj({"receipt":S},[]),t_module_status),
     ("update_tracker", NOTE, "Your task checklist (it keeps you on track). Create it FIRST for every "
      "request: 'goal'; 'design' = the decisions the result depends on (the hard parts and how you will handle "
@@ -5059,6 +5128,7 @@ class Registry:
                             "harness puts in your conversation history in place of a long earlier tool argument; it "
                             "is not file content, and writing it would replace the real text. Nothing was changed. "
                             "Read the file with read_file to see its current text, then send the actual content.")
+        t_started = time.time()                         # (a passing test run covers changes made before this)
         res = t["fn"](args, self.ctx)
         if (name in ("read_file", "edit_file", "undo_file") or (name == "write_file" and
                 (not args.get("append") or appending))) and args.get("path"):
@@ -5089,6 +5159,7 @@ class Registry:
             cmd_blob = json.dumps(args or {}).lower()
             if name == "run_tests" or (name in ("powershell", "python_host") and re.search(r"test|pytest|unittest", cmd_blob)):
                 p_, f_ = test_counts(str(text))
+                _record_test_run(self.ctx, name, args, str(text), p_, f_, t_started)
                 if name != "run_tests" and (p_ or f_) and _SHELL_TEST_RX.search(cmd_blob) and \
                         not _hist(self.ctx).get("run_tests_hint"):
                     # once per chat: models ran pytest through powershell and lost what run_tests adds

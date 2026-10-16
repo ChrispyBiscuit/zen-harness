@@ -32,13 +32,18 @@ def digest(value):
 
 def text(value, label, limit=2000):
     if not isinstance(value, str) or not value.strip() or len(value) > limit:
-        raise PolicyError(f"{label} must be nonempty text, at most {limit} characters")
+        got = ("nothing" if value in (None, "") else f"{len(value)} characters" if isinstance(value, str)
+               else f"a {type(value).__name__}")
+        raise PolicyError(f"Not recorded: {label} must be text of 1-{limit} characters; you sent {got}. Send it as "
+                          f"one plain string.")
     return value.strip()
 
 
-def identifier(value):
+def identifier(value, field="id"):
     if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", value):
-        raise PolicyError("Use a stable ID of 1-64 letters, digits, underscores or hyphens")
+        hint = re.sub(r"[^A-Za-z0-9_-]+", "_", str(value or "")).strip("_")[:40] or "q1"
+        raise PolicyError(f"Not recorded: {field} must be a short ID of letters, digits, _ or - (no spaces), such as "
+                          f"'{hint}'; you sent {str(repr(value))[:80]}.")
     return value
 
 
@@ -75,9 +80,11 @@ class Workbook:
         self.state["events"].append(dict(kind=kind, time=time.time(), **fields))
 
     def evidence(self, eid):
-        identifier(eid)
+        identifier(eid, "evidence")
         if eid not in self.state["evidence"]:
-            raise PolicyError("Unknown controller evidence ID")
+            recent = ", ".join(self.state["evidence"][-3:]) or "none yet"
+            raise PolicyError(f"Not recorded: evidence '{eid}' is not one of this workbook's results. Use the id printed as "
+                              f"'Controller evidence: <id>' after the tool ran (latest: {recent}).")
         return json.loads((self.folder / (eid + ".json")).read_text(encoding="utf-8"))
 
     @staticmethod
@@ -126,58 +133,77 @@ class Workbook:
         with self.lock:
             self.refresh()
             if self.state["pending"]:
-                raise PolicyError("Execute and record the pending experiment before revising the plan")
+                raise PolicyError(f"Not revised: experiment for question '{self.state['pending']['question']}' is pending. "
+                                  f"Run its tool ({self.state['pending']['tool']}) with the declared arguments, then "
+                                  f"problem_record the result (or problem_record action='cancel' if it was never run).")
             goal = text(a["goal"], "goal")
             if self.state["goal"] and goal != self.state["goal"]:
-                raise PolicyError("Preserve the original goal; a new goal requires a new user task")
+                raise PolicyError(f"Not revised: send the goal unchanged. It is: {self.state['goal'][:300]}")
             constraints = a["constraints"]
             if not isinstance(constraints, list):
-                raise PolicyError("constraints must be a list")
+                raise PolicyError("Not revised: constraints must be a list of strings (send [] if there are none).")
             constraints = [text(v, "constraint") for v in constraints]
             if any(v not in constraints for v in self.state["constraints"]):
-                raise PolicyError("Do not drop existing constraints")
+                raise PolicyError("Not revised: keep the existing constraints in the list and add new ones after them: "
+                                  + json.dumps(self.state["constraints"], ensure_ascii=False)[:600])
             acceptance = copy.deepcopy(self.state["acceptance"])
             for item in a["acceptance"]:
-                iid = identifier(item["id"])
+                iid = identifier(item.get("id") if isinstance(item, dict) else item, "acceptance id")
                 value = text(item["condition"], "acceptance condition")
                 if iid in acceptance and acceptance[iid]["condition"] != value:
-                    raise PolicyError("Existing acceptance conditions cannot be silently rewritten")
+                    raise PolicyError(f"Not revised: acceptance '{iid}' already says: {acceptance[iid]['condition'][:300]}. "
+                                      f"Send that text unchanged, or add the new condition under a new id.")
                 acceptance.setdefault(iid, {"condition": value, "evidence": []})
             if not acceptance:
-                raise PolicyError("Define observable acceptance conditions")
+                raise PolicyError("Not recorded: add at least one acceptance condition, e.g. acceptance=[{'id': 'a1', "
+                                  "'condition': 'all tests pass and the CLI adds an expense'}].")
             questions = copy.deepcopy(self.state["questions"])
             for item in a["questions"]:
-                qid = identifier(item["id"])
+                qid = identifier(item.get("id") if isinstance(item, dict) else item, "question id")
                 old = questions.get(qid)
                 q = {"id": qid, "question": text(item["question"], "question"),
                      "why": text(item["why"], "connection to goal"),
                      "hypotheses": item["hypotheses"], "dependencies": item["dependencies"],
                      "acceptance": item.get("acceptance", [])}
                 if not isinstance(q["acceptance"], list) or any(v not in acceptance for v in q["acceptance"]):
-                    raise PolicyError("Integration questions must reference existing acceptance condition IDs")
+                    bad = [v for v in (q["acceptance"] if isinstance(q["acceptance"], list) else [q["acceptance"]])
+                           if v not in acceptance]
+                    raise PolicyError(f"Not recorded: question '{qid}' acceptance must list acceptance ids "
+                                      f"({', '.join(acceptance) or 'none defined'}), not descriptions; these aren't ids: "
+                                      + "; ".join(str(v)[:60] for v in bad[:3]) + ". Use e.g. acceptance=['"
+                                      + (next(iter(acceptance), "a1")) + "'], or [] if it checks none.")
                 if not isinstance(q["hypotheses"], list) or len(q["hypotheses"]) < 2:
-                    raise PolicyError("Provide at least two distinguishable explanations, including an unknown alternative if needed")
+                    raise PolicyError(f"Not recorded: question '{qid}' needs at least two hypotheses (possible explanations), "
+                                      f"e.g. ['the server returns too little', 'something else (unknown)'].")
                 q["hypotheses"] = [text(h, "hypothesis") for h in q["hypotheses"]]
                 if len(set(q["hypotheses"])) != len(q["hypotheses"]):
-                    raise PolicyError("Hypotheses must differ")
+                    raise PolicyError(f"Not recorded: question '{qid}' lists the same hypothesis twice; make each one a "
+                                      f"different explanation.")
                 if not isinstance(q["dependencies"], list):
-                    raise PolicyError("dependencies must be question IDs")
+                    raise PolicyError(f"Not recorded: question '{qid}' dependencies must be a list of question ids "
+                                      f"(send [] if it depends on none).")
                 if old and any(old[k] != v for k, v in q.items()):
                     if old["status"] == "resolved":
-                        raise PolicyError("Reopen with contradictory evidence before revising a resolved question")
+                        raise PolicyError(f"Not revised: question '{qid}' is resolved. Send it unchanged, or first "
+                                          f"problem_record action='reopen' target='{qid}' with new evidence that contradicts "
+                                          f"its conclusion.")
                     self.event("question_revised", previous=old)
                 questions[qid] = dict(q, status=old["status"] if old else "open",
                                      evidence=old["evidence"] if old else [],
                                      conclusion=old.get("conclusion", "") if old else "")
             def visit(qid, seen):
                 if qid not in questions or qid in seen:
-                    raise PolicyError("Unknown or cyclic question dependency")
+                    raise PolicyError(f"Not recorded: question dependency '{qid}' is "
+                                      + ("not a question id" if qid not in questions else "part of a cycle")
+                                      + f". Known questions: {', '.join(questions)}. Fix the dependencies lists.")
                 for dep in questions[qid]["dependencies"]:
                     visit(dep, seen | {qid})
             for qid in questions:
                 visit(qid, set())
             if not questions:
-                raise PolicyError("Define the question blocking progress")
+                raise PolicyError("Not recorded: add the question that blocks progress, e.g. questions=[{'id': 'q1', "
+                                  "'question': '...', 'why': '...', 'hypotheses': ['...', '...'], 'dependencies': [], "
+                                  "'acceptance': []}].")
             self.state.update(goal=goal, constraints=constraints, acceptance=acceptance, questions=questions)
             self.event("plan", goal=goal)
             self.save()
@@ -187,34 +213,51 @@ class Workbook:
         with self.lock:
             self.refresh()
             if self.state["pending"]:
-                raise PolicyError("Execute then record the current experiment first")
+                raise PolicyError(f"Not declared: an experiment for '{self.state['pending']['question']}' is pending. Run "
+                                  f"{self.state['pending']['tool']} with its declared arguments and problem_record the "
+                                  f"result first (or problem_record action='cancel').")
             q = self.state["questions"].get(a["question"])
             if not q or q["status"] == "resolved":
-                raise PolicyError("Select an open question; resolved questions need changed inputs or contradictory evidence")
+                opened = [k for k, v in self.state["questions"].items() if v["status"] != "resolved"]
+                raise PolicyError(f"Not declared: question '{a.get('question')}' is "
+                                  + ("resolved" if q else "not in the workbook")
+                                  + f". Open questions: {', '.join(opened) or 'none'}. Use one of those, or add a new "
+                                    f"question with problem_plan.")
             if any(self.state["questions"][d]["status"] != "resolved" for d in q["dependencies"]):
-                raise PolicyError("Resolve prerequisites or revise the dependency model with evidence")
+                deps = [d for d in q["dependencies"] if self.state["questions"][d]["status"] != "resolved"]
+                raise PolicyError(f"Not declared: '{q['id']}' depends on unresolved {', '.join(deps)}. Run an experiment "
+                                  f"on {deps[0]} first, or remove the dependency with problem_plan.")
             name = registry.canonical(a["tool"])
             if name in CONTROL or not registry.get(name):
-                raise PolicyError("Choose an actual observation/action tool, not a workbook/control tool")
+                raise PolicyError(f"Not declared: tool '{a.get('tool')}' "
+                                  + ("is a workbook/control tool" if name in CONTROL else "doesn't exist")
+                                  + ". Name the tool that makes the observation, e.g. run_tests, powershell or read_file.")
             if not isinstance(a["arguments"], dict):
-                raise PolicyError("arguments must be a JSON object")
+                raise PolicyError("Not declared: arguments must be the tool's arguments as an object, e.g. "
+                                  "{'path': 'tests'} for run_tests.")
             args = registry.normalize_args(name, a["arguments"])
             predictions = a["predictions"]
             if not isinstance(predictions, list) or len(predictions) < 2:
-                raise PolicyError("Specify at least two possible outcomes and how they change the decision")
+                raise PolicyError("Not declared: predictions needs at least two possible outcomes and what each means, "
+                                  "e.g. ['tests pass: the server was the cause', 'tests still fail: look at the client'].")
             predictions = [text(v, "prediction") for v in predictions]
             if len(set(predictions)) != len(predictions):
-                raise PolicyError("Predicted outcomes must differ")
+                raise PolicyError("Not declared: two predictions are identical; make each outcome different.")
             inputs = a["inputs"]
             if not isinstance(inputs, list):
-                raise PolicyError("inputs must be artifact paths, or [] for external observations")
+                raise PolicyError("Not declared: inputs must be a list of the files this observation depends on "
+                                  "(e.g. ['server.py', 'tests/test_client.py']), or [] for none.")
             paths = [str(Path(registry.ctx.resolve(text(p, "input path"))).resolve()) for p in inputs]
             if any(Path(p).is_dir() for p in paths):
-                raise PolicyError("Declare relevant files, including tests/configuration, rather than directories")
+                raise PolicyError("Not declared: inputs lists a folder ("
+                                  + ", ".join(p for p in paths if Path(p).is_dir())[:200]
+                                  + "); list the specific files instead.")
             sig = digest([name, args])
             gate = self.state["gate"]
             if gate and gate["signature"] == sig and gate["inputs"] == self.versions(gate["inputs"]):
-                raise PolicyError("This repeats the unchanged experiment. Change the observation/action or relevant inputs; rewording is not progress")
+                raise PolicyError("Not declared: this is the same experiment as before and none of its input files "
+                                  "changed, so it would show the same result. Change a file it depends on first, or "
+                                  "choose a different tool or arguments.")
             self.state["active"] = q["id"]
             self.state["pending"] = {"id": uuid.uuid4().hex, "question": q["id"], "tool": name,
                 "arguments": args, "signature": sig, "inputs": paths, "predictions": predictions,
@@ -230,14 +273,19 @@ class Workbook:
             signature = digest([name, args])
             if pending:
                 if pending["status"] != "ready" or pending["signature"] != signature:
-                    raise PolicyError("One experiment is pending. Execute its declared tool/arguments, then record the actual result; problem_status retrieves it")
+                    raise PolicyError(f"Not run: the pending experiment expects {pending['tool']} with "
+                                      + json.dumps(pending["arguments"], ensure_ascii=False)[:300]
+                                      + ". Run exactly that, then problem_record the result, or problem_record "
+                                        "action='cancel' to drop the experiment and work freely.")
                 pending["status"] = "executing"
                 paths = pending["inputs"]
                 experiment = copy.deepcopy(pending)
                 self.save()
             else:
                 if self.state["gate"]:
-                    raise PolicyError("Repeated unchanged evidence: use problem_plan/problem_experiment to choose a different discriminating observation, or ask_user for a concrete blocker")
+                    raise PolicyError("Not run: this action already gave the same result three times with the same "
+                                      "files. Change one of those files, or declare a different observation with "
+                                      "problem_experiment, or ask_user about the blocker.")
                 paths = []
                 experiment = None
             return {"signature": signature, "before": self.versions(paths), "experiment": experiment}
@@ -280,7 +328,9 @@ class Workbook:
             if action == "cancel":
                 pending = self.state["pending"]
                 if not pending or pending["status"] != "ready":
-                    raise PolicyError("Only an unexecuted experiment can be cancelled; observed results must be recorded")
+                    raise PolicyError("Not cancelled: " + ("there is no pending experiment" if not pending else
+                                      "it already ran; record its result with action='supports', 'refutes', "
+                                      "'inconclusive' or 'resolve' and evidence='" + str(pending.get("evidence")) + "'") + ".")
                 self.event("experiment_cancelled", experiment=pending, reason=text(a["interpretation"], "reason"))
                 self.state["pending"] = None
                 self.save()
@@ -290,31 +340,45 @@ class Workbook:
             if action == "reopen":
                 q = self.state["questions"].get(a["target"])
                 if not q or q["status"] != "resolved" or a["evidence"] in q["evidence"] or evidence["error"] or not self.fresh(evidence):
-                    raise PolicyError("Reopening requires new, current contradictory evidence for a resolved question")
+                    raise PolicyError("Not reopened: target must be a resolved question (resolved: "
+                                      + (", ".join(k for k, v in self.state["questions"].items() if v["status"] == "resolved") or "none")
+                                      + ") and evidence a new, successful result that contradicts it.")
                 q.update(status="open", conclusion=conclusion)
                 self.event("reopened", question=q["id"], evidence=a["evidence"], reason=conclusion)
             elif action == "accept":
                 item = self.state["acceptance"].get(a["target"])
                 if not item or self.state["pending"] or self.state["gate"] or any(q["status"] != "resolved" for q in self.state["questions"].values()):
-                    raise PolicyError("Resolve open questions and record experiments before integration acceptance")
+                    opened = [k for k, v in self.state["questions"].items() if v["status"] != "resolved"]
+                    raise PolicyError("Not accepted: " + (f"'{a.get('target')}' is not an acceptance id ({', '.join(self.state['acceptance'])})"
+                                      if not item else "an experiment is pending: record it first" if self.state["pending"]
+                                      else f"questions still open: {', '.join(opened)}; resolve them first" if opened
+                                      else "a loop gate is active: change the inputs first") + ".")
                 experiment = evidence["experiment"]
                 if not self.fresh(evidence) or evidence["error"] or not experiment:
-                    raise PolicyError("Acceptance requires a current executed experiment, not a narration or control-tool result")
+                    raise PolicyError("Not accepted: the evidence must come from an experiment that ran successfully on "
+                                      "the current files (declare one with problem_experiment, run it, then accept with its "
+                                      "evidence id).")
                 execution = evidence.get("execution") or {}
                 if execution.get("exit") not in (None, 0) or execution.get("status") not in (None, "passed"):
-                    raise PolicyError("Failed, empty, uncovered or interrupted execution cannot establish acceptance")
+                    raise PolicyError("Not accepted: that run failed or was incomplete. Fix what it reported, run it again, "
+                                      "and accept with the new evidence id.")
                 if a["target"] not in self.state["questions"][experiment["question"]]["acceptance"]:
-                    raise PolicyError("Use evidence from an explicit integration question for this acceptance condition")
+                    raise PolicyError(f"Not accepted: the evidence answers question '{experiment['question']}', which doesn't "
+                                      f"list '{a['target']}' in its acceptance. Add '{a['target']}' to that question's "
+                                      f"acceptance with problem_plan, or use evidence from a question that does.")
                 item.update(evidence=[a["evidence"]], interpretation=conclusion,
                             scope="Model-assessed acceptance supported by executed evidence")
                 self.event("acceptance", target=a["target"], evidence=a["evidence"], interpretation=conclusion)
             elif action in {"supports", "refutes", "inconclusive", "resolve"}:
                 pending = self.state["pending"]
                 if not pending or pending.get("evidence") != a["evidence"] or pending["question"] != a["target"]:
-                    raise PolicyError("Record the pending experiment's actual evidence against its question")
+                    raise PolicyError("Not recorded: " + ("there is no pending experiment to record" if not pending else
+                                      f"record evidence='{pending.get('evidence')}' against target='{pending['question']}' "
+                                      f"(the pending experiment's result and question)") + ".")
                 q = self.state["questions"][a["target"]]
                 if action == "resolve" and (evidence["error"] or not self.fresh(evidence)):
-                    raise PolicyError("Failed execution or changed inputs cannot resolve a question")
+                    raise PolicyError("Not resolved: that run failed or its input files changed since. Record it as "
+                                      "'inconclusive' or 'refutes', fix the problem, and resolve with a new successful run.")
                 next_step = text(a["next"], "next experiment or integration step")
                 q.update(conclusion=conclusion, next=next_step)
                 if action == "resolve":
@@ -330,7 +394,8 @@ class Workbook:
                 self.event("interpretation", question=q["id"], action=action, evidence=a["evidence"], text=conclusion)
                 self.state["pending"] = None
             else:
-                raise PolicyError("Unknown record action")
+                raise PolicyError(f"Not recorded: action must be one of supports, refutes, inconclusive, resolve, accept, "
+                                  f"reopen or cancel; you sent {str(repr(action))[:40]}.")
             self.save()
             self.refresh()
             return self.summary()
