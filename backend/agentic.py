@@ -2983,6 +2983,11 @@ class AgentEngine:
             # no thinking shown between calls: without a sentence the user sees tool cards appear with no idea why
             parts.append("Thinking is off for this step: begin your reply with one or two short sentences for the "
                          "user — what you are about to do and why — then make the tool call(s).")
+        tgt = getattr(self, "_think_target", None)
+        if tgt and getattr(self, "_think_step", False) and self._role != "exec":
+            parts.append(f"Thinking budget for this step: about {int(tgt * 0.75)} words (the model runs slowly on "
+                         f"this machine). Settle the next action within that, then act; you can think again after "
+                         f"its result.")
         if t and self._role != "exec":
             try:
                 import obligations
@@ -6155,8 +6160,33 @@ class AgentEngine:
             # 'high' used to as well, and a debug streak then spent 3072 tokens (~3 min) on every step.
             setting = str(self.cfg.get("effort") or "").lower()
             b = max(b, EFFORT_THINK["high"]) if setting in ("max", "high") else DEBUG_THINK
+        b = self._time_capped(b, eff)
         cap = think_max(self.cfg)
         return b if cap < 0 else min(b, cap)
+
+    # seconds of thinking a step may take, by level: the token budgets alone meant 2048 tokens = 2+ minutes on a 27B
+    # at 16 tok/s, and the same budget is 40 s on a 9B at 48 tok/s
+    THINK_SECONDS = {"none": 0, "low": 15, "medium": 30, "high": 60, "debug": 45}
+    THINK_FLOOR = 128
+
+    def _time_capped(self, b, eff):
+        """The step's thinking budget, capped by time at the speed the model is generating now (the user's Effort
+        High / Max keeps the full token budget)."""
+        if str(self.cfg.get("effort") or "").lower() in ("max", "high"):
+            return b
+        self._think_target = None
+        tps = float(getattr(self, "_last_tps", 0) or 0)
+        if tps < 1:
+            return b                                 # no measurement yet: the token budget alone
+        level = "debug" if (getattr(self, "_debugging", False) or self._fail_streak >= 1) else eff
+        secs = self.THINK_SECONDS.get(level, 30) * (2 if self._wrapping_up() else 1)
+        target = max(self.THINK_FLOOR, int(tps * secs))
+        if target >= b:
+            return b                                 # a fast model: the token budget is the tighter limit
+        # a soft target the model is told (so it finishes its thought), and the hard cut only at twice that: a cut
+        # mid-thought leaves the model acting on half a plan
+        self._think_target = target
+        return min(b, 2 * target)
 
     def _wants_thinking(self, tools, step):
         """Think where judgment matters, act directly on routine steps. 'high' effort thinks on every step; an
@@ -6939,6 +6969,8 @@ Short phrases, no padding. If the message is trivial chat, keep everything minim
                         if now - tps_last > 1.0 and now - tps_first > 0.5:
                             tps_last = now
                             self.emit("stats", tps=tps_count / (now - tps_first))
+                            if tps_count >= 40:
+                                self._last_tps = tps_count / (now - tps_first)   # sizes the next steps' thinking
                             if getattr(self, "_live_ctx", None):     # a main step: the context gauge moves too
                                 self.emit_context(self._live_ctx + tps_count)
                 pp = ev.get("prompt_progress")

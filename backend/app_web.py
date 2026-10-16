@@ -97,7 +97,25 @@ def start_backend():
         if port_in_use(PORT):
             return True
         time.sleep(0.25)
+    if _rolled_back_failed_update():           # a new version that doesn't start: the previous one, then try again
+        subprocess.Popen(cmd, cwd=HERE, creationflags=flags)
+        for _ in range(240):
+            if port_in_use(PORT):
+                break
+            time.sleep(0.25)
     return True
+
+
+def _rolled_back_failed_update():
+    """The server didn't come up and the last update hasn't proven itself yet: put the previous files back."""
+    try:
+        import updater
+        if updater.pending_verify():
+            updater.rollback("the new version did not start")
+            return True
+    except Exception:
+        pass
+    return False
 
 
 def _start_note_poller(emit):

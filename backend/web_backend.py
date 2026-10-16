@@ -1884,6 +1884,13 @@ def make_app():
     import models_api                          # Settings → Models: inspect, profile, test-load, download
     help_api.install(app)
     models_api.install(app)
+    import update_api                          # updates from git (updater.py): check, install, roll back
+
+    def _save_before_restart():
+        HOST_stop_all()
+        STORE.save_convs()
+    update_api.install(app, busy=lambda: any(r.running() for r in HOST.runs.values()), port=PORT,
+                       before_exit=_save_before_restart)
     app.router.add_get("/", index)
     if os.path.isdir(DIST):
         app.router.add_static("/", DIST, show_index=False)

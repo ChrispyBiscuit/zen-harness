@@ -31,3 +31,17 @@ def test_a_broken_program_keeps_debugging_until_a_clean_run():
     assert e._debugging and e._wants_thinking(True, 6)
     e._watch_progress("run_tests", {}, True, "== 10 passed in 1.0s ==")
     assert not e._debugging and not e._wants_thinking(True, 7)
+
+
+def test_thinking_budget_is_capped_by_time_at_the_measured_speed():
+    e = engine(effort="medium")
+    e._think_effort = "medium"
+    assert e._step_budget(True, 3) == agentic.EFFORT_THINK["medium"]       # no speed measured: tokens only
+    e._last_tps = 16.0                                                      # a 27B late in a build
+    assert e._step_budget(True, 3) == 2 * 16 * 30 and e._think_target == 16 * 30   # told 30 s, cut only at 60 s
+    e._fail_streak = 1
+    assert e._step_budget(True, 3) == 2 * 16 * 45 and e._think_target == 16 * 45   # debugging: told 45 s, cut at 90 s
+    e._fail_streak, e._last_tps = 0, 48.0                                   # a 9B: the token budget is the tighter cap
+    assert e._step_budget(True, 3) == agentic.EFFORT_THINK["medium"]
+    e.cfg["effort"], e._last_tps = "high", 16.0
+    assert e._step_budget(True, 3) == agentic.EFFORT_THINK["medium"]       # the user's High: no time cap

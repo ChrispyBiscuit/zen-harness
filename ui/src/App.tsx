@@ -18,6 +18,7 @@ import { useApp } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import { MeterBar } from "@/components/MeterBar"
 import { CodeIndexChip } from "@/components/CodeIndex"
+import { UpdateChip } from "@/components/UpdateChip"
 import { Decode } from "@/components/Decode"
 import { RefractFilter } from "@/components/Lens"
 import { InkRing } from "@/components/Logo"
@@ -145,6 +146,7 @@ function StatusBar() {
       </span>
       <div className="flex-1" />
       <CodeIndexChip />
+      <UpdateChip />
       <div className="hidden @2xl:flex"><Monitor /></div>
     </footer>
   )

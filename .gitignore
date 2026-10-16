@@ -88,3 +88,6 @@ backend/evals/build/old_explicit/
 
 # focus_pack's saved embeddings (data folder)
 code_index/
+
+# the app updater's own clone, state and backups (backend/updater.py)
+update/
