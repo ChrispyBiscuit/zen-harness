@@ -85,3 +85,6 @@ packaging/build.log
 !backend/evals/build/
 backend/evals/build/runs/
 backend/evals/build/old_explicit/
+
+# focus_pack's saved embeddings (data folder)
+code_index/

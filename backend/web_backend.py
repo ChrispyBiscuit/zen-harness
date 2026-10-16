@@ -1168,6 +1168,45 @@ async def api_browser_input(req):
     return J(st or {})
 
 
+# ---- code index (context_pack): status chip + the code-index view in the side panel
+@routes.get("/api/code_index/status")
+async def api_code_index_status(req):
+    import context_pack as cp
+    return J(cp.index_status())
+
+
+@routes.get("/api/code_index/projects")
+async def api_code_index_projects(req):
+    import context_pack as cp
+    return J({"projects": [cp.index_summary(r) for r in cp.indexed_roots()], "status": cp.index_status()})
+
+
+@routes.get("/api/code_index/pack")
+async def api_code_index_pack(req):
+    """What the agent would see: the focus pack for a goal (read-only; nothing is recorded as shown)."""
+    import context_pack as cp
+    root, q = req.query.get("root") or "", (req.query.get("q") or "").strip()
+    if not (root and os.path.isdir(root) and q):
+        return J({"error": "give root (an indexed project folder) and q"}, status=400)
+    budget = max(500, min(int(req.query.get("budget") or 4000), 12000))
+    text, chosen = await asyncio.to_thread(cp.focus_pack, root, q, budget)
+    return J({"text": text, "used": sum(u["tokens"] for u in chosen),
+              "slices": [{"file": u["file"], "start": u["start"], "end": u["end"], "symbol": u["symbol"],
+                          "tokens": u["tokens"]} for u in chosen]})
+
+
+@routes.post("/api/code_index/rebuild")
+async def api_code_index_rebuild(req):
+    import context_pack as cp
+    body = await req.json()
+    root = str(body.get("root") or "")
+    if not os.path.isdir(root):
+        return J({"error": "no such folder"}, status=400)
+    cp.forget(root)
+    cp.start_index(root)
+    return J({"ok": True, "status": cp.index_status()})
+
+
 @routes.get("/api/sys")
 async def api_sys(req):
     return J(GPU.last or await asyncio.to_thread(GPU.sample))

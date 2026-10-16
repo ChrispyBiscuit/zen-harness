@@ -309,6 +309,73 @@ def _symbol_range(p, lines, symbol):
     return first, last
 
 
+def _pack_root(a, c):
+    """The project folder a focus pack searches: the folder given, else the build's verified root, else the folder
+    holding the files this chat changed, else the working folder."""
+    if a.get("folder"):
+        return c.resolve(str(a["folder"]), True)
+    if getattr(c, "verification_root", None) and os.path.isdir(c.verification_root):
+        return c.verification_root
+    changed = [p for p in (getattr(c, "changed", {}) or {}) if os.path.isfile(p)]
+    if changed:
+        try:
+            return os.path.commonpath([os.path.dirname(p) for p in changed])
+        except ValueError:
+            pass
+    return getattr(c, "cwd", None) or c.roots[0]
+
+
+def t_focus_pack(a, c):
+    """The functions and classes a goal needs, from across a project, in one numbered block (context_pack)."""
+    import context_pack as cp
+    goal = str(a.get("goal") or "").strip()
+    names = a.get("names") or []
+    if isinstance(names, str):
+        names = [n.strip() for n in re.split(r"[,\n]", names) if n.strip()]
+    if not goal and not names:
+        raise ToolError("give a goal (what you are trying to do or understand, or an error) and/or names")
+    root = _pack_root(a, c)
+    files = cp.code_files(root, limit=3001)
+    if not files:
+        raise ToolError(f"no code files under {root}; give folder= the project folder")
+    if len(files) > 3000:
+        raise ToolError(f"{root} holds over 3,000 code files; give folder= the project folder itself")
+    budget = max(1000, min(int(a.get("budget") or 4000), 12000))
+    shown = c.__dict__.setdefault("_pack_shown", set())
+    text, chosen = cp.focus_pack(root, goal or " ".join(names), budget, files=files, names=names, skip=shown,
+                                 embed=cp._default_embed)          # looked up now: tests and settings can swap it
+    shown.update(cp.unit_key(u) for u in chosen)
+    if not text:
+        return f"Nothing in {root} matched. Try other words, exact names, or search_text."
+    return (text + f"\n\n(Project folder: {root}. Missing something? Call focus_pack again with names=[the exact "
+                   f"function, class or file names] — it brings only slices not shown yet.)")
+
+
+def refresh_code_index(c, path):
+    """After a write or edit: if that file's project already has a code index, refresh it in the background (only
+    the changed slices are embedded), so the next focus_pack is current without waiting."""
+    if os.environ.get("LWS_NO_CODE_INDEX"):             # the offline test suite: no background embedding
+        return
+    try:
+        import context_pack as cp
+        if cp.STATUS.get("state") == "indexing":
+            return
+        p = os.path.normcase(os.path.abspath(path))
+        if os.path.splitext(p)[1].lower() not in (".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".html", ".css"):
+            return
+        for key, entry in list(cp._CACHE.items()):
+            if p.startswith(key[0] + os.sep) and entry.get("vecs") is not None:
+                cp.start_index(entry["root"], max_lines=key[2])
+                return
+        # no index yet: start one for the project the agent is writing, so the first focus_pack finds it ready
+        root = _pack_root({}, c)
+        if root and p.startswith(os.path.normcase(os.path.abspath(root)) + os.sep) and \
+                len(cp.code_files(root, limit=1501)) <= 1500:
+            cp.start_index(root)
+    except Exception:
+        pass
+
+
 def t_read_file(a, c):
     p = c.resolve(a.get("path"), True)
     if os.path.isdir(p):
@@ -2390,7 +2457,7 @@ def t_query_data(a, c):
 # groups shown by available_tools (a tool not listed falls under "other")
 TOOL_GROUPS = [
     ("files", "read, find, write and edit files in the allowed folders; search their contents by meaning",
-     ["list_dir", "find_files", "search_text", "trace_symbol", "search_documents", "read_file", "read_document", "write_file", "edit_file", "make_dir",
+     ["list_dir", "find_files", "search_text", "trace_symbol", "search_documents", "focus_pack", "read_file", "read_document", "write_file", "edit_file", "make_dir",
       "move_path", "trash_path"]),
     ("documents", "create professionally styled Word, Excel, PowerPoint and PDF files (the only way to make them)",
      ["create_document"]),
@@ -4110,6 +4177,11 @@ BUILTIN = [
      t_read_document),
     ("find_files", READ, "Find files by name pattern, e.g. '*.py'.",
      _obj({"pattern": S, "root": S}, ["pattern"]), t_find_files),
+    ("focus_pack", READ, "The code a task needs from across a project, in ONE block: the functions and classes that "
+     "best match `goal` (a question, a bug, an error or failing test), as numbered slices from several files, within a "
+     "token budget (default 4000). Use it instead of reading whole files one by one when work spans files. Call it "
+     "again with `names` (exact function/class/file names you still need) — it brings only slices not shown yet.",
+     _obj({"goal": S, "names": {"type": "array", "items": S}, "folder": S, "budget": I}), t_focus_pack),
     ("search_text", READ, "Search inside files (root = a folder or one file) for a regular expression. "
      "context='function' shows each match inside its whole enclosing function (Python; others +-12 lines), "
      "context=N shows N lines around each match — use it to see related code together instead of reading slices.",
@@ -4792,6 +4864,8 @@ class Registry:
                 (not args.get("append") or appending))) and args.get("path"):
             try:
                 note_seen(self.ctx, self.ctx.resolve(args.get("path")))
+                if name != "read_file":
+                    refresh_code_index(self.ctx, self.ctx.resolve(args.get("path")))
             except Exception:
                 pass
         text, image = (res[0], res[1]) if isinstance(res, tuple) else (res, None)

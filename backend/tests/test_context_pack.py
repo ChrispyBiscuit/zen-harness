@@ -87,3 +87,31 @@ def test_link_boost_brings_in_what_a_top_hit_calls():
     _t, on = cp.focus_pack(root, q, 400, embed=None, link_seeds=5, link_boost=0.01)
     assert "compute_tax" not in {u["symbol"] for u in off}
     assert "compute_tax" in {u["symbol"] for u in on}
+
+
+def test_tool_follow_up_brings_only_new_slices_and_reports_unknown_names(monkeypatch):
+    import agent_tools as at
+    monkeypatch.setattr(cp, "_default_embed", None)
+    root = _project()
+    c = at.Ctx([root])
+    c.conv_id = "pack-tool"
+    first = at.t_focus_pack({"goal": "where is a negative amount_cents rejected", "budget": 200}, c)
+    assert "### db.py:" in first and "Missing something?" in first
+    again = at.t_focus_pack({"goal": "amount", "names": ["monthly_totals", "no_such_function"], "budget": 400}, c)
+    assert "monthly_totals" in again and "Not found in the project: no_such_function" in again
+    assert again.count("def add_expense") == 0                    # shown in the first pack: left out
+
+
+def test_writing_code_starts_a_background_index(monkeypatch):
+    import agent_tools as at
+    started = []
+    monkeypatch.delenv("LWS_NO_CODE_INDEX", raising=False)
+    monkeypatch.setattr(cp, "start_index", lambda root, **k: started.append(root))
+    root = _project()
+    c = at.Ctx([root])
+    c.changed = {os.path.join(root, "db.py"): "edited"}
+    at.refresh_code_index(c, os.path.join(root, "db.py"))
+    assert started and os.path.normcase(started[0]) == os.path.normcase(root)
+    started.clear()
+    at.refresh_code_index(c, os.path.join(root, "notes.txt"))        # not code: nothing
+    assert not started
