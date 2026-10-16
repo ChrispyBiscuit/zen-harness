@@ -102,4 +102,6 @@ DEFAULT_AGENT["compact_target_tokens"] = 0     # 0 = auto: 72% of the compaction
 DEFAULT_AGENT["execution_memory_test_mode"] = False  # code-owned action journal and compact state view
 # after a compaction, put the current text of the files being worked on back into the prompt (agentic._working_set)
 DEFAULT_AGENT["working_set"] = True
+# the model's own MTP head for speculative decoding (Settings > General > Model): off by default, it costs ~0.6-1 GB of GPU memory
+DEFAULT_AGENT["mtp_head"] = False
 DEFAULT_AGENT["occ"] = {"enabled": False, "experimental": True, "max_pages_per_turn": 2}

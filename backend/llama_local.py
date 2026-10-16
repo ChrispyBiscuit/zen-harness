@@ -537,6 +537,26 @@ def auto_size(model_name, tuned_ctx, kv="q8_0", kv_v=None, tuned_mib=8192, cap=N
             "note": f"{gb}: {ctx // 1024}k context ({kv}{'/' + kv_v if kv_v and kv_v != kv else ''} cache)"}
 
 
+MTP_OVERHEAD_MIB = 450             # beside an MTP head's weights: its one-layer KV cache, draft compute buffer, state copies
+
+
+def mtp_head_mib(model_name):
+    """GPU memory an MTP head built into the model file needs (its weights + MTP_OVERHEAD_MIB), or 0 when the file has
+    no head. The head is the last block (blk.<block_count-1>.*) when nextn_predict_layers > 0."""
+    try:
+        blob = ollama_blob(model_name)
+        meta = gguf_meta(blob)
+    except Exception:
+        return 0
+    n_next, blocks = int(meta.get("nextn_predict_layers") or 0), int(meta.get("block_count") or 0)
+    if n_next <= 0 or blocks <= n_next:
+        return 0
+    first = blocks - n_next
+    heads = tuple(f"blk.{i}." for i in range(first, blocks))
+    weights = sum(b for name, b in gguf_tensor_sizes(blob).items() if name.startswith(heads))
+    return int(weights / 1048576) + MTP_OVERHEAD_MIB
+
+
 def vram_need_mib(model_name, ctx, kv="q8_0"):
     """GPU memory a dense model needs entirely on the GPU at this context (0 if unknown)."""
     try:

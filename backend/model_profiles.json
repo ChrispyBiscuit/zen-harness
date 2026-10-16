@@ -73,6 +73,21 @@
       "mtp": false,
       "tuned_vram_mib": 8192
     },
+    "lfm2.5-24b-a2b": {
+      "model_file": "LFM2.5-24B-A2B-QAD-Q4_0.gguf",
+      "num_ctx": 65536,
+      "kv_cache": "q8_0",
+      "kv_cache_v": "q8_0",
+      "spec_ngram": "",
+      "parallel": 1,
+      "cache_ram_mib": 1024,
+      "temperature": 0.1,
+      "top_p": 1.0,
+      "top_k": 50,
+      "min_p": 0.0,
+      "presence_penalty": 0.0,
+      "tuned_vram_mib": 8192
+    },
     "ternary-bonsai-2-9b": {
       "model_file": "Ternary-Bonsai-2-9B-PQ2_0-MTP-Q8_0.gguf",
       "mmproj": "Ternary-Bonsai-2-9B-mmproj-Q8_0.gguf",
@@ -80,7 +95,6 @@
       "num_ctx": 131072,
       "kv_cache": "q8_0",
       "kv_cache_v": "q8_0",
-      "mtp_head": true,
       "spec_draft_max_mtp": 2,
       "spec_ngram": "",
       "mtp": false,

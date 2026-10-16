@@ -1654,6 +1654,15 @@ class AgentEngine:
             reserve += int(fan.get("reserve_mib") or 256)     # GPU-assisted workers borrow the GPU to read prompts
         # the MTP drafter runs beside fan-out within a measured context cap (the workers borrow ~0.24 GB of GPU)
         draft = self._mtp_draft_path() if be == "llama" else ""
+        # the model's own MTP head (Settings → MTP head, off by default): drafts tokens ahead for faster generation,
+        # paid for in GPU memory — reserved here so the context fit shrinks instead of the server running out
+        head_mib = 0
+        if be == "llama" and c.get("mtp_head") and not draft:
+            head_mib = llama_local.mtp_head_mib(model)
+            if head_mib:
+                reserve += head_mib
+            else:
+                self.emit("status", text="MTP head is on, but this model file has no MTP head: running without it")
         # (the MTP drafter's GPU memory is handled by a measured context cap below, not by the estimate)
         if be == "llama" and llama_local.running("speech"):
             self.emit("status", text="Unloading the speech-mode model…")
@@ -1720,7 +1729,7 @@ class AgentEngine:
                 dkv = str(c.get("spec_draft_kv") or "").strip()     # the drafter's own cache (f16 by default)
                 if dkv:
                     args += ["-ctkd", dkv, "-ctvd", dkv]
-            elif c.get("mtp_head") and not (fit.get("moe") or fit.get("partial")):
+            elif head_mib and not (fit.get("moe") or fit.get("partial")):
                 # the model file carries its own MTP head (Ternary Bonsai 2 9B PQ2_0-MTP): no separate drafter file.
                 # PrismML's recommended settings: depth 2, no minimum draft length or probability
                 args += ["--spec-type", "draft-mtp", "--spec-draft-n-max", str(int(c.get("spec_draft_max_mtp") or 2)),
