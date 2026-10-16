@@ -1,5 +1,6 @@
-# Builds the Zazen installer: UI -> licences -> frozen app (PyInstaller) -> llama.cpp -> setup.exe (Inno Setup).
-#   powershell -ExecutionPolicy Bypass -File packaging\build.ps1 [-SkipUi] [-SkipFreeze] [-LlamaDir C:\path\to\llama.cpp]
+# Builds the Zazen installer: UI -> licences -> frozen app (PyInstaller) -> setup.exe (Inno Setup).
+# No llama.cpp and no model inside: first-run setup downloads the runtime for the PC's GPU (backend/setup_api.py).
+#   powershell -ExecutionPolicy Bypass -File packaging\build.ps1 [-SkipUi] [-SkipFreeze] [-LlamaDir <dir: licence text only>]
 # Output: packaging\out\ZenHarness-Setup-<version>.exe (+ .sha256)
 param(
     [switch]$SkipUi,
@@ -15,7 +16,6 @@ New-Item -ItemType Directory -Force $Out | Out-Null
 Write-Host "== Zazen $Version"
 
 if (-not (Test-Path $Py)) { throw "backend\venv missing: py -3.13 -m venv backend\venv; backend\venv\Scripts\pip install -r backend\requirements-dev.txt" }
-if (-not (Test-Path (Join-Path $LlamaDir "llama-server.exe"))) { throw "llama-server.exe not found in $LlamaDir (set -LlamaDir or LLAMA_CPP_DIR)" }
 
 # 1. UI -> backend\web_dist
 if (-not $SkipUi) {
@@ -52,13 +52,7 @@ if (-not $SkipFreeze) {
     if ($LASTEXITCODE) { throw "PyInstaller failed" }
 }
 
-# 5. llama.cpp: the server, its libraries, the CUDA runtime and the CPU backends (no other tools, no archives)
-$LlamaOut = Join-Path $Dist "llama"
-New-Item -ItemType Directory -Force $LlamaOut | Out-Null
-$keep = @("llama-server.exe", "llama-server-impl.dll", "llama-common.dll", "llama.dll", "mtmd.dll", "libomp.dll",
-          "cudart64_12.dll", "cublas64_12.dll", "cublasLt64_12.dll", "LICENSE-LLVM-OpenMP", "LICENSE")
-Get-ChildItem $LlamaDir -File | Where-Object { $keep -contains $_.Name -or ($_.Name -like "ggml*.dll" -and $_.Name -ne "ggml-rpc.dll") } |
-    ForEach-Object { Copy-Item $_.FullName $LlamaOut -Force }
+# 5. (no llama.cpp in the installer: runtimes download on first run, per GPU vendor)
 
 # 6. smoke test of the frozen program
 $cli = Join-Path $Dist "zenharness-cli.exe"

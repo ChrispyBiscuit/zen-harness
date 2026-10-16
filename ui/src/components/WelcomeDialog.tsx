@@ -7,10 +7,12 @@ import { help, modelsApi, type About, type Download as Dl } from "@/lib/api"
 import { useApp } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import { confirmDownload } from "@/components/ConsentDialog"
+import { SetupProgress, startSetup, useHardware } from "@/components/HardwarePanel"
 
-/* First run: no model configured yet. Checks the hardware, recommends a model from the catalog
-   (backend/model_catalog.json), downloads it and sets it up (models_api.install_from_catalog saves the profile and
-   makes it the default when the download finishes), or lets the user bring their own file / a cloud key. */
+/* First run: no model configured yet. Checks the hardware (any GPU vendor: backend/hardware.py) and sets this PC up:
+   the matching llama.cpp runtime, the Ternary Bonsai 2 27B file that fits, its vision file and, if wanted, offline
+   Wikipedia (setup_api.py). Nothing heavy ships in the installer. The catalog of other models, a file of the user's
+   own, or a cloud key remain as alternatives. */
 
 type CatalogModel = {
   id: string; name: string; summary: string; file: string; size: number; license: string; license_url: string
@@ -33,6 +35,9 @@ export function WelcomeDialog() {
   const [dls, setDls] = useState<Dl[]>([])
   const [keyFor, setKeyFor] = useState<"" | "openai" | "anthropic">("")
   const [key, setKey] = useState("")
+  const [others, setOthers] = useState(false)
+  const [wiki, setWiki] = useState(true)
+  const hw = useHardware(open)
   useEffect(() => { if (needsModel && !dismissed()) setOpen(true) }, [needsModel])
   useEffect(() => {
     if (!open) return
@@ -70,19 +75,37 @@ export function WelcomeDialog() {
   }
   const active = dls.find((d) => d.status !== "done" && d.status !== "failed" && d.status !== "paused" && d.id.toLowerCase().endsWith(".gguf") && !d.id.toLowerCase().startsWith("mmproj"))
   const failed = dls.find((d) => d.status === "failed")
-  const gpu = about?.gpu
   return (
     <Dialog open={open} onOpenChange={(v) => !v && close(false)}>
       <DialogContent className="max-h-[min(90dvh,860px)] overflow-y-auto sm:max-w-2xl">
         <DialogHeader><DialogTitle className="flex items-center gap-2"><Sparkles className="size-4" /> Welcome to Zazen</DialogTitle></DialogHeader>
-        <p className="text-ui text-muted-foreground">Zazen runs AI models on your own PC. To start, it needs a model — pick one below (it downloads once and stays on your computer).</p>
+        <p className="text-ui text-muted-foreground">Zazen runs its AI model on your own PC. Setup downloads what this PC needs, once: the runtime for your graphics card and the model sized for it.</p>
         <div className="flex items-center gap-2 rounded-lg border border-line-1 bg-surface-1 px-3 py-2 text-ui">
           <Cpu className="size-4 text-muted-foreground" />
-          {!about ? "Checking your hardware…" : <span>{gpu ? `${gpu.name} · ${(gpu.vram_mib / 1024).toFixed(0)} GB video memory` : "No NVIDIA graphics card found — models will run on the CPU (slower)"}
-            {about.ram_mib ? ` · ${(about.ram_mib / 1024).toFixed(0)} GB RAM` : ""}</span>}
+          {!hw.r ? "Checking your hardware…" : <span>{hw.r.gpu ? `${hw.r.gpu.name} · ${(hw.r.gpu.vram_mib / 1024).toFixed(0)} GB video memory` : "No graphics card found"}
+            {hw.r.ram_mib ? ` · ${(hw.r.ram_mib / 1024).toFixed(0)} GB RAM` : ""}</span>}
         </div>
+        {hw.r && (
+          <div className={cn("space-y-2 rounded-lg border px-3 py-3", hw.r.supported ? "border-success/50 bg-success/5" : "border-warning/50")}>
+            <div className="text-ui font-medium">Ternary Bonsai 2 27B</div>
+            <div className="text-caption text-muted-foreground">{hw.r.plan.note}</div>
+            {!hw.r.supported && <div className="text-caption text-warning">Zazen needs a graphics card with 8 GB or more (NVIDIA, AMD or Intel Arc). On this PC it would run on the CPU, very slowly.</div>}
+            <div className="text-caption text-muted-foreground">Downloads: {hw.r.downloads.map((d) => `${d.name} (${(d.mib / 1024).toFixed(1)} GB)`).join(" · ") || "nothing — already here"}</div>
+            <label className="flex items-center gap-1.5 text-caption text-muted-foreground">
+              <input type="checkbox" checked={wiki} onChange={(e) => setWiki(e.target.checked)} disabled={hw.r.wiki.installed} />
+              Offline Wikipedia for answers without the internet ({hw.r.wiki.installed ? "installed" : `${(hw.r.wiki.mib / 1024).toFixed(1)} GB, downloads after the model`})</label>
+            <div className="flex items-center gap-2">
+              <Button size="sm" disabled={hw.job.status === "running"} onClick={async () => {
+                if (await startSetup(hw.r!, wiki)) hw.setJob({ status: "running" })
+              }}><Download /> Set up this PC</Button>
+            </div>
+            <SetupProgress job={hw.job} />
+          </div>
+        )}
+        <button className="text-left text-caption text-muted-foreground underline-offset-2 hover:underline" onClick={() => setOthers(!others)}>
+          {others ? "Hide other models" : "Other models instead…"}</button>
 
-        {active ? (
+        {!others ? null : active ? (
           <div className="rounded-lg border border-info/40 px-3 py-3">
             <div className="flex items-center gap-2 text-ui"><Loader2 className="size-4 animate-spin" />
               {active.status === "setting up" ? "Setting it up for your hardware…" : `Downloading ${active.id}`}</div>

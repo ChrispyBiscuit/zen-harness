@@ -1,5 +1,5 @@
 {
-  "_note": "Built-in per-model settings, used when the user's settings.json has no profile of the same name (a user profile replaces the preset key by key). model_file/mmproj paths are relative to the models folder; llama_dir is relative to the app's folder (installed) or the home folder, or '~/...'. default_order: the model a fresh install starts on is the first of these whose file is present (the installer downloads them). Measured on an 8 GB RTX 3070 Laptop + 16 GB RAM (tuned_vram_mib): on a bigger GPU the app sizes context, cache and MoE expert placement automatically (setting ctx_auto, cap ctx_auto_max).",
+  "_note": "Built-in per-model settings, used when the user's settings.json has no profile of the same name (a user profile replaces the preset key by key). model_file/mmproj paths are relative to the models folder; llama_dir is relative to the app's folder (installed) or the home folder, or '~/...'. default_order: the model a fresh install starts on is the first of these whose file is present (the installer downloads them). Measured on an 8 GB RTX 3070 Laptop + 16 GB RAM (tuned_vram_mib): on a bigger GPU the app sizes context, cache and MoE expert placement automatically (setting ctx_auto, cap ctx_auto_max). runtime 'prism': runs on PrismML's llama.cpp fork, chosen per GPU vendor by hardware.py. variants: files of the same weights, best first; hardware.py picks one by GPU memory.",
   "default_order": [
     "ornith-1.5-9b",
     "qwen3.6-35b-a3b-reap48",
@@ -112,7 +112,8 @@
       "min_p": 0.05,
       "presence_penalty": 0.0,
       "hesitation_penalty": 1.5,
-      "tuned_vram_mib": 8192
+      "tuned_vram_mib": 8192,
+      "runtime": "prism"
     },
     "ternary-bonsai-2-27b": {
       "model_file": "Ternary-Bonsai-2-27B-PTQ1_0.gguf",
@@ -135,7 +136,38 @@
       "presence_penalty": 0.0,
       "kv_cache_v": "q4_0",
       "tuned_vram_mib": 8192,
-      "hesitation_penalty": 1.5
+      "hesitation_penalty": 1.5,
+      "runtime": "prism",
+      "variants": [
+        {
+          "file": "Ternary-Bonsai-2-27B-PQ2_0.gguf",
+          "repo": "prism-ml/Ternary-Bonsai-2-27B-gguf",
+          "bytes": 7206168928,
+          "weights_mib": 6872,
+          "sha256": "3907dc1658db1f78a9826bf8d5bcb8dc65db0d466388937af57f2294fae62ec1",
+          "min_vram_mib": 11264,
+          "why": "same weights as PTQ1_0; reads prompts about 2x faster, generates faster on Ampere"
+        },
+        {
+          "file": "Ternary-Bonsai-2-27B-PTQ1_0.gguf",
+          "repo": "prism-ml/Ternary-Bonsai-2-27B-gguf",
+          "bytes": 5946648928,
+          "weights_mib": 5671,
+          "sha256": "53107f530aa52eb00912263ab1ee29bd199261c87cd7b4ad4ca1318c1fe33ee3",
+          "min_vram_mib": 0,
+          "sycl_expands": true,
+          "why": "the smallest packing: fits 8 GB cards"
+        }
+      ],
+      "mmproj": "Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf",
+      "mmproj_download": {
+        "repo": "prism-ml/Ternary-Bonsai-2-27B-gguf",
+        "bytes": 629246976,
+        "sha256": "6807ede61d570bb86ba34b756a0fa109edc33668604de867c6ea6d8f1d631903"
+      },
+      "mmproj_mib": 600,
+      "vision": true,
+      "kv_mib_per_1k": 34
     }
   }
 }

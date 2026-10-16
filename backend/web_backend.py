@@ -1910,6 +1910,8 @@ def make_app():
     models_api.install(app)
     import downloads                           # every download the app makes on its own asks first
     downloads.install(app)
+    import setup_api                           # first run: this PC's GPU runtime, model and offline Wikipedia
+    setup_api.install(app)
     import update_api                          # updates from git (updater.py): check, install, roll back
 
     def _save_before_restart():

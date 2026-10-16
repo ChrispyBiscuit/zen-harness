@@ -15,6 +15,7 @@ import { MemoryPanel } from "@/components/MemoryPanel"
 import { VoicePanel } from "@/components/VoicePanel"
 import { HEADLESS_DEFAULTS, ServicePanel, type Headless } from "@/components/ServicePanel"
 import { ModelsPanel } from "@/components/ModelsPanel"
+import { HardwarePanel } from "@/components/HardwarePanel"
 
 /* Settings, kept small on purpose: what you actually change. Per-chat run controls (thinking, plan budget) live on
    the message box; per-model tuning (drafter, cache, GPU split) lives in the model's profile; retired experiments
@@ -193,6 +194,7 @@ export function SettingsDialog() {
           <TabsList className="mx-6 max-w-[calc(100%-3rem)] shrink-0 justify-start overflow-x-auto">
             <TabsTrigger value="general">General</TabsTrigger>
             <TabsTrigger value="models">Models</TabsTrigger>
+            <TabsTrigger value="hardware">Hardware</TabsTrigger>
             <TabsTrigger value="agent">Agent</TabsTrigger>
             <TabsTrigger value="perms">Permissions</TabsTrigger>
             <TabsTrigger value="memory">Memory</TabsTrigger>
@@ -283,6 +285,10 @@ export function SettingsDialog() {
                 setA({ model: name, backend: "llama" })
                 toast.message(`“${name}” selected`, { description: "Click Save to use it from the next message." })
               }} />
+            </TabsContent>
+
+            <TabsContent value="hardware">
+              <HardwarePanel hw={(a as any).hardware || {}} setHw={(p) => setA({ hardware: { ...((a as any).hardware || {}), ...p } })} />
             </TabsContent>
 
             <TabsContent value="agent">

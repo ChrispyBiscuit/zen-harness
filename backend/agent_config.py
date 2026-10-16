@@ -109,6 +109,11 @@ DEFAULT_AGENT["model_explanations"] = True
 # compaction (plans/compaction-revisions.md): each switch restores the behaviour before 2026-10-16
 DEFAULT_AGENT["compact_summary"] = "terse"        # "narrative": the old 500-word, four-section summary
 DEFAULT_AGENT["slow_compaction"] = True           # False: no smaller budget for models under 20 tok/s
-DEFAULT_AGENT["program_run_gate"] = True         # False: no "run the program before done" reminder or label
+# this PC's GPU picks the runtime, model file, context, cache and vision placement (hardware.py); any field set here
+# by hand wins: backend (cuda/hip/vulkan/sycl/cpu), gpu (index or name), model_file, num_ctx, kv_cache, kv_cache_v,
+# vision_gpu (on/off). auto false = the model profile exactly as written
+DEFAULT_AGENT["hardware"] = {"auto": True, "backend": "auto", "gpu": "auto", "model_file": "auto", "num_ctx": "auto",
+                             "kv_cache": "auto", "kv_cache_v": "auto", "vision_gpu": "auto"}
+DEFAULT_AGENT["program_run_gate"] = True        # False: no "run the program before done" reminder or label
 DEFAULT_AGENT["trim_old_writes"] = "all"          # "superseded": strip only writes of files touched again later
 DEFAULT_AGENT["occ"] = {"enabled": False, "experimental": True, "max_pages_per_turn": 2}

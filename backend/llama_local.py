@@ -430,6 +430,14 @@ def kv_bytes_per_token(meta, kv_type):
 
 
 def gpu_total_mib():
+    """Memory of the GPU the model runs on, any vendor (hardware.primary: Windows' own adapter list, nvidia-smi's
+    exact figure for NVIDIA). 0 when there is no dedicated GPU."""
+    try:
+        import hardware
+        g = hardware.primary()
+        return int(g["vram_mib"]) if g else 0
+    except Exception:
+        pass
     try:
         out = subprocess.run(["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
                              capture_output=True, text=True, timeout=10, creationflags=0x08000000).stdout
@@ -686,7 +694,15 @@ def _unload_ollama():
 
 
 def _free_vram_mib():
-    """Free GPU memory in MiB (0 if it cannot be read)."""
+    """Free GPU memory in MiB (0 if it cannot be read). NVIDIA: nvidia-smi. Other vendors: 0 (unknown), so the start
+    below assumes the model fits, as the planner sized it for the card's total memory."""
+    try:
+        import hardware
+        g = hardware.primary()
+        if g and g["vendor"] != "nvidia":
+            return 0
+    except Exception:
+        pass
     try:
         out = subprocess.run(["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"],
                              capture_output=True, text=True, timeout=10,

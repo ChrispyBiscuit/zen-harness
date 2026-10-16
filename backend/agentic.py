@@ -1637,6 +1637,41 @@ class AgentEngine:
             self.ctx.tracker, self.ctx.tracker_path = at.load_tracker(tp), tp
 
     # ---------------------------------------------------------------- setup
+    def _hardware_setup(self, c):
+        """This PC's GPU (any vendor) picks the llama.cpp runtime, the model file and its context, cache and vision
+        placement (hardware.py, plans/hardware-scaling.md); settings → hardware overrides any of it. Only for profiles
+        that declare variants or a runtime (the Ternary Bonsai ones); a missing runtime leaves the profile as it is."""
+        try:
+            import hardware
+            import runtimes
+            if not hardware.wants_plan(c):
+                return
+            hw = dict(c.get("hardware") or {})
+            gpu = hardware.primary(hw)
+            order = hardware.backend_order(gpu, hw)
+            own = paths.resolve_llama_dir(c.get("llama_dir"))
+            # a CUDA build already set up for this profile (an existing install) is used before a downloaded one
+            backend, exe, dev, notes = runtimes.choose(gpu, order, install_missing=False,
+                                                       existing={"cuda": own} if own else None)
+            if not backend:
+                self.emit("status", text="The GPU runtime for this PC isn't installed yet: run setup (Settings → "
+                                         "Hardware) to download it. Using the profile as written.")
+                _log({"hardware": "no runtime", "order": order, "notes": notes, "conv": self.ctx.conv_id})
+                return
+            p = hardware.apply(c, backend=backend, runtime_dir=exe, gpu=gpu)
+            if not p:
+                return
+            if dev:
+                c["_device"] = dev["id"]
+            self.emit("status", text="Hardware: " + p["note"]
+                      + (f". A faster file of the same model ({p['better_file']}) isn't downloaded: Settings → "
+                         f"Hardware can fetch it" if p.get("better_file") else ""))
+            _log({"hardware": {k: p.get(k) for k in ("backend", "gpu", "vram_mib", "model_file", "num_ctx", "kv_cache",
+                                                     "kv_cache_v", "vision_gpu", "better_file")},
+                  "device": c.get("_device"), "conv": self.ctx.conv_id})
+        except Exception as e:                       # detection must never stop a chat
+            _log({"hardware_error": repr(e)[:300], "conv": self.ctx.conv_id})
+
     def prepare(self):
         c = self.cfg
         # per-model settings (Settings → model_overrides): switching the model brings its own context, cache and
@@ -1676,6 +1711,8 @@ class AgentEngine:
                 fastfacts.warm()                 # the first web search pays a ~3 s handshake: do it now, unseen
             except Exception:
                 pass
+        if be == "llama":
+            self._hardware_setup(c)
         model = c.get("model") or ""
         if be == "llama" and str(c.get("model_file") or "").strip() and os.path.isfile(paths.resolve_model(c["model_file"])):
             model = paths.resolve_model(c["model_file"])          # a profile can serve a different file of the same model (e.g. IQ4_XS)
@@ -1701,7 +1738,16 @@ class AgentEngine:
         if be == "llama" and llama_local.running("speech"):
             self.emit("status", text="Unloading the speech-mode model…")
             llama_local.stop("speech")
-        if be == "llama" and c.get("ctx_auto", True) and c.get("tuned_vram_mib"):
+        if be == "llama" and c.get("_overhead_mib"):
+            # the runtime's own buffers beyond CUDA's (Vulkan, HIP and SYCL allocate more), and the vision projector
+            # when it runs on the GPU: both come out of the context's memory
+            reserve += max(0, int(c["_overhead_mib"]) - llama_local.FIXED_OVERHEAD_MB)
+            if c.get("vision") and c.get("vision_gpu") and c.get("mmproj"):
+                try:
+                    reserve += int(os.path.getsize(paths.resolve_model(c["mmproj"])) / 1048576) + 128
+                except OSError:
+                    c["vision_gpu"] = False
+        if be == "llama" and c.get("ctx_auto", True) and c.get("tuned_vram_mib") and not c.get("_auto_ctx"):
             # a profile tuned for a smaller card (the built-in ones: 8 GB) on a bigger GPU: use the extra memory for
             # a better cache, more context, or more experts on the GPU, instead of leaving it idle
             auto = llama_local.auto_size(model, int(c.get("num_ctx") or 16384), str(c.get("kv_cache") or "q8_0"),
@@ -1734,6 +1780,10 @@ class AgentEngine:
             self.fit = fit
             kv = kv_cache_type(c)
             args = ["--jinja"]
+            if c.get("_device"):
+                # the GPU the plan chose: with Vulkan or HIP a laptop's integrated GPU is listed too, and llama.cpp
+                # would split the model across both
+                args += ["--device", str(c["_device"])]
             # llama-server keeps old prompt states in system RAM (default up to 8 GB) plus up to 32 context checkpoints
             # per slot; with Qwen3.5 at 128k that reached 12 GB and the 16 GB laptop swapped (5-8 tok/s). Cap both.
             args += ["-cram", str(int(c.get("cache_ram_mib") or 1536)),
@@ -1811,7 +1861,9 @@ class AgentEngine:
                 self._can_see = bool(proj)
                 self.ctx.vision = bool(proj)
                 if proj:
-                    args += ["--mmproj", proj, "--no-mmproj-offload"]     # on the CPU: no GPU memory to spare
+                    # on the CPU unless the hardware plan found room on the GPU (12 GB cards and up): every screenshot
+                    # the agent checks goes through it
+                    args += ["--mmproj", proj] + ([] if c.get("vision_gpu") else ["--no-mmproj-offload"])
                 else:
                     self.emit("status", text="Vision is on but this model has no image projector: images won't be seen")
             self.emit("status", text=f"Starting llama.cpp for {model} ({int(c.get('num_ctx') or 16384):,} "
