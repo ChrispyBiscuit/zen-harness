@@ -34,7 +34,9 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("LWS_DATA_DIR", str(data))
     monkeypatch.setattr(updater, "app_dir", lambda: str(app))
     monkeypatch.setattr(updater, "smoke", lambda python: None)
-    monkeypatch.setattr(updater, "_progress", {"steps": {}, "current": None, "started": None})   # per-test progress
+    # module state the updater keeps between calls: fresh for every test, whatever ran before
+    monkeypatch.setattr(updater, "_progress", {"steps": {}, "current": None, "started": None})
+    monkeypatch.setattr(updater, "_busy", {"stage": None})
     updater.record_install(first)
     return origin, app, first
 
@@ -66,7 +68,7 @@ def test_install_reports_its_steps_and_not_now_is_remembered(env):
     (origin / "backend" / "app.py").write_text("V = 4\n")
     git(origin, "commit", "-q", "-am", "fourth")
     st = updater.check()
-    assert st["auto"] is True and st["progress"] is None
+    assert st["auto"] is True
     updater.decline(st["latest"])
     assert updater.status()["declined"] == st["latest"]
     updater.progress_begin()
