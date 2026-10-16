@@ -4397,6 +4397,7 @@ class AgentEngine:
             # a build request: a from-scratch project folder gets the module workflow (verification_ledger decides,
             # once per folder: only an empty one); everything else is evidence mode
             self.ctx.project_build = bool(getattr(self, "_build_profile", False))
+            self._decide_turn_tools()
             need, decided = False, False
             if self._effort:
                 # the agent judged the effort itself (guideline in the lean prompt): plan size and thinking per step.
@@ -5029,6 +5030,9 @@ class AgentEngine:
         if (self._gated() and t is not None and isinstance(args, dict) and name not in self._active_names()
                 and getattr(self, "_offered", None) is None):
             self._enable([name])                    # used = enabled: no refuse-then-retry round trip
+            # a late load changes the tool list (a full re-read on a hybrid model): logged, so the always-on core
+            # can be tuned from what runs actually reach for (plans/tool-loading-v2.md)
+            _log({"late_tool_load": name, "step": self.turn.get("steps"), "conv": self.ctx.conv_id})
         if self._basic and name in ("gather", "wait_for_workers", "delegate_task", "wait_task"):
             basic_block = (f"{name} did not run: this is the basic path (no parallel workers). Do it with your own tools "
                            f"— several independent lookups can go in one step — or call go_extensive if the task "
@@ -5935,7 +5939,7 @@ class AgentEngine:
     # set plus the groups this chat needs; the rest are listed by available_tools and load when enabled or first
     # called (one full prompt re-read then — rare, and the list stays stable again after it).
     CORE_GROUPS = ("files", "shell", "code", "web", "math", "memory")
-    COMPACT_CORE_NAMES = {"available_tools", "update_tracker", "ask_user", "history_search", "read_guide",
+    COMPACT_CORE_NAMES = {"available_tools", "update_tracker", "ask_user", "read_guide",
                           "read_file", "write_file", "edit_file", "list_dir", "find_files", "search_text",
                           "make_dir", "powershell", "run_tests", "go_extensive"}
     # a software build never uses these (~3K tokens of the ~13K fixed prompt start); listed in available_tools and
@@ -6009,16 +6013,37 @@ class AgentEngine:
     def _profiled(self):
         return self._gated() and self._stable_tools() and bool(self.cfg.get("tool_profiles", True))
 
+    def _decide_turn_tools(self):
+        """Once per turn, before the first step (the tool list must stay fixed for the prompt cache): the module
+        tools if this project folder is in module mode, the workbook tools if this chat's workbook is open."""
+        self._module_tools = self._workbook_tools = False
+        if getattr(self.ctx, "build_test_record", False) and getattr(self.ctx, "project_build", False):
+            try:
+                import verification_ledger as vl
+                ledger = vl.for_ctx(self.ctx)
+                self._module_tools = bool(ledger is not None and ledger.mode == "modules")
+            except Exception as e:
+                _log({"module_mode_error": repr(e)[:200], "conv": self.ctx.conv_id})
+        if getattr(self.ctx, "problem_workbook", False):
+            try:
+                import problem_workbook as pw
+                w = pw.for_ctx(self.ctx)
+                self._workbook_tools = bool(w is not None and (w.state.get("goal") or w.state.get("pending")))
+            except Exception as e:
+                _log({"workbook_state_error": repr(e)[:200], "conv": self.ctx.conv_id})
+
     def _core_names(self):
         if self.cfg.get("compact_prompt", False):
             core = self.COMPACT_CORE_NAMES & set(self.reg.by_name)
-            if getattr(self.ctx, "build_test_record", False) and getattr(self.ctx, "project_build", False):
-                # the module workflow is for from-scratch builds; other code work is checked by test evidence
+            if getattr(self, "_module_tools", False):
+                # only when the project folder is in module mode (a from-scratch build); decided at turn start
                 core |= {"module_contract", "begin_module", "verify_module", "module_status"} & set(self.reg.by_name)
             if getattr(self, "_code_work", False):
                 # code work only: research, documents and chat never index code (still loadable: files group)
                 core |= {"focus_pack"} & set(self.reg.by_name)
-            if getattr(self.ctx, "problem_workbook", False):
+            if getattr(self, "_workbook_tools", False):
+                # only once a workbook is open (15 calls in 5,201; ~840 tokens a step otherwise); problem_plan loads
+                # on its first call like any other tool
                 core |= {"problem_plan", "problem_experiment", "problem_record", "problem_status"} & set(self.reg.by_name)
             # User-provided connectors stay available without an activation ceremony.
             for group, _brief, names in at.tool_groups(self.reg):
@@ -6064,9 +6089,9 @@ class AgentEngine:
         """ALWAYS_ON minus the workbook / module-ledger tools when those features are off (8 schemas sent for
         nothing on every request otherwise)."""
         out = set(at.ALWAYS_ON)
-        if not getattr(self.ctx, "problem_workbook", False):
-            out -= self._WORKBOOK_TOOLS
-        if not (getattr(self.ctx, "build_test_record", False) and getattr(self.ctx, "project_build", False)):
+        if not getattr(self, "_workbook_tools", False):
+            out -= self._WORKBOOK_TOOLS            # (they load on first call)
+        if not getattr(self, "_module_tools", False):
             out -= self._MODULE_TOOLS
         return out
 
@@ -6136,11 +6161,16 @@ class AgentEngine:
                 msg.append("Unknown (not a tool or group): " + ", ".join(unknown) + ". Call available_tools to see names.")
             return "\n".join(msg) or "Nothing to enable."
         if self._profiled():
-            out = at.tool_catalog(self.reg, set(self._active_names()), a.get("query", ""), gate=True)
+            if self.cfg.get("compact_prompt", False) and not a.get("query") and not a.get("group"):
+                return at.tool_catalog_compact(self.reg, set(self._active_names()))
+            out = at.tool_catalog(self.reg, set(self._active_names()), a.get("query", ""), gate=True,
+                                  group=a.get("group", ""))
             return out + ("\n\nTools without ✓ load when you enable their group, e.g. "
                           "available_tools(enable=[\"browser\"]), or when you simply call one of them.")
+        if self.cfg.get("compact_prompt", False) and not a.get("query") and not a.get("group"):
+            return at.tool_catalog_compact(self.reg, set(self._active_names()))
         out = at.tool_catalog(self.reg, self.enabled_tools, a.get("query", ""),
-                              gate=self._gated() and not self._stable_tools())
+                              gate=self._gated() and not self._stable_tools(), group=a.get("group", ""))
         if self._gated() and not self._stable_tools():
             out += ("\n\nTo use a tool that has no ✓, call available_tools with enable, e.g. "
                     "available_tools(enable=[\"python_sandbox\"]) — then call that tool on your next step.")

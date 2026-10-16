@@ -143,3 +143,68 @@ def test_workbook_refusals_name_the_field_and_the_fix(tmp_path):
     with pytest.raises(pw.PolicyError) as e:
         pw.identifier("server returns ok", "target")
     assert "target" in str(e.value) and "'server_returns_ok'" in str(e.value)
+
+
+def test_the_workbook_takes_a_plain_text_plan_and_assigns_ids(tmp_path):
+    wb = pw.Workbook("conv-text", tmp_path / "wb")
+    out = wb.plan({"text": "GOAL: client tests pass against the server\nACCEPT: all client tests pass\n"
+                           "ACCEPT: server tests still pass\n"
+                           "QUESTION: does do_POST drop the saved record? | because: 5 KeyError 'amount' failures\n"
+                           "  MAYBE: the server returns {'ok': true} instead of the record\n"
+                           "  MAYBE: the client reads the wrong field\n  CHECKS: 1\n"
+                           "QUESTION: is the host saved by the add command?\n  MAYBE: it is never written\n  NEEDS: 1\n"})
+    st = wb.state
+    assert set(st["acceptance"]) == {"a1", "a2"} and set(st["questions"]) == {"q1", "q2"}
+    assert st["questions"]["q1"]["acceptance"] == ["a1"] and st["questions"]["q2"]["dependencies"] == ["q1"]
+    assert len(st["questions"]["q2"]["hypotheses"]) == 2                  # 'something else' added
+    wb.plan({"text": "GOAL: anything\nACCEPT: all client tests pass\nQUESTION: does do_POST drop the saved record?\n"
+                     "  MAYBE: x\n  MAYBE: y\n"})                          # same text: same ids, goal kept
+    assert st["goal"] == wb.state["goal"] == "client tests pass against the server"
+
+
+def test_a_plain_text_checklist_and_done_ids(tmp_path):
+    c = at.Ctx([str(tmp_path)]); c.cwd = str(tmp_path); c.tracker_path = str(tmp_path / "PROGRESS.md")
+    r = at.Registry(c, enabled={"update_tracker"})
+    r.call("update_tracker", {"checklist": "GOAL: roommate expense tracker\n## Store | done when: store tests pass\n"
+                                           "- [x] write PRD\n- [ ] write store.py\n## Server\n- [ ] write server.py"})
+    t = c.tracker
+    assert t["goal"] == "roommate expense tracker" and [m["title"] for m in t["milestones"]] == ["Store", "Server"]
+    assert t["milestones"][0]["done_when"] == "store tests pass"
+    assert t["milestones"][0]["subtasks"][0]["status"] == "pending"     # a new plan starts with nothing done
+    r.call("update_tracker", {"checklist": "GOAL: roommate expense tracker\n## Store\n- [x] write PRD\n"
+                                           "- [ ] write store.py\n## Server\n- [ ] write server.py"})
+    t = c.tracker
+    assert t["milestones"][0]["subtasks"][0]["status"] == "done"        # the same plan again: its marks count
+    r.call("update_tracker", {"done": "1.2", "started": "2.1"})
+    t = c.tracker
+    assert t["milestones"][0]["subtasks"][1]["status"] == "done" and t["milestones"][1]["subtasks"][0]["status"] == "in_progress"
+    with pytest.raises(at.ToolError) as e:
+        r.call("update_tracker", {"checklist": "just some words"})
+    assert "- [ ] a concrete step" in str(e.value)
+
+
+def test_compact_schemas_and_catalog_are_small():
+    import json
+    reg = at.Registry(at.Ctx(["."]))
+    assert len(json.dumps(reg.schemas(["update_tracker"], compact=True))) // 4 < 350
+    assert len(json.dumps(reg.schemas(["powershell"], compact=True))) // 4 < 230
+    text = at.tool_catalog_compact(reg, {"read_file"})
+    assert len(text) // 4 < 700 and "read_file*" in text and "[files]" in text
+
+
+def test_module_and_workbook_tools_load_only_when_in_use(tmp_path):
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from offline_suite import engine
+    e = engine(compact_prompt=True)
+    fresh = tmp_path / "fresh"
+    fresh.mkdir()
+    e.ctx.cwd = e.ctx.verification_root = str(fresh)
+    e.ctx.build_test_record = e.ctx.problem_workbook = True
+    e.ctx.project_build = True
+    e._decide_turn_tools()
+    assert e._module_tools and not e._workbook_tools                 # from scratch: modules; no workbook open yet
+    core = e._core_names()
+    assert "module_contract" in core and "problem_plan" not in core and "history_search" not in core
+    e.ctx.project_build = False
+    e._decide_turn_tools()
+    assert not e._module_tools and "module_contract" not in e._core_names()

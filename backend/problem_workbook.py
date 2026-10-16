@@ -47,6 +47,78 @@ def identifier(value, field="id"):
     return value
 
 
+def parse_plan_text(text, state):
+    """The workbook plan as plain text -> the structured plan, with every id assigned by the app:
+
+        GOAL: client tests pass against the server
+        CONSTRAINT: keep the HTTP API as documented
+        ACCEPT: all client tests pass
+        ACCEPT: server tests still pass
+        QUESTION: does do_POST drop the saved record? | because: 5 KeyError 'amount' failures
+          MAYBE: the server returns {"ok": true} instead of the record
+          MAYBE: the client reads the wrong field
+          CHECKS: 1            (optional: which ACCEPT lines this question settles, by number)
+          NEEDS: 1             (optional: earlier QUESTION numbers it depends on)
+
+    A 27B failed 12 of 14 structured problem_plan calls (ids, nested cross-references); the text form has none.
+    The existing goal, constraints and conditions are kept; a question asked again with the same text keeps its id."""
+    goal = state.get("goal") or ""
+    constraints = list(state.get("constraints") or [])
+    acceptance = {k: v["condition"] for k, v in (state.get("acceptance") or {}).items()}
+    by_text = {v: k for k, v in acceptance.items()}
+    known_q = {v["question"]: k for k, v in (state.get("questions") or {}).items()}
+    order_a, questions, cur = [], [], None
+
+    def next_id(prefix, used):
+        n = 1
+        while f"{prefix}{n}" in used:
+            n += 1
+        return f"{prefix}{n}"
+
+    for raw in str(text or "").splitlines():
+        line = raw.strip()
+        m = re.match(r"^(GOAL|CONSTRAINT|ACCEPT|QUESTION|MAYBE|CHECKS|NEEDS|WHY|BECAUSE)\s*:\s*(.*)$", line, re.I)
+        if not m:
+            continue
+        key, val = m.group(1).upper(), m.group(2).strip()
+        if key == "GOAL":
+            goal = goal or val                          # the original goal is kept
+        elif key == "CONSTRAINT" and val and val not in constraints:
+            constraints.append(val)
+        elif key == "ACCEPT" and val:
+            aid = by_text.get(val) or next_id("a", acceptance)
+            acceptance.setdefault(aid, val)
+            by_text[val] = aid
+            order_a.append(aid)
+        elif key == "QUESTION" and val:
+            q, _, why = val.partition("|")
+            why = re.sub(r"^\s*(because|why)\s*:?\s*", "", why, flags=re.I).strip()
+            cur = {"question": q.strip(), "why": why, "hypotheses": [], "checks": [], "needs": []}
+            questions.append(cur)
+        elif cur is not None and key in ("WHY", "BECAUSE"):
+            cur["why"] = val
+        elif cur is not None and key == "MAYBE" and val:
+            cur["hypotheses"].append(val)
+        elif cur is not None and key in ("CHECKS", "NEEDS"):
+            nums = [int(x) for x in re.findall(r"\d+", val)]
+            cur["checks" if key == "CHECKS" else "needs"] += nums
+    used_q = set(state.get("questions") or {})
+    out_q, ids = [], []
+    for q in questions:
+        qid = known_q.get(q["question"]) or next_id("q", used_q | set(ids))
+        ids.append(qid)
+    for i, q in enumerate(questions):
+        hyps = q["hypotheses"] or ["the explanation above", "something else (unknown)"]
+        if len(hyps) == 1:
+            hyps = hyps + ["something else (unknown)"]
+        out_q.append({"id": ids[i], "question": q["question"], "why": q["why"] or "it blocks progress on the goal",
+                      "hypotheses": hyps,
+                      "dependencies": [ids[n - 1] for n in q["needs"] if 1 <= n <= len(ids) and n - 1 != i],
+                      "acceptance": [order_a[n - 1] for n in q["checks"] if 1 <= n <= len(order_a)]})
+    return {"goal": goal, "constraints": constraints,
+            "acceptance": [{"id": k, "condition": v} for k, v in acceptance.items()], "questions": out_q}
+
+
 def for_ctx(ctx):
     if not getattr(ctx, "problem_workbook", False) or not getattr(ctx, "conv_id", None):
         return None
@@ -132,6 +204,18 @@ class Workbook:
     def plan(self, a):
         with self.lock:
             self.refresh()
+            if isinstance(a.get("text"), str) and a["text"].strip():
+                a = parse_plan_text(a["text"], self.state)
+                if not a["goal"]:
+                    raise PolicyError("Not recorded: the plan text needs a GOAL: line, e.g. 'GOAL: all tests pass'.")
+                if not a["questions"]:
+                    raise PolicyError("Not recorded: add at least one QUESTION: line (what blocks progress), with "
+                                      "MAYBE: lines under it for the possible explanations.")
+            a = dict(a)                                 # structured form: missing fields keep what is recorded
+            a.setdefault("goal", self.state["goal"] or "")
+            a.setdefault("constraints", list(self.state["constraints"]))
+            a.setdefault("acceptance", [])
+            a.setdefault("questions", [])
             if self.state["pending"]:
                 raise PolicyError(f"Not revised: experiment for question '{self.state['pending']['question']}' is pending. "
                                   f"Run its tool ({self.state['pending']['tool']}) with the declared arguments, then "

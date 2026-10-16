@@ -2126,7 +2126,94 @@ def t_module_status(a,c):
     return json.dumps(summary,ensure_ascii=False)
 
 
+_CHECK_RX = re.compile(r"^\s*(?:[-*]\s*)?(?:\[([ xX~>!-])\]\s*|\d+[.)]\s+)(.+?)\s*$")
+
+
+def parse_checklist_text(text):
+    """A plain-text checklist -> (goal, design, milestones). The format a small model can't get wrong:
+
+        GOAL: what the result is
+        DESIGN: optional, the hard parts and how
+        ## First phase | done when: tests for X pass
+        - [ ] a step
+        - [x] a finished step
+        ## Second phase
+        - [ ] ...
+
+    Steps before any '##' (or with no headings at all) form one phase named after the goal. [x] = done,
+    [~] or [>] = in progress, [!] = blocked, [-] = skipped; numbered lines ('1. step') work too."""
+    goal = design = ""
+    milestones, cur = [], None
+    marks = {"x": "done", "X": "done", "~": "in_progress", ">": "in_progress", "!": "blocked", "-": "skipped"}
+    for raw in str(text or "").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        m = re.match(r"^(GOAL|DESIGN)\s*:\s*(.*)$", line, re.I)
+        if m:
+            if m.group(1).upper() == "GOAL":
+                goal = m.group(2).strip()
+            else:
+                design = m.group(2).strip()
+            continue
+        h = re.match(r"^#{1,3}\s*(.+)$", line) or re.match(r"^(?:milestone|phase)\s*\d*\s*:\s*(.+)$", line, re.I)
+        if h:
+            title, _, when = h.group(1).partition("|")
+            when = re.sub(r"^\s*done\s*when\s*:?\s*", "", when, flags=re.I).strip()
+            cur = {"title": title.strip(), "subtasks": []}
+            if when:
+                cur["done_when"] = when
+            milestones.append(cur)
+            continue
+        dw = re.match(r"^done\s*when\s*:\s*(.+)$", line, re.I)
+        if dw and cur is not None:
+            cur["done_when"] = dw.group(1).strip()
+            continue
+        s = _CHECK_RX.match(line)
+        if s:
+            if cur is None:
+                cur = {"title": goal or "Plan", "subtasks": []}
+                milestones.append(cur)
+            step = {"step": s.group(2).strip()}
+            if s.group(1) and s.group(1) in marks:
+                step["status"] = marks[s.group(1)]
+            cur["subtasks"].append(step)
+    return goal, design, [m for m in milestones if m["subtasks"] or m.get("done_when")]
+
+
+def _expand_simple_tracker_args(a, c):
+    """checklist='<plain text>' and done='1.2, 1.3' / started='1.4' become the structured fields."""
+    a = dict(a)
+    if isinstance(a.get("checklist"), str) and a["checklist"].strip():
+        goal, design, ms = parse_checklist_text(a.pop("checklist"))
+        if not ms:
+            raise ToolError("Not saved: the checklist text has no steps. Write it like:\nGOAL: what you will deliver\n"
+                            "## First phase | done when: how you'll know it works\n- [ ] a concrete step\n- [ ] another step")
+        a["milestones"] = ms
+        if goal and not a.get("goal"):
+            a["goal"] = goal
+        if design and not a.get("design"):
+            a["design"] = design
+        if "new" not in a:
+            a["new"] = not (c.tracker and tracker_open(c.tracker) and goal and goal == c.tracker.get("goal"))
+    ups = list(a.get("updates") or []) if isinstance(a.get("updates"), list) else a.get("updates")
+    for key, status in (("done", "done"), ("started", "in_progress"), ("blocked", "blocked"), ("skipped", "skipped")):
+        v = a.pop(key, None)
+        if v in (None, "", []):
+            continue
+        ids = v if isinstance(v, list) else re.split(r"[,\s;]+", str(v))
+        extra = [{"id": str(i).strip().rstrip("."), "status": status} for i in ids if str(i).strip()]
+        if isinstance(ups, list):
+            ups += extra
+        else:
+            ups = extra
+    if ups:
+        a["updates"] = ups
+    return a
+
+
 def t_update_tracker(a, c):
+    a = _expand_simple_tracker_args(a, c)
     if a.get("new") and c.tracker and not a.get("milestones") and not a.get("steps") and tracker_open(c.tracker):
         # an empty "new" checklist over one with open items (a 9B sent {"new": true} mid-build and was told
         # "everything is done")
@@ -2704,6 +2791,20 @@ BRIEF_OVER = 450            # a description longer than this is sent as its firs
 # descriptions that carry rules the model must follow on every call stay whole (shell syntax, the checklist's
 # fields, the sandbox folder, waiting for a server's port, 'use it for every calculation', Office file rules)
 BRIEF_KEEP = {"update_tracker", "powershell", "python_sandbox", "bg_start", "calculate", "create_document"}
+# compact prompts: hand-shortened versions of the two biggest always-on descriptions, keeping every rule the model
+# needs on each call (plans/tool-loading-v2.md); the full text stays in read_guide('tool:<name>')
+COMPACT_DESC = {
+    "update_tracker": ("Your task checklist; it keeps you on track. Create it first, as plain text: checklist='GOAL: "
+                       "what you deliver\\n## phase | done when: how you will know it works\\n- [ ] step\\n- [ ] step' "
+                       "(new=true for a new request). Then keep it current with short calls: done='1.2', "
+                       "started='1.3', notes=[findings, what failed], decisions=[settled questions, kept in view], "
+                       "next='the very next action'. Full guide: read_guide('tool:update_tracker')."),
+    "powershell": ("Run PowerShell on the user's Windows PC: output, errors and exit code. Your terminal for git, "
+                   "python, pip, npm, builds and tests; cd sticks between calls. It is PowerShell, not bash: no "
+                   "heredocs (<<EOF), no &&-chains (use ;). For more than a line of Python, write a .py file and run it. A "
+                   "command silent for 10 s returns early and keeps running in the background (allow_idle=true "
+                   "waits). timeout default 120 s, max 600; shell='cmd' or 'pwsh' to switch."),
+}
 
 
 def brief_description(name, text, limit=BRIEF_OVER):
@@ -2751,10 +2852,24 @@ def tool_groups(reg):
     return out
 
 
-def tool_catalog(reg, enabled, query="", gate=True):
-    q = str(query or "").strip().lower()
+def tool_catalog_compact(reg, enabled):
+    """One line per group: what it is for and its tool names (* = loaded now). About 300 tokens instead of the full
+    catalog's ~2,100, which was dumped 91 times in the logs; available_tools(group=…) or query=… gives the details."""
     lines = []
     for g, blurb, names in tool_groups(reg):
+        if names:
+            lines.append(f"[{g}] {blurb}: " + ", ".join(n + ("*" if n in enabled else "") for n in names))
+    return ("Tools by group (* = loaded now; any other loads when you call it). For what a group's tools do: "
+            "available_tools(group='web'), or query='keyword'.\n" + "\n".join(lines))
+
+
+def tool_catalog(reg, enabled, query="", gate=True, group=""):
+    q = str(query or "").strip().lower()
+    want_group = str(group or "").strip().lower()
+    lines = []
+    for g, blurb, names in tool_groups(reg):
+        if want_group and g.lower() != want_group:
+            continue
         rows = []
         for n in names:
             desc = _first_sentence(reg.by_name[n]["description"])
@@ -4522,13 +4637,13 @@ BUILTIN = [
      _obj({"action": S, "index": I, "url": S}), t_browser_tabs),
     ("browser_screenshot", READ, "Screenshot of the browser page (you see it if vision is on).",
      _obj({"full_page": B}), t_browser_screenshot),
-    ("problem_plan", NOTE, "For complex work preserve the goal, acceptance conditions and constraints. Reduce the blocker to questions with alternative explanations and dependencies. Existing resolved questions cannot be silently rewritten. Integration questions name acceptance IDs; a plan is an interpretation, not proof.",
-     _obj({"goal":S,"constraints":{"type":"array","items":S},
+    ("problem_plan", NOTE, "For a hard problem: record the goal, what counts as done, and the questions blocking it with their possible explanations. Easiest as text= lines: GOAL: …, ACCEPT: … (one per condition), QUESTION: … | because: …, then MAYBE: … lines (two or more explanations), optional CHECKS: 1 (ACCEPT numbers it settles) and NEEDS: 1 (earlier QUESTION numbers). The app assigns the ids. A plan is an interpretation, not proof.",
+     _obj({"text":S,"goal":S,"constraints":{"type":"array","items":S},
            "acceptance":{"type":"array","items":_obj({"id":S,"condition":S},["id","condition"])},
            "questions":{"type":"array","items":_obj({"id":S,"question":S,"why":S,
               "hypotheses":{"type":"array","items":S},"dependencies":{"type":"array","items":S},
               "acceptance":{"type":"array","items":S}},["id","question","why","hypotheses","dependencies","acceptance"])}},
-          ["goal","constraints","acceptance","questions"]), t_problem_plan),
+          []), t_problem_plan),
     ("problem_experiment", NOTE, "Choose one open question and a discriminating normal tool call. Declare its actual tool arguments, relevant input file paths (including tests/config), at least two predicted outcomes/decisions and rationale. Execute it normally, then record its controller evidence. This grants no permissions and does not call the tool itself.",
      _obj({"question":S,"tool":S,"arguments":{"type":"object","additionalProperties":True},
            "inputs":{"type":"array","items":S},"predictions":{"type":"array","items":S},"rationale":S},
@@ -4570,6 +4685,10 @@ BUILTIN = [
      "Send 'milestones' again only to restructure the plan. "
      "Optional 'path' keeps it in a project folder (e.g. PROGRESS.md).",
      _obj({"goal": S, "design": S, "new": B,
+           "checklist": {"type": "string", "description": "the plan as plain text: GOAL: …, ## phase | done when: …, "
+                         "- [ ] step lines ([x] = done). Easier than milestones."},
+           "done": {"type": "string", "description": "ids finished, e.g. '1.2, 1.3'"},
+           "started": {"type": "string", "description": "ids now in progress, e.g. '1.4'"},
            "milestones": {"type": "array", "items": {"type": "object", "properties": {
                "title": S, "done_when": S, "status": S, "subtasks": {"type": "array", "items": {"type": "object", "properties": {
                    "step": S, "status": S}, "required": ["step"]}}}, "required": ["title"]}},
@@ -4605,7 +4724,7 @@ BUILTIN = [
      "by purpose with what each does; query filters by keyword; enable turns tools on by tool or group name (e.g. "
      "[\"files\", \"web\", \"calculate\"]) — they become callable on your next step and stay on for this chat. "
      "Use it when planning to decide which tools you will use, and whenever you need a capability you don't see.",
-     _obj({"query": S, "enable": {"type": "array", "items": S}}), t_available_tools),
+     _obj({"query": S, "group": S, "enable": {"type": "array", "items": S}}), t_available_tools),
     ("schedule_task", EXEC, "Schedule a recurring or one-time agent task (the user approves it): name, prompt (full "
      "instructions; the run starts with no chat history), when: 'daily 08:00', 'weekdays 8:30am', 'every monday at 9am', "
      "'mon,thu 18:00', 'daily 08:00 and 17:30', 'every 3 days at 07:00', 'monthly 1 09:00', '15th of every month at "
@@ -5033,8 +5152,18 @@ class Registry:
             if compact:
                 # Preserve parameter names, types, required fields, enums and defaults.
                 # The full prose remains retrievable via read_guide('tool:<name>').
-                if t["name"] not in {"module_contract", "verify_module", "update_tracker", "powershell", "available_tools"}:
+                if t["name"] in COMPACT_DESC:
+                    desc = COMPACT_DESC[t["name"]]
+                elif t["name"] not in {"module_contract", "verify_module", "available_tools"}:
                     desc = brief_description(t["name"], desc, limit=220)
+                if t["name"] == "update_tracker" and isinstance(params, dict):
+                    # the nested milestone/update schemas were half of the biggest tool (479 tokens); the plain-text
+                    # checklist and done='1.2' cover them, and the structured forms still parse
+                    props = dict(params.get("properties") or {})
+                    for k in ("milestones", "updates"):
+                        if k in props:
+                            props[k] = {"type": "array", "items": {"type": "object"}}
+                    params = dict(params, properties=props)
                 def shorten(value):
                     if isinstance(value, list):
                         return [shorten(v) for v in value]
