@@ -68,3 +68,26 @@ boost what the top hits call and what calls them (seeds, boost added to the RRF 
 - Next candidates need a signal that says which neighbour matters for this question: rank linked definitions by their
   own match to the question instead of a flat boost (offline, cheap), or a second round where the model reads the
   first pack and names what is missing (needs the model; most promising for the large codebase).
+
+## Round 3: a model-driven second round (`second_round.py`, `second_round.json`)
+Same total budget either way. Two rounds = a first pack of 60% of the budget; Ternary Bonsai 2 9B (GPU, thinking off)
+reads it with the question and names what is still missing (exact names or short phrases, JSON); a second pack fills
+the remaining 40% with the named definitions first, then a search on its request. Median model call 3.9 s.
+
+| Budget | Single pack: all / pieces | First pack alone (60%) | Two rounds: all / pieces |
+|---|---|---|---|
+| 4K | 7/50 / 53% | 6/50 / 42% | **11/50 / 60%** |
+| 8K | 20/50 / 68% | 10/50 / 56% | **21/50 / 76%** |
+
+| Codebase | 4K single -> two rounds (pieces) | 8K single -> two rounds (pieces) | Questions better / worse at 8K |
+|---|---|---|---|
+| bonsai8 | 53% -> 72% | 79% -> 88% | 6 / 2 |
+| FPS Arena | 65% -> 65% | 84% -> 78% | 2 / 4 |
+| Zen backend | 45% -> 51% | 54% -> **69%** | **10 / 0** |
+
+- The second round helps most where single packs do worst: Zen's backend at 8K gains 15 points of piece recall and is
+  never worse. The model reads names in the first pack (`_STUB_TOOLS`, `_slim_call_args`) and asks for them exactly.
+- Where the first pack is already good (FPS at 8K, 84%), the fixed 60/40 split displaces good slices: worse on 4 of 15.
+- "All pieces together" moves little (20 -> 21 of 50 at 8K): questions need 4-5 pieces and one miss still loses them.
+- Fixes to try: let the model say nothing is missing and keep the full single pack; replace the lowest-ranked slices
+  instead of splitting the budget up front; allow a third round when it still names missing code.

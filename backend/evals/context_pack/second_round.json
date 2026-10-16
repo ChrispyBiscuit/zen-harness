@@ -1,0 +1,1893 @@
+[
+ {
+  "id": "exp-01",
+  "corpus": "bonsai8",
+  "budget": 4000,
+  "pieces": 4,
+  "single": 1,
+  "first": 0,
+  "two_round": 2,
+  "asked": [
+   "db.py:amount_cents CHECK constraint",
+   "db.py:add_expense function",
+   "cli.py:add-expense command handler",
+   "server.py:add-expense HTTP handler",
+   "db.py:insert_expense function",
+   "cli.py:argparse parser for --amount-cents"
+  ],
+  "model_s": 3.7,
+  "prompt_tokens": 3708
+ },
+ {
+  "id": "exp-01",
+  "corpus": "bonsai8",
+  "budget": 8000,
+  "pieces": 4,
+  "single": 2,
+  "first": 1,
+  "two_round": 4,
+  "asked": [
+   "db.py:insert_expense",
+   "db.py:validate_amount",
+   "server.py:handle_add_expense",
+   "cli.py:cmd_add_expense",
+   "db.py:execute_query",
+   "db.py:run_transaction"
+  ],
+  "model_s": 5.2,
+  "prompt_tokens": 7377
+ },
+ {
+  "id": "exp-02",
+  "corpus": "bonsai8",
+  "budget": 4000,
+  "pieces": 4,
+  "single": 3,
+  "first": 2,
+  "two_round": 4,
+  "asked": [
+   "server.py",
+   "api.py",
+   "db.py",
+   "parse_totals_block",
+   "_current_month",
+   "fetch_totals_raw"
+  ],
+  "model_s": 3.1,
+  "prompt_tokens": 4096
+ },
+ {
+  "id": "exp-02",
+  "corpus": "bonsai8",
+  "budget": 8000,
+  "pieces": 4,
+  "single": 3,
+  "first": 3,
+  "two_round": 4,
+  "asked": [
+   "db.py.totals",
+   "cli.py.cmd_totals",
+   "server.py",
+   "db.py._get_db",
+   "db.py.expenses",
+   "db.py.users"
+  ],
+  "model_s": 5.4,
+  "prompt_tokens": 7690
+ },
+ {
+  "id": "exp-03",
+  "corpus": "bonsai8",
+  "budget": 4000,
+  "pieces": 4,
+  "single": 1,
+  "first": 1,
+  "two_round": 1,
+  "asked": [
+   "server.py",
+   "db.py:126-145",
+   "db.py:75-81",
+   "db.py:132-142",
+   "db.py:135-136",
+   "db.py:139-140"
+  ],
+  "model_s": 3.4,
+  "prompt_tokens": 3651
+ },
+ {
+  "id": "exp-03",
+  "corpus": "bonsai8",
+  "budget": 8000,
+  "pieces": 4,
+  "single": 2,
+  "first": 1,
+  "two_round": 3,
+  "asked": [
+   "server.py",
+   "db.py",
+   "http_get function implementation",
+   "list-expenses HTTP handler",
+   "add-user HTTP handler",
+   "user name uniqueness constraint enforcement"
+  ],
+  "model_s": 4.9,
+  "prompt_tokens": 6941
+ },
+ {
+  "id": "exp-04",
+  "corpus": "bonsai8",
+  "budget": 4000,
+  "pieces": 5,
+  "single": 2,
+  "first": 1,
+  "two_round": 3,
+  "asked": [
+   "server.py: function handling add-expense POST request",
+   "db.py: function to insert expense with payment_method field",
+   "db.py: function to query expenses including payment_method",
+   "db.py: schema definition for payment_method column",
+   "cli.py: function cmd_add_expense implementation",
+   "cli.py: function cmd_list_expenses implementation"
+  ],
+  "model_s": 3.3,
+  "prompt_tokens": 3391
+ },
+ {
+  "id": "exp-04",
+  "corpus": "bonsai8",
+  "budget": 8000,
+  "pieces": 5,
+  "single": 3,
+  "first": 2,
+  "two_round": 4,
+  "asked": [
+   "server.py:Handler class",
+   "server.py:add_expense_route",
+   "db.py:expense schema definition",
+   "db.py:fetch_expense_by_id function",
+   "db.py:fetch_expenses_by_user function",
+   "db.py:fetch_expenses_by_month function"
+  ],
+  "model_s": 5.1,
+  "prompt_tokens": 6853
+ },
+ {
+  "id": "exp-05",
+  "corpus": "bonsai8",
+  "budget": 4000,
+  "pieces": 5,
+  "single": 3,
+  "first": 1,
+  "two_round": 4,
+  "asked": [
+   "server.py",
+   "cli.py",
+   "server.py:port parameter definition",
+   "cli.py:port argument parsing",
+   "smoke_test.py:port configuration",
+   "server.py:default port constant or variable"
+  ],
+  "model_s": 3.1,
+  "prompt_tokens": 3725
+ },
+ {
+  "id": "exp-05",
+  "corpus": "bonsai8",
+  "budget": 8000,
+  "pieces": 5,
+  "single": 4,
+  "first": 2,
+  "two_round": 3,
+  "asked": [
+   "server.py:run()",
+   "server.py:Handler.do_GET()",
+   "server.py:Handler.do_POST()",
+   "db.py:db.init_db()",
+   "db.py:db.query()",
+   "db.py:db.insert()"
+  ],
+  "model_s": 4.9,
+  "prompt_tokens": 6821
+ },
+ {
+  "id": "exp-06",
+  "corpus": "bonsai8",
+  "budget": 4000,
+  "pieces": 4,
+  "single": 2,
+  "first": 1,
+  "two_round": 3,
+  "asked": [
+   "db.py:initialize_database()",
+   "db.py:ensure_directory()",
+   "server.py:main()",
+   "server.py:handle_db_path_argument()",
+   "README.md:firewall_instructions()",
+   "README.md:db_path_explanation()"
+  ],
+  "model_s": 2.8,
+  "prompt_tokens": 3189
+ },
+ {
+  "id": "exp-06",
+  "corpus": "bonsai8",
+  "budget": 8000,
+  "pieces": 4,
+  "single": 4,
+  "first": 2,
+  "two_round": 4,
+  "asked": [
+   "db.py:1-32 (SCHEMA)",
+   "server.py:31-100 (Handler class and route handlers)",
+   "server.py:101-150 (command parsing and db.py imports)",
+   "README.md:101-180 (firewall instructions and troubleshooting)",
+   "db.py:1-32 (init_db function implementation)",
+   "server.py:151-200 (exception handling for database errors)"
+  ],
+  "model_s": 5.6,
+  "prompt_tokens": 6813
+ },
+ {
+  "id": "exp-07",
+  "corpus": "bonsai8",
+  "budget": 4000,
+  "pieces": 3,
+  "single": 2,
+  "first": 2,
+  "two_round": 2,
+  "asked": [
+   "cli.py:cmd_list_expenses",
+   "cli.py:cmd_totals",
+   "server.py:Handler",
+   "server.py:run_server",
+   "server.py:run_cli",
+   "server.py:parse_args"
+  ],
+  "model_s": 3.2,
+  "prompt_tokens": 3849
+ },
+ {
+  "id": "exp-07",
+  "corpus": "bonsai8",
+  "budget": 8000,
+  "pieces": 3,
+  "single": 3,
+  "first": 3,
+  "two_round": 3,
+  "asked": [
+   "server.py:do_GET",
+   "server.py:Handler class",
+   "server.py:db module import",
+   "server.py:db.list_expenses call",
+   "server.py:db.totals call",
+   "server.py:db.list_users call"
+  ],
+  "model_s": 5.4,
+  "prompt_tokens": 7326
+ },
+ {
+  "id": "exp-08",
+  "corpus": "bonsai8",
+  "budget": 4000,
+  "pieces": 4,
+  "single": 1,
+  "first": 1,
+  "two_round": 3,
+  "asked": [
+   "db.add_expense",
+   "db.list_expenses",
+   "db.totals",
+   "cli.py",
+   "parse_totals_block",
+   "expense-cli.py"
+  ],
+  "model_s": 3.2,
+  "prompt_tokens": 3782
+ },
+ {
+  "id": "exp-08",
+  "corpus": "bonsai8",
+  "budget": 8000,
+  "pieces": 4,
+  "single": 4,
+  "first": 2,
+  "two_round": 3,
+  "asked": [
+   "db.list_expenses",
+   "db.totals",
+   "db.add_expense",
+   "db.user_exists",
+   "db.list_users",
+   "parse_totals_block"
+  ],
+  "model_s": 5.0,
+  "prompt_tokens": 7209
+ },
+ {
+  "id": "exp-09",
+  "corpus": "bonsai8",
+  "budget": 4000,
+  "pieces": 4,
+  "single": 2,
+  "first": 3,
+  "two_round": 4,
+  "asked": [
+   "server.py:handler for /users POST",
+   "server.py:transaction handling or locking mechanism",
+   "server.py:exception handling for UNIQUE constraint",
+   "server.py:threading model for concurrent requests",
+   "server.py:how the error message is formatted",
+   "server.py:database connection lifecycle during concurrent writes"
+  ],
+  "model_s": 3.4,
+  "prompt_tokens": 3605
+ },
+ {
+  "id": "exp-09",
+  "corpus": "bonsai8",
+  "budget": 8000,
+  "pieces": 4,
+  "single": 4,
+  "first": 3,
+  "two_round": 4,
+  "asked": [
+   "db.py:54-55",
+   "db.py:45-53",
+   "server.py:do_POST",
+   "server.py:do_GET",
+   "server.py:ThreadingHTTPServer",
+   "server.py:run_server"
+  ],
+  "model_s": 5.1,
+  "prompt_tokens": 6840
+ },
+ {
+  "id": "exp-10",
+  "corpus": "bonsai8",
+  "budget": 4000,
+  "pieces": 4,
+  "single": 2,
+  "first": 2,
+  "two_round": 2,
+  "asked": [
+   "code under test",
+   "the codebase",
+   "the test",
+   "the code",
+   "the test",
+   "the code"
+  ],
+  "model_s": 3.3,
+  "prompt_tokens": 4158
+ },
+ {
+  "id": "exp-10",
+  "corpus": "bonsai8",
+  "budget": 8000,
+  "pieces": 4,
+  "single": 2,
+  "first": 1,
+  "two_round": 3,
+  "asked": [
+   "_http_get",
+   "_http_post",
+   "_http_error",
+   "_current_month",
+   "_tmp_db",
+   "parse_totals_block"
+  ],
+  "model_s": 5.4,
+  "prompt_tokens": 7898
+ },
+ {
+  "id": "exp-11",
+  "corpus": "bonsai8",
+  "budget": 4000,
+  "pieces": 4,
+  "single": 4,
+  "first": 4,
+  "two_round": 4,
+  "asked": [
+   "_start_server",
+   "_wait_for_port",
+   "_http_post",
+   "_http_get",
+   "_http_error",
+   "_current_month"
+  ],
+  "model_s": 3.5,
+  "prompt_tokens": 4085
+ },
+ {
+  "id": "exp-11",
+  "corpus": "bonsai8",
+  "budget": 8000,
+  "pieces": 4,
+  "single": 4,
+  "first": 4,
+  "two_round": 4,
+  "asked": [
+   "_start_server",
+   "_wait_for_port",
+   "_http_error",
+   "_http_get",
+   "_http_post",
+   "_current_month"
+  ],
+  "model_s": 5.2,
+  "prompt_tokens": 7608
+ },
+ {
+  "id": "exp-12",
+  "corpus": "bonsai8",
+  "budget": 4000,
+  "pieces": 3,
+  "single": 1,
+  "first": 1,
+  "two_round": 2,
+  "asked": [
+   "db.py: function that opens a database connection for writes",
+   "db.py: function that handles concurrent write operations",
+   "db.py: function that retries on 'database is locked' errors",
+   "server.py: HTTP handler that calls the write function",
+   "db.py: transaction handling or locking mechanism",
+   "db.py: add_expense function implementation"
+  ],
+  "model_s": 3.4,
+  "prompt_tokens": 3550
+ },
+ {
+  "id": "exp-12",
+  "corpus": "bonsai8",
+  "budget": 8000,
+  "pieces": 3,
+  "single": 1,
+  "first": 1,
+  "two_round": 2,
+  "asked": [
+   "db.py: function that opens a database connection for writes",
+   "db.py: function that handles concurrent write locks or retries",
+   "db.py: function that catches sqlite3.OperationalError: database is locked",
+   "db.py: function that sleeps or retries on lock contention",
+   "db.py: function that returns the database path for the test fixture",
+   "db.py: function that creates the initial schema for the test fixture"
+  ],
+  "model_s": 5.7,
+  "prompt_tokens": 7096
+ },
+ {
+  "id": "exp-13",
+  "corpus": "bonsai8",
+  "budget": 4000,
+  "pieces": 4,
+  "single": 3,
+  "first": 2,
+  "two_round": 3,
+  "asked": [
+   "db.add_expense",
+   "server.py",
+   "test_db.py"
+  ],
+  "model_s": 3.1,
+  "prompt_tokens": 3963
+ },
+ {
+  "id": "exp-13",
+  "corpus": "bonsai8",
+  "budget": 8000,
+  "pieces": 4,
+  "single": 4,
+  "first": 4,
+  "two_round": 4,
+  "asked": [
+   "db.add_expense",
+   "server.py:121-126",
+   "server.py:110-112"
+  ],
+  "model_s": 5.1,
+  "prompt_tokens": 7465
+ },
+ {
+  "id": "exp-14",
+  "corpus": "bonsai8",
+  "budget": 4000,
+  "pieces": 4,
+  "single": 3,
+  "first": 2,
+  "two_round": 3,
+  "asked": [
+   "server.py:run function implementation",
+   "server.py:ThreadingHTTPServer instantiation",
+   "server.py:BaseHTTPRequestHandler do_GET/do_POST methods",
+   "cli.py:urllib request implementation",
+   "cli.py:argparse host parsing logic",
+   "server.py:db.py database connection logic"
+  ],
+  "model_s": 3.1,
+  "prompt_tokens": 3244
+ },
+ {
+  "id": "exp-14",
+  "corpus": "bonsai8",
+  "budget": 8000,
+  "pieces": 4,
+  "single": 4,
+  "first": 3,
+  "two_round": 4,
+  "asked": [
+   "server.py:run function",
+   "server.py:main function",
+   "server.py:ThreadingHTTPServer usage",
+   "server.py:Handler class",
+   "server.py:argparse default values",
+   "server.py:bind address logic"
+  ],
+  "model_s": 5.0,
+  "prompt_tokens": 6810
+ },
+ {
+  "id": "exp-15",
+  "corpus": "bonsai8",
+  "budget": 4000,
+  "pieces": 2,
+  "single": 1,
+  "first": 1,
+  "two_round": 2,
+  "asked": [
+   "server.py:run method",
+   "server.py:argparse parser",
+   "server.py:main function",
+   "server.py:DB_PATH variable usage",
+   "server.py:exception handling in run",
+   "db.py:db_path parameter handling"
+  ],
+  "model_s": 3.4,
+  "prompt_tokens": 3515
+ },
+ {
+  "id": "exp-15",
+  "corpus": "bonsai8",
+  "budget": 8000,
+  "pieces": 2,
+  "single": 2,
+  "first": 1,
+  "two_round": 2,
+  "asked": [
+   "server.py:run()",
+   "server.py:Handler.do_GET()",
+   "server.py:Handler.do_POST()",
+   "server.py:db.init_db()",
+   "server.py:db.add_expense()",
+   "server.py:db.add_user()"
+  ],
+  "model_s": 5.5,
+  "prompt_tokens": 6697
+ },
+ {
+  "id": "fps-01",
+  "corpus": "fps",
+  "budget": 4000,
+  "pieces": 4,
+  "single": 1,
+  "first": 0,
+  "two_round": 0,
+  "asked": [
+   "rayAABB",
+   "playerFire",
+   "createEnemy",
+   "setupCameraAim",
+   "G.arena.collidersArray",
+   "G.utils.isFree"
+  ],
+  "model_s": 3.5,
+  "prompt_tokens": 3874
+ },
+ {
+  "id": "fps-01",
+  "corpus": "fps",
+  "budget": 8000,
+  "pieces": 4,
+  "single": 1,
+  "first": 1,
+  "two_round": 1,
+  "asked": [
+   "G.utils.rayAABB",
+   "G.utils.isFree",
+   "G.enemies.hit",
+   "G.effects.addParticles",
+   "G.arena.collidersArray",
+   "player.js.fire"
+  ],
+  "model_s": 5.2,
+  "prompt_tokens": 7550
+ },
+ {
+  "id": "fps-02",
+  "corpus": "fps",
+  "budget": 4000,
+  "pieces": 3,
+  "single": 2,
+  "first": 1,
+  "two_round": 2,
+  "asked": [
+   "G.player.shake",
+   "G.camera.shake",
+   "G.game.update",
+   "G.game.loop",
+   "G.sound.play",
+   "playerFire"
+  ],
+  "model_s": 3.1,
+  "prompt_tokens": 3981
+ },
+ {
+  "id": "fps-02",
+  "corpus": "fps",
+  "budget": 8000,
+  "pieces": 3,
+  "single": 2,
+  "first": 2,
+  "two_round": 3,
+  "asked": [
+   "player.updateCamera",
+   "player.updateRig",
+   "main.render",
+   "G.game.shake",
+   "player.fire",
+   "enemies.update"
+  ],
+  "model_s": 5.2,
+  "prompt_tokens": 7715
+ },
+ {
+  "id": "fps-03",
+  "corpus": "fps",
+  "budget": 4000,
+  "pieces": 4,
+  "single": 2,
+  "first": 0,
+  "two_round": 1,
+  "asked": [
+   "player.fire",
+   "enemies.js:309",
+   "enemies.js:hitFlashTimer",
+   "enemies.js:hitStaggerTimer",
+   "enemies.js:applyFlashEffect",
+   "updateEnemy"
+  ],
+  "model_s": 3.3,
+  "prompt_tokens": 4054
+ },
+ {
+  "id": "fps-03",
+  "corpus": "fps",
+  "budget": 8000,
+  "pieces": 4,
+  "single": 3,
+  "first": 3,
+  "two_round": 3,
+  "asked": [
+   "player.js.fire",
+   "enemies.js.hit",
+   "enemies.js.updateEnemy",
+   "G.effects.addParticles",
+   "G.sound.play",
+   "G.game.score"
+  ],
+  "model_s": 5.4,
+  "prompt_tokens": 7825
+ },
+ {
+  "id": "fps-04",
+  "corpus": "fps",
+  "budget": 4000,
+  "pieces": 4,
+  "single": 3,
+  "first": 2,
+  "two_round": 3,
+  "asked": [
+   "G.game.score += ...",
+   "G.game.score = ...",
+   "G.ui.hudOn()",
+   "G.ui.hudOff()",
+   "G.waves.startWave()",
+   "G.waves.getCurrent()"
+  ],
+  "model_s": 3.3,
+  "prompt_tokens": 3988
+ },
+ {
+  "id": "fps-04",
+  "corpus": "fps",
+  "budget": 8000,
+  "pieces": 4,
+  "single": 3,
+  "first": 3,
+  "two_round": 3,
+  "asked": [
+   "G.game.score += 500 * currentN",
+   "G.game.score",
+   "G.ui.updateHud",
+   "G.ui.hudOn",
+   "G.ui.gameOver",
+   "G.waves.update"
+  ],
+  "model_s": 5.4,
+  "prompt_tokens": 7631
+ },
+ {
+  "id": "fps-05",
+  "corpus": "fps",
+  "budget": 4000,
+  "pieces": 3,
+  "single": 3,
+  "first": 3,
+  "two_round": 3,
+  "asked": [
+   "G.game.update()",
+   "G.game.loop()",
+   "G.game.enemies[0].update()",
+   "G.game.enemies[0].attack()",
+   "G.game.player.takeDamage()",
+   "G.game.ui.pause()"
+  ],
+  "model_s": 3.3,
+  "prompt_tokens": 3960
+ },
+ {
+  "id": "fps-05",
+  "corpus": "fps",
+  "budget": 8000,
+  "pieces": 3,
+  "single": 3,
+  "first": 3,
+  "two_round": 3,
+  "asked": [
+   "G.ui.pause",
+   "G.ui.resume",
+   "G.ui.hudOn",
+   "G.ui.hudOff",
+   "G.ui.crosshairOn",
+   "G.ui.crosshairOff"
+  ],
+  "model_s": 5.3,
+  "prompt_tokens": 7639
+ },
+ {
+  "id": "fps-06",
+  "corpus": "fps",
+  "budget": 4000,
+  "pieces": 4,
+  "single": 4,
+  "first": 4,
+  "two_round": 4,
+  "asked": [
+   "G.game.onRestart",
+   "G.waves.update",
+   "G.ui.pause",
+   "G.ui.resume",
+   "G.ui.hudOn",
+   "G.ui.hudOff"
+  ],
+  "model_s": 3.2,
+  "prompt_tokens": 3889
+ },
+ {
+  "id": "fps-06",
+  "corpus": "fps",
+  "budget": 8000,
+  "pieces": 4,
+  "single": 4,
+  "first": 4,
+  "two_round": 4,
+  "asked": [
+   "G.game.onRestart",
+   "G.waves.startWave",
+   "G.ui.pause",
+   "G.ui.resume"
+  ],
+  "model_s": 5.1,
+  "prompt_tokens": 7638
+ },
+ {
+  "id": "fps-07",
+  "corpus": "fps",
+  "budget": 4000,
+  "pieces": 4,
+  "single": 4,
+  "first": 4,
+  "two_round": 4,
+  "asked": [
+   "main.js:134-136",
+   "main.js:140-142",
+   "main.js:160-166",
+   "ui.js:52-57",
+   "main.js:83-85",
+   "main.js:107-113"
+  ],
+  "model_s": 3.5,
+  "prompt_tokens": 3840
+ },
+ {
+  "id": "fps-07",
+  "corpus": "fps",
+  "budget": 8000,
+  "pieces": 4,
+  "single": 4,
+  "first": 4,
+  "two_round": 4,
+  "asked": [
+   "main.js:134-136",
+   "main.js:160-166",
+   "main.js:162",
+   "main.js:161",
+   "main.js:160",
+   "main.js:163"
+  ],
+  "model_s": 5.7,
+  "prompt_tokens": 7694
+ },
+ {
+  "id": "fps-08",
+  "corpus": "fps",
+  "budget": 4000,
+  "pieces": 4,
+  "single": 2,
+  "first": 1,
+  "two_round": 2,
+  "asked": [
+   "player.js.fire",
+   "enemies.js.hit",
+   "utils.js.raycast",
+   "arena.js.collidersArray",
+   "G.game.enemies",
+   "G.game.player"
+  ],
+  "model_s": 3.3,
+  "prompt_tokens": 4064
+ },
+ {
+  "id": "fps-08",
+  "corpus": "fps",
+  "budget": 8000,
+  "pieces": 4,
+  "single": 4,
+  "first": 2,
+  "two_round": 2,
+  "asked": [
+   "G.utils.rayAABB",
+   "G.utils.isFree",
+   "G.camera.quaternion.applyToVector",
+   "G.game.enemies[0].hitbox",
+   "player.js.fire",
+   "enemies.js.hit"
+  ],
+  "model_s": 5.8,
+  "prompt_tokens": 7870
+ },
+ {
+  "id": "fps-09",
+  "corpus": "fps",
+  "budget": 4000,
+  "pieces": 4,
+  "single": 3,
+  "first": 3,
+  "two_round": 3,
+  "asked": [
+   "player.js",
+   "enemies.js",
+   "utils.js",
+   "arena.js",
+   "G.player.damage",
+   "G.game.player.pos"
+  ],
+  "model_s": 3.2,
+  "prompt_tokens": 3951
+ },
+ {
+  "id": "fps-09",
+  "corpus": "fps",
+  "budget": 8000,
+  "pieces": 4,
+  "single": 3,
+  "first": 3,
+  "two_round": 4,
+  "asked": [
+   "player.js",
+   "playerFire function",
+   "G.game.player.pos property",
+   "G.game.player object initialization",
+   "G.game.player.pos.x access in enemies.js line 125",
+   "verify_ai.js runDetourTest function"
+  ],
+  "model_s": 5.9,
+  "prompt_tokens": 7582
+ },
+ {
+  "id": "fps-10",
+  "corpus": "fps",
+  "budget": 4000,
+  "pieces": 3,
+  "single": 1,
+  "first": 1,
+  "two_round": 1,
+  "asked": [
+   "G.arena.build",
+   "G.game.enemies.push",
+   "updateEnemy",
+   "G.effects.update",
+   "G.game.onSpawn"
+  ],
+  "model_s": 3.1,
+  "prompt_tokens": 3964
+ },
+ {
+  "id": "fps-10",
+  "corpus": "fps",
+  "budget": 8000,
+  "pieces": 3,
+  "single": 3,
+  "first": 1,
+  "two_round": 3,
+  "asked": [
+   "G.waves.spawn",
+   "G.waves.update",
+   "G.effects.addParticles",
+   "G.effects.update",
+   "G.waves.getCurrent",
+   "G.waves.spawnTimer"
+  ],
+  "model_s": 5.5,
+  "prompt_tokens": 7775
+ },
+ {
+  "id": "fps-11",
+  "corpus": "fps",
+  "budget": 4000,
+  "pieces": 4,
+  "single": 2,
+  "first": 1,
+  "two_round": 3,
+  "asked": [
+   "function createEnemy",
+   "function create",
+   "function updateEnemy",
+   "function hit",
+   "function kill",
+   "function hasLineOfSight"
+  ],
+  "model_s": 3.5,
+  "prompt_tokens": 4101
+ },
+ {
+  "id": "fps-11",
+  "corpus": "fps",
+  "budget": 8000,
+  "pieces": 4,
+  "single": 4,
+  "first": 2,
+  "two_round": 3,
+  "asked": [
+   "G.enemies.spawnChance",
+   "G.enemies.attackRange",
+   "G.enemies.killReward",
+   "G.enemies.spawnChance",
+   "G.enemies.attackRange",
+   "G.enemies.killReward"
+  ],
+  "model_s": 6.3,
+  "prompt_tokens": 7835
+ },
+ {
+  "id": "fps-12",
+  "corpus": "fps",
+  "budget": 4000,
+  "pieces": 4,
+  "single": 4,
+  "first": 4,
+  "two_round": 4,
+  "asked": [
+   "G.effects.addDamageNumber",
+   "G.game.score",
+   "G.game.player.health",
+   "G.game.enemies",
+   "createEnemy",
+   "updateEnemy"
+  ],
+  "model_s": 3.8,
+  "prompt_tokens": 4086
+ },
+ {
+  "id": "fps-12",
+  "corpus": "fps",
+  "budget": 8000,
+  "pieces": 4,
+  "single": 4,
+  "first": 4,
+  "two_round": 4,
+  "asked": [
+   "G.player.damage",
+   "G.enemies.hit",
+   "G.effects.addDamageNumber",
+   "player.js.fire",
+   "enemies.js.hit",
+   "player.js.damage"
+  ],
+  "model_s": 5.6,
+  "prompt_tokens": 7793
+ },
+ {
+  "id": "fps-13",
+  "corpus": "fps",
+  "budget": 4000,
+  "pieces": 4,
+  "single": 1,
+  "first": 1,
+  "two_round": 1,
+  "asked": [
+   "createEnemy",
+   "updateEnemy",
+   "spawnBeam",
+   "G.effects.addParticles",
+   "G.player.damage",
+   "G.arena.collidersArray"
+  ],
+  "model_s": 3.3,
+  "prompt_tokens": 3925
+ },
+ {
+  "id": "fps-13",
+  "corpus": "fps",
+  "budget": 8000,
+  "pieces": 4,
+  "single": 2,
+  "first": 1,
+  "two_round": 1,
+  "asked": [
+   "G.enemies",
+   "createEnemy",
+   "updateEnemy",
+   "G.game.enemies",
+   "G.game.player",
+   "G.arena"
+  ],
+  "model_s": 5.4,
+  "prompt_tokens": 7824
+ },
+ {
+  "id": "fps-14",
+  "corpus": "fps",
+  "budget": 4000,
+  "pieces": 3,
+  "single": 2,
+  "first": 2,
+  "two_round": 3,
+  "asked": [
+   "G.enemies.update",
+   "G.enemies.kill",
+   "G.enemies.create",
+   "G.game.enemies",
+   "G.waves.update",
+   "G.waves.startWave"
+  ],
+  "model_s": 3.3,
+  "prompt_tokens": 3875
+ },
+ {
+  "id": "fps-14",
+  "corpus": "fps",
+  "budget": 8000,
+  "pieces": 3,
+  "single": 3,
+  "first": 3,
+  "two_round": 3,
+  "asked": [
+   "G.waves.update",
+   "G.enemies.update",
+   "G.enemies.updateEnemy",
+   "G.game.enemies",
+   "G.game.score",
+   "G.waves.startWave"
+  ],
+  "model_s": 5.6,
+  "prompt_tokens": 7710
+ },
+ {
+  "id": "fps-15",
+  "corpus": "fps",
+  "budget": 4000,
+  "pieces": 3,
+  "single": 2,
+  "first": 2,
+  "two_round": 2,
+  "asked": [
+   "player.js:fire()",
+   "player.js:finishReload()",
+   "player.js:update()",
+   "player.js:loop()",
+   "player.js:update()",
+   "player.js:loop()"
+  ],
+  "model_s": 3.2,
+  "prompt_tokens": 3780
+ },
+ {
+  "id": "fps-15",
+  "corpus": "fps",
+  "budget": 8000,
+  "pieces": 3,
+  "single": 3,
+  "first": 2,
+  "two_round": 2,
+  "asked": [
+   "player.js:fire()",
+   "player.js:reloadTimer",
+   "RELOAD_DUR constant",
+   "G.game.onReload callback",
+   "player.js.update() loop",
+   "G.game.onReload implementation"
+  ],
+  "model_s": 5.5,
+  "prompt_tokens": 7639
+ },
+ {
+  "id": "zen-01",
+  "corpus": "zen",
+  "budget": 4000,
+  "pieces": 6,
+  "single": 3,
+  "first": 2,
+  "two_round": 3,
+  "asked": [
+   "AgentEngine._covered",
+   "AgentEngine._file_state",
+   "AgentEngine._step_no",
+   "AgentEngine._key_output",
+   "Registry._call_unchecked",
+   "obligations.record"
+  ],
+  "model_s": 3.1,
+  "prompt_tokens": 3026
+ },
+ {
+  "id": "zen-01",
+  "corpus": "zen",
+  "budget": 8000,
+  "pieces": 6,
+  "single": 3,
+  "first": 3,
+  "two_round": 5,
+  "asked": [
+   "AgentEngine._unchanged_read",
+   "AgentEngine._remember_read",
+   "AgentEngine._step_no",
+   "AgentEngine._file_state",
+   "AgentEngine._covered",
+   "AgentEngine._gate_key"
+  ],
+  "model_s": 4.2,
+  "prompt_tokens": 5669
+ },
+ {
+  "id": "zen-02",
+  "corpus": "zen",
+  "budget": 4000,
+  "pieces": 5,
+  "single": 2,
+  "first": 2,
+  "two_round": 2,
+  "asked": [
+   "function key_line",
+   "function events",
+   "function _dir",
+   "function _minimum_render",
+   "function _active_lines",
+   "function _workbook_brief"
+  ],
+  "model_s": 2.6,
+  "prompt_tokens": 2985
+ },
+ {
+  "id": "zen-02",
+  "corpus": "zen",
+  "budget": 8000,
+  "pieces": 5,
+  "single": 2,
+  "first": 2,
+  "two_round": 4,
+  "asked": [
+   "write_map",
+   "events",
+   "key_line",
+   "_dir",
+   "history_search",
+   "render_timeline"
+  ],
+  "model_s": 3.9,
+  "prompt_tokens": 5675
+ },
+ {
+  "id": "zen-03",
+  "corpus": "zen",
+  "budget": 4000,
+  "pieces": 6,
+  "single": 1,
+  "first": 1,
+  "two_round": 2,
+  "asked": [
+   "function that composes sentences from trace data",
+   "function that appends 'Controller evidence' IDs",
+   "function that logs write_file calls between engine and t_write_file",
+   "function that tracks which layers a call passes through",
+   "function that explains why nothing was written despite a call",
+   "function that resolves the 'Controller evidence' ID 6b1f0c2e9a4d4e0fb3c7a1d2e5f60718"
+  ],
+  "model_s": 3.4,
+  "prompt_tokens": 3054
+ },
+ {
+  "id": "zen-03",
+  "corpus": "zen",
+  "budget": 8000,
+  "pieces": 6,
+  "single": 1,
+  "first": 1,
+  "two_round": 2,
+  "asked": [
+   "t_write_file",
+   "verify_module",
+   "module_contract",
+   "begin_module",
+   "problem_experiment",
+   "problem_record"
+  ],
+  "model_s": 4.0,
+  "prompt_tokens": 5602
+ },
+ {
+  "id": "zen-04",
+  "corpus": "zen",
+  "budget": 4000,
+  "pieces": 7,
+  "single": 3,
+  "first": 2,
+  "two_round": 3,
+  "asked": [
+   "_save_filehist",
+   "_filehist_path",
+   "tracker_current",
+   "tracker_items",
+   "obligations.on_tests",
+   "ci.failing_names"
+  ],
+  "model_s": 2.7,
+  "prompt_tokens": 3209
+ },
+ {
+  "id": "zen-04",
+  "corpus": "zen",
+  "budget": 8000,
+  "pieces": 7,
+  "single": 7,
+  "first": 4,
+  "two_round": 7,
+  "asked": [
+   "Registry._call_unchecked",
+   "obligations.on_tests",
+   "mark_green",
+   "_hist",
+   "_save_filehist",
+   "t_changes_since_green"
+  ],
+  "model_s": 4.5,
+  "prompt_tokens": 6334
+ },
+ {
+  "id": "zen-05",
+  "corpus": "zen",
+  "budget": 4000,
+  "pieces": 6,
+  "single": 4,
+  "first": 3,
+  "two_round": 5,
+  "asked": [
+   "kv_bytes_per_token",
+   "kv_fixed_bytes",
+   "compute_per_token",
+   "FIXED_OVERHEAD_MB",
+   "MARGIN_MB",
+   "KV_BYTES"
+  ],
+  "model_s": 2.9,
+  "prompt_tokens": 3485
+ },
+ {
+  "id": "zen-05",
+  "corpus": "zen",
+  "budget": 8000,
+  "pieces": 6,
+  "single": 5,
+  "first": 4,
+  "two_round": 5,
+  "asked": [
+   "llama.cpp server source code (specifically how it parses -ctk, -ctv, and -ub flags)",
+   "kv_bytes_per_token function implementation",
+   "kv_fixed_bytes function implementation",
+   "compute_per_token function implementation",
+   "gpu_total_mib function implementation",
+   "system_ram_mib function implementation"
+  ],
+  "model_s": 5.1,
+  "prompt_tokens": 6634
+ },
+ {
+  "id": "zen-06",
+  "corpus": "zen",
+  "budget": 4000,
+  "pieces": 6,
+  "single": 3,
+  "first": 3,
+  "two_round": 3,
+  "asked": [
+   "_BULKY_ARGS",
+   "_HISTORY_STUB",
+   "_STUB_TOOLS",
+   "_seen_current",
+   "_read_text",
+   "_backup"
+  ],
+  "model_s": 2.6,
+  "prompt_tokens": 3073
+ },
+ {
+  "id": "zen-06",
+  "corpus": "zen",
+  "budget": 8000,
+  "pieces": 6,
+  "single": 2,
+  "first": 3,
+  "two_round": 5,
+  "asked": [
+   "_BULKY_ARGS",
+   "_HISTORY_STUB",
+   "_STUB_TOOLS",
+   "_slim_call_args",
+   "_truncated_call",
+   "_seen_current"
+  ],
+  "model_s": 4.2,
+  "prompt_tokens": 5780
+ },
+ {
+  "id": "zen-07",
+  "corpus": "zen",
+  "budget": 4000,
+  "pieces": 5,
+  "single": 2,
+  "first": 1,
+  "two_round": 2,
+  "asked": [
+   "Adapter.run",
+   "batch_execution.py:execute",
+   "web_backend.py:_ask",
+   "harness_api.approval_decision",
+   "Agent.ctx.resolve",
+   "agent_tools.protected_reason"
+  ],
+  "model_s": 2.7,
+  "prompt_tokens": 2919
+ },
+ {
+  "id": "zen-07",
+  "corpus": "zen",
+  "budget": 8000,
+  "pieces": 5,
+  "single": 3,
+  "first": 2,
+  "two_round": 3,
+  "asked": [
+   "batch_execution.py:authorize",
+   "harness_api.py:approval_decision",
+   "web_backend.py:_ask",
+   "agent_config.py:batch_execution",
+   "batch_tools.py:execute",
+   "run_policy.py"
+  ],
+  "model_s": 4.3,
+  "prompt_tokens": 5809
+ },
+ {
+  "id": "zen-08",
+  "corpus": "zen",
+  "budget": 4000,
+  "pieces": 6,
+  "single": 2,
+  "first": 2,
+  "two_round": 2,
+  "asked": [
+   "agent_tools.py:1853-1892",
+   "agent_tools.py:1989-2032",
+   "agentic.py:2153-2163",
+   "agentic.py:3668-3685",
+   "context_memory.py:93-95",
+   "agent_tools.py:1744-1751"
+  ],
+  "model_s": 3.5,
+  "prompt_tokens": 3367
+ },
+ {
+  "id": "zen-08",
+  "corpus": "zen",
+  "budget": 8000,
+  "pieces": 6,
+  "single": 2,
+  "first": 2,
+  "two_round": 3,
+  "asked": [
+   "at.tracker_open",
+   "at.parse_progress",
+   "at.tracker_current",
+   "at.tracker_markdown",
+   "at.NOTE",
+   "at.blocked_reason"
+  ],
+  "model_s": 4.3,
+  "prompt_tokens": 5947
+ },
+ {
+  "id": "zen-09",
+  "corpus": "zen",
+  "budget": 4000,
+  "pieces": 6,
+  "single": 1,
+  "first": 1,
+  "two_round": 2,
+  "asked": [
+   "_stub_result",
+   "_slim_call_args",
+   "history_archive",
+   "_summarize_in_place",
+   "_summarize",
+   "_collect_pins"
+  ],
+  "model_s": 2.7,
+  "prompt_tokens": 3132
+ },
+ {
+  "id": "zen-09",
+  "corpus": "zen",
+  "budget": 8000,
+  "pieces": 6,
+  "single": 1,
+  "first": 1,
+  "two_round": 2,
+  "asked": [
+   "_stub_result",
+   "_slim_call_args",
+   "_summarize",
+   "_summarize_in_place",
+   "_collect_pins",
+   "_code_outline"
+  ],
+  "model_s": 4.2,
+  "prompt_tokens": 5805
+ },
+ {
+  "id": "zen-10",
+  "corpus": "zen",
+  "budget": 4000,
+  "pieces": 4,
+  "single": 4,
+  "first": 2,
+  "two_round": 3,
+  "asked": [
+   "context_checkpoint.compact",
+   "render",
+   "context_memory.save_snapshot",
+   "exact_snippets",
+   "at.tracker_items",
+   "as_cached"
+  ],
+  "model_s": 2.7,
+  "prompt_tokens": 3037
+ },
+ {
+  "id": "zen-10",
+  "corpus": "zen",
+  "budget": 8000,
+  "pieces": 4,
+  "single": 4,
+  "first": 4,
+  "two_round": 4,
+  "asked": [
+   "context_checkpoint.py:409-424",
+   "context_checkpoint.py:330-369",
+   "context_checkpoint.py:140-171",
+   "context_checkpoint.py:112-137",
+   "context_checkpoint.py:375-414",
+   "problem_workbook.py:1-24"
+  ],
+  "model_s": 4.8,
+  "prompt_tokens": 5649
+ },
+ {
+  "id": "zen-11",
+  "corpus": "zen",
+  "budget": 4000,
+  "pieces": 5,
+  "single": 4,
+  "first": 3,
+  "two_round": 4,
+  "asked": [
+   "_state",
+   "_current",
+   "_item",
+   "_save",
+   "_test_passes",
+   "_BROKEN_RX"
+  ],
+  "model_s": 2.7,
+  "prompt_tokens": 3239
+ },
+ {
+  "id": "zen-11",
+  "corpus": "zen",
+  "budget": 8000,
+  "pieces": 5,
+  "single": 3,
+  "first": 3,
+  "two_round": 4,
+  "asked": [
+   "_state",
+   "_current",
+   "_item",
+   "_save",
+   "_hist",
+   "_code_path"
+  ],
+  "model_s": 4.2,
+  "prompt_tokens": 5835
+ },
+ {
+  "id": "zen-12",
+  "corpus": "zen",
+  "budget": 4000,
+  "pieces": 6,
+  "single": 0,
+  "first": 0,
+  "two_round": 0,
+  "asked": [
+   "execution_memory_test_mode",
+   "harness restart logic",
+   "how harness tracks incomplete calls",
+   "where model is told about failed calls",
+   "ApiRun.finished status handling",
+   "execution_memory.py call history tracking"
+  ],
+  "model_s": 2.8,
+  "prompt_tokens": 3046
+ },
+ {
+  "id": "zen-12",
+  "corpus": "zen",
+  "budget": 8000,
+  "pieces": 6,
+  "single": 1,
+  "first": 0,
+  "two_round": 3,
+  "asked": [
+   "execution_memory_test_mode",
+   "harness state tracking after restart",
+   "how harness knows call never finished",
+   "where model is told about incomplete call",
+   "test mode execution flow",
+   "recovery policy for failed calls"
+  ],
+  "model_s": 4.4,
+  "prompt_tokens": 5814
+ },
+ {
+  "id": "zen-13",
+  "corpus": "zen",
+  "budget": 4000,
+  "pieces": 6,
+  "single": 3,
+  "first": 3,
+  "two_round": 6,
+  "asked": [
+   "at.suggest_rule",
+   "at.rule_label",
+   "at.is_safe_command",
+   "at.protected_reason",
+   "at.blocked_reason",
+   "rule_target"
+  ],
+  "model_s": 2.7,
+  "prompt_tokens": 3144
+ },
+ {
+  "id": "zen-13",
+  "corpus": "zen",
+  "budget": 8000,
+  "pieces": 6,
+  "single": 4,
+  "first": 4,
+  "two_round": 6,
+  "asked": [
+   "at.is_safe_command",
+   "at.protected_reason",
+   "at.blocked_reason",
+   "at.rule_label",
+   "at.suggest_rule",
+   "rule_target"
+  ],
+  "model_s": 4.4,
+  "prompt_tokens": 5965
+ },
+ {
+  "id": "zen-14",
+  "corpus": "zen",
+  "budget": 4000,
+  "pieces": 4,
+  "single": 1,
+  "first": 1,
+  "two_round": 1,
+  "asked": [
+   "t_bg_stop",
+   "bg_stop",
+   "listening",
+   "port_owners",
+   "blocked_reason",
+   "t_bg_start"
+  ],
+  "model_s": 2.7,
+  "prompt_tokens": 3240
+ },
+ {
+  "id": "zen-14",
+  "corpus": "zen",
+  "budget": 8000,
+  "pieces": 4,
+  "single": 1,
+  "first": 1,
+  "two_round": 1,
+  "asked": [
+   "t_bg_stop",
+   "bg_stop",
+   "blocked_reason",
+   "port_owners",
+   "listening",
+   "stackdump"
+  ],
+  "model_s": 4.4,
+  "prompt_tokens": 6219
+ },
+ {
+  "id": "zen-15",
+  "corpus": "zen",
+  "budget": 4000,
+  "pieces": 4,
+  "single": 4,
+  "first": 4,
+  "two_round": 4,
+  "asked": [
+   "t_edit_file",
+   "_loose_match",
+   "_reindent",
+   "_closest_region",
+   "read_file",
+   "read_file the region again and retry"
+  ],
+  "model_s": 2.9,
+  "prompt_tokens": 3437
+ },
+ {
+  "id": "zen-15",
+  "corpus": "zen",
+  "budget": 8000,
+  "pieces": 4,
+  "single": 4,
+  "first": 4,
+  "two_round": 4,
+  "asked": [
+   "t_edit_file",
+   "_loose_match",
+   "_reindent",
+   "_closest_region",
+   "make_diff",
+   "_read_text"
+  ],
+  "model_s": 4.6,
+  "prompt_tokens": 6239
+ },
+ {
+  "id": "zen-16",
+  "corpus": "zen",
+  "budget": 4000,
+  "pieces": 5,
+  "single": 1,
+  "first": 1,
+  "two_round": 2,
+  "asked": [
+   "repomap.outline",
+   "repomap.find_definition",
+   "repomap.find_references",
+   "repomap",
+   "repomap.outline(p)",
+   "repomap.find_definition(root, name)"
+  ],
+  "model_s": 3.0,
+  "prompt_tokens": 3302
+ },
+ {
+  "id": "zen-16",
+  "corpus": "zen",
+  "budget": 8000,
+  "pieces": 5,
+  "single": 2,
+  "first": 1,
+  "two_round": 3,
+  "asked": [
+   "repomap.outline",
+   "repomap.find_definition",
+   "repomap.find_references",
+   "repomap.index",
+   "t_read_file",
+   "serve_helper"
+  ],
+  "model_s": 4.6,
+  "prompt_tokens": 6343
+ },
+ {
+  "id": "zen-17",
+  "corpus": "zen",
+  "budget": 4000,
+  "pieces": 3,
+  "single": 1,
+  "first": 1,
+  "two_round": 1,
+  "asked": [
+   "memory_store.store()",
+   "memory_store.search()",
+   "memory_store.fmt_age()",
+   "_PAST_RX",
+   "_NO_PLAN_RX",
+   "AgentEngine._maybe_compact"
+  ],
+  "model_s": 2.7,
+  "prompt_tokens": 3011
+ },
+ {
+  "id": "zen-17",
+  "corpus": "zen",
+  "budget": 8000,
+  "pieces": 3,
+  "single": 1,
+  "first": 1,
+  "two_round": 1,
+  "asked": [
+   "memory_store.store().search",
+   "memory_store.fmt_age",
+   "_PAST_RX",
+   "_NO_PLAN_RX",
+   "AgentEngine._ensure_workspace",
+   "AgentEngine._continues_work"
+  ],
+  "model_s": 4.3,
+  "prompt_tokens": 5739
+ },
+ {
+  "id": "zen-18",
+  "corpus": "zen",
+  "budget": 4000,
+  "pieces": 6,
+  "single": 3,
+  "first": 3,
+  "two_round": 3,
+  "asked": [
+   "problem_record",
+   "problem_status",
+   "problem_plan",
+   "problem_experiment",
+   "ask_user",
+   "module_status"
+  ],
+  "model_s": 2.3,
+  "prompt_tokens": 2698
+ },
+ {
+  "id": "zen-18",
+  "corpus": "zen",
+  "budget": 8000,
+  "pieces": 6,
+  "single": 4,
+  "first": 4,
+  "two_round": 4,
+  "asked": [
+   "problem_workbook.py:240-241",
+   "problem_workbook.py:267-270",
+   "problem_workbook.py:327-330",
+   "problem_workbook.py:413-445",
+   "agent_tools.py:4196-4235",
+   "agentic.py:5931-5934"
+  ],
+  "model_s": 4.5,
+  "prompt_tokens": 5147
+ },
+ {
+  "id": "zen-19",
+  "corpus": "zen",
+  "budget": 4000,
+  "pieces": 5,
+  "single": 3,
+  "first": 3,
+  "two_round": 3,
+  "asked": [
+   "Registry._debug_aids",
+   "code_insight.py:contract_drift",
+   "code_insight.py:_seen",
+   "obligations.py:STALE",
+   "debug_tools.py:flight_note",
+   "agentic.py:5344"
+  ],
+  "model_s": 3.0,
+  "prompt_tokens": 3149
+ },
+ {
+  "id": "zen-19",
+  "corpus": "zen",
+  "budget": 8000,
+  "pieces": 5,
+  "single": 3,
+  "first": 3,
+  "two_round": 3,
+  "asked": [
+   "Registry._debug_aids",
+   "code_insight.contract_drift",
+   "code_insight._seen",
+   "obligations.OBS_KEEP",
+   "debug_tools.lint_file",
+   "agent_engine._tested_behaviour"
+  ],
+  "model_s": 4.5,
+  "prompt_tokens": 5934
+ },
+ {
+  "id": "zen-20",
+  "corpus": "zen",
+  "budget": 4000,
+  "pieces": 5,
+  "single": 3,
+  "first": 2,
+  "two_round": 3,
+  "asked": [
+   "llama_local.ensure",
+   "llama_local.stop",
+   "llama_local.running",
+   "llama_local.fit_context",
+   "llama_local.available",
+   "agent_config.model_profile"
+  ],
+  "model_s": 3.1,
+  "prompt_tokens": 3247
+ },
+ {
+  "id": "zen-20",
+  "corpus": "zen",
+  "budget": 8000,
+  "pieces": 5,
+  "single": 4,
+  "first": 4,
+  "two_round": 4,
+  "asked": [
+   "llama_local.ensure",
+   "llama_local.stop",
+   "llama_local.running",
+   "llama_local.auto_size",
+   "llama_local.fit_context",
+   "llama_local.vram_need_mib"
+  ],
+  "model_s": 4.8,
+  "prompt_tokens": 6192
+ }
+]
