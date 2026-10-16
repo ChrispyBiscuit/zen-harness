@@ -91,3 +91,18 @@ the remaining 40% with the named definitions first, then a search on its request
 - "All pieces together" moves little (20 -> 21 of 50 at 8K): questions need 4-5 pieces and one miss still loses them.
 - Fixes to try: let the model say nothing is missing and keep the full single pack; replace the lowest-ranked slices
   instead of splitting the budget up front; allow a third round when it still names missing code.
+
+## Round 4: "fixing" the second round made it worse (`adaptive_rounds.py`, `adaptive_rounds.json`)
+Changes tried: the first pack uses the whole budget; the model may say nothing is missing; what it names replaces the
+lowest-ranked slices (no fixed 60/40 split); up to a third round; the prompt lists the project's files.
+
+| Budget | Single pack | Round 3 original (60/40, add what's named) | Round 4, up to 2 rounds | Round 4, up to 3 rounds |
+|---|---|---|---|---|
+| 4K: all / pieces | 7/50 / 53% | **11/50 / 60%** | 7/50 / 53% | 8/50 / 52% |
+| 8K: all / pieces | 20/50 / 68% | **21/50 / 76%** | 15/50 / 68% | 19/50 / 69% |
+
+- The model never said "nothing missing" (it always asks for more), so that escape never fired.
+- A smaller first pack plus what the model names exactly beats a full pack with requests swapped in; the third round
+  adds little. **Decision: the agent's focus_pack uses the round-3 method** (`context_pack.two_round_pack`: 60% for the
+  best matches, the loaded model names what is missing in one short side request, the other 40% brings those
+  definitions first). A call with explicit `names` skips the side request.

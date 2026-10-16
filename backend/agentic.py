@@ -1595,6 +1595,7 @@ class AgentEngine:
         self._handoff = False         # the executor gave up the step: the planner takes the next one
         self.enabled_tools = set()    # tools turned on through available_tools (tool gate)
         self.ctx.tool_gate = self._available_tools
+        self.ctx.pack_ask = self._pack_ask              # focus_pack's second round asks the loaded model directly
         self._exec_said = ""
         self.cfg["think"] = think_max(cfg) != 0
         self.ctx.advisor = self._advise
@@ -4362,6 +4363,8 @@ class AgentEngine:
                     self._start_project()
                 if getattr(self, "_project", False) or self._BUILD_REQ_RX.search(user_text or ""):
                     self._build_profile = True       # set before the first step: the prompt start stays fixed
+                if self._build_profile or self._CODE_REQ_RX.search(user_text or ""):
+                    self._code_work = True           # focus_pack loads (decided once: the tool list stays fixed)
                 self.emit("status", text=f"Plan: {self._effort['plan']} · thinking: {self._effort['think']}")
             elif self._escalated and self._depth == "basic" and not self.should_stop():
                 # the lean pass only knew get_tools: the plan decision (which sees the whole harness) has the last
@@ -5787,6 +5790,17 @@ class AgentEngine:
             [{"role": "system", "content": "You write precise summaries of an AI agent's work."},
              {"role": "user", "content": f"{SUMMARY_PROMPT}\n\nCONVERSATION:\n{text}"}], 1200).strip()
 
+    def _pack_ask(self, prompt):
+        """focus_pack's second round: one short side request (no thinking, no tool list, not shown in the chat) in
+        which the model reads the first part of a pack and names the code still missing. -> its reply text."""
+        old, self._delta = self._delta, "summary_delta"
+        try:
+            msg, _n, _p = self._call_openai([{"role": "user", "content": prompt}], tools=False, max_tokens=300,
+                                            no_think=True, omit_tool_schemas=True)
+        finally:
+            self._delta = old
+        return msg.get("content") or ""
+
     def _plain(self, messages, max_tokens):
         """One non-streaming completion without tools (for summaries)."""
         c, be, model = self.cfg, self.cfg.get("backend", "llama"), self.cfg.get("model") or ""
@@ -5827,12 +5841,16 @@ class AgentEngine:
     CORE_GROUPS = ("files", "shell", "code", "web", "math", "memory")
     COMPACT_CORE_NAMES = {"available_tools", "update_tracker", "ask_user", "history_search", "read_guide",
                           "read_file", "write_file", "edit_file", "list_dir", "find_files", "search_text",
-                          "make_dir", "powershell", "run_tests", "go_extensive", "focus_pack"}
+                          "make_dir", "powershell", "run_tests", "go_extensive"}
     # a software build never uses these (~3K tokens of the ~13K fixed prompt start); listed in available_tools and
     # turned on if called (used = enabled), as any other tool
     BUILD_SKIP = {"record", "query_data", "python_sandbox", "python_host", "calculate", "read_formula", "encyclopedia",
                   "memory_search", "memory_save", "memory_update", "memory_delete", "playbook_note", "read_document",
                   "search_documents"}
+    # code work that is not a new build: debugging, refactoring, understanding an existing codebase
+    _CODE_REQ_RX = re.compile(r"\b(bugs?|debug\w*|refactor\w*|codebase|repo(sitory)?|traceback|stack ?trace|exception|"
+                              r"unit tests?|tests? (fail|pass)\w*)\b|"
+                              r"\.(py|js|mjs|ts|tsx|jsx|java|cs|go|rs|cpp|rb|php)\b", re.I)
     _BUILD_REQ_RX = re.compile(r"\b(build|make|create|write|develop|code|program|implement)\b[^.?!\n]{0,80}\b(app|"
                                r"application|program|game|website|web ?site|tool|script|server|cli|api|bot|tracker|"
                                r"service|backend|frontend)s?\b", re.I)
@@ -5867,6 +5885,7 @@ class AgentEngine:
 
     # what a tool group's capability text becomes while the group is not loaded (one line; available_tools has more)
     _LAYERS = (
+        ("focus_pack", r" When a task or a failure spans several files, focus_pack\(goal=\.\.\.\).*?one by one\.", ""),
         ("browser_open", r"; and a real in-app browser \(.*?use those numbers\.",
          ". A real in-app browser (open sites, click, type, fill forms, sign in when asked) loads on demand: "
          "available_tools(enable=[\"browser\"])."),
@@ -5899,6 +5918,9 @@ class AgentEngine:
             core = self.COMPACT_CORE_NAMES & set(self.reg.by_name)
             if getattr(self.ctx, "build_test_record", False):
                 core |= {"module_contract", "begin_module", "verify_module", "module_status"} & set(self.reg.by_name)
+            if getattr(self, "_code_work", False):
+                # code work only: research, documents and chat never index code (still loadable: files group)
+                core |= {"focus_pack"} & set(self.reg.by_name)
             if getattr(self.ctx, "problem_workbook", False):
                 core |= {"problem_plan", "problem_experiment", "problem_record", "problem_status"} & set(self.reg.by_name)
             # User-provided connectors stay available without an activation ceremony.

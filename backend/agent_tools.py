@@ -342,13 +342,40 @@ def t_focus_pack(a, c):
         raise ToolError(f"{root} holds over 3,000 code files; give folder= the project folder itself")
     budget = max(1000, min(int(a.get("budget") or 4000), 12000))
     shown = c.__dict__.setdefault("_pack_shown", set())
-    text, chosen = cp.focus_pack(root, goal or " ".join(names), budget, files=files, names=names, skip=shown,
-                                 embed=cp._default_embed)          # looked up now: tests and settings can swap it
+    ask = getattr(c, "pack_ask", None)
+    if goal and not names and callable(ask) and a.get("rounds", 2) != 1:
+        # the measured two-round method: 60% of the budget, the model names what is missing, the rest brings it
+        text, chosen, _items = cp.two_round_pack(root, goal, budget, ask, files=files, embed=cp._default_embed,
+                                                 skip=shown)
+    else:
+        text, chosen = cp.focus_pack(root, goal or " ".join(names), budget, files=files, names=names, skip=shown,
+                                     embed=cp._default_embed)          # looked up now: tests can swap it
     shown.update(cp.unit_key(u) for u in chosen)
+    c._code_reads = []                                 # a pack resets the one-by-one reading count
     if not text:
         return f"Nothing in {root} matched. Try other words, exact names, or search_text."
     return (text + f"\n\n(Project folder: {root}. Missing something? Call focus_pack again with names=[the exact "
                    f"function, class or file names] — it brings only slices not shown yet.)")
+
+
+PACK_HINT_EVERY = 15        # tool calls between two focus_pack hints
+
+
+def pack_hint(c, path):
+    """Reading code files one by one (the 27B's habit: read_file was 23% of its calls) -> after the third different
+    code file within the last 8 calls, point at focus_pack once; again only after PACK_HINT_EVERY more calls."""
+    c._calls = getattr(c, "_calls", 0) + 1
+    if os.path.splitext(str(path))[1].lower() not in (".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".html", ".css"):
+        return ""
+    recent = c.__dict__.setdefault("_code_reads", [])
+    recent.append((c._calls, os.path.normcase(str(path))))
+    del recent[:-8]
+    files = {p for n, p in recent if c._calls - n < 8}
+    if len(files) >= 3 and c._calls - getattr(c, "_pack_hint_at", -10 ** 6) >= PACK_HINT_EVERY:
+        c._pack_hint_at = c._calls
+        return ("\n\n(Tip: you have read %d code files one by one. focus_pack(goal='what you are working out') brings "
+                "the relevant functions from all of them in one block, and fetches what is still missing.)" % len(files))
+    return ""
 
 
 def refresh_code_index(c, path):
@@ -4168,7 +4195,8 @@ BUILTIN = [
      _obj({"path": S}), t_list_dir),
     ("read_file", READ, "Read a text file. Returns lines prefixed with line numbers (the prefix is "
      "not part of the file). offset = first line (1-based), limit = number of lines (default 400). symbol = one "
-     "function or class by name (e.g. 'Ledger.save'): just its lines, wherever it is.",
+     "function or class by name (e.g. 'Ledger.save'): just its lines, wherever it is. For the exact part of one file "
+     "you are about to edit, or a non-code file; to understand code across several files use focus_pack.",
      _obj({"path": S, "offset": I, "limit": I, "symbol": S}, ["path"]), t_read_file),
     ("read_document", READ, "Read a document's text: PDF, Word (.docx/.doc/.rtf), Excel "
      "(.xlsx/.xls, tab-separated rows), PowerPoint (.pptx/.ppt, with speaker notes), CSV, or text. "
@@ -4352,7 +4380,8 @@ BUILTIN = [
     ("search_documents", READ, "Search the contents of the user's files (in the allowed folders) by meaning and keywords — "
      "e.g. 'my notes on the Q3 budget', 'the script that renames photos'. Returns the best matching passage per file "
      "with its path (then read_file / read_document it). folder narrows the search. For exact text or regex use "
-     "search_text instead.", _obj({"query": S, "folder": S, "limit": I}, ["query"]), t_search_documents),
+     "search_text instead; for a project's code use focus_pack.", _obj({"query": S, "folder": S, "limit": I}, ["query"]),
+     t_search_documents),
     ("create_document", WRITE, "THE way to make Office files — PowerPoint decks, Word documents, Excel workbooks and "
      "PDFs — professionally styled (themes: corporate, modern, minimal, warm, forest). pptx: JSON slides with layouts "
      "(title, bullets, two_column, stats, quote, section, image, closing); docx/pdf: Markdown; xlsx: JSON sheets with "
@@ -4868,6 +4897,10 @@ class Registry:
                     refresh_code_index(self.ctx, self.ctx.resolve(args.get("path")))
             except Exception:
                 pass
+        if name == "read_file" and args.get("path") and "focus_pack" in self.by_name:
+            hint = pack_hint(self.ctx, self.ctx.resolve(args.get("path")))
+            if hint:
+                res = (str(res[0]) + hint, res[1]) if isinstance(res, tuple) else str(res) + hint
         text, image = (res[0], res[1]) if isinstance(res, tuple) else (res, None)
         try:
             import obligations

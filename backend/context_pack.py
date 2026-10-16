@@ -12,6 +12,7 @@ Prototype: not wired into the agent loop yet. Natural plug-in points: after a fa
 the working set at compaction (query = the current checklist item), or a tool the model calls with a goal.
 """
 import ast
+import json
 import math
 import os
 import re
@@ -426,10 +427,17 @@ def focus_pack(root, query, budget_tokens=4000, files=None, embed=_default_embed
            (f" {skipped} slice(s) already shown earlier left out." if skipped else "")
     if not chosen:
         return ("[Focus pack: nothing new matched." + note + "]") if (missing or skipped) else "", []
+    return render_pack(chosen, query, note), chosen
+
+
+def render_pack(chosen, query, note=""):
+    """One block: slices grouped by file (files in rank order of their best slice), each in line order with line
+    numbers as read_file shows them."""
+    used = sum(u["tokens"] for u in chosen) + tokens("[Focus pack]") + 20
     by_file = defaultdict(list)
     for u in chosen:
         by_file[u["file"]].append(u)
-    order = [f for f in dict.fromkeys(u["file"] for u in chosen)]      # files in rank order of their best slice
+    order = [f for f in dict.fromkeys(u["file"] for u in chosen)]
     parts = [f"[Focus pack: {len(chosen)} code slices from {len(order)} file(s), ~{used:,} tokens, the best match for: "
              f"{' '.join(query.split())[:160]}.{note} Line numbers as read_file shows them — edit from this text.]"]
     for f in order:
@@ -437,4 +445,61 @@ def focus_pack(root, query, budget_tokens=4000, files=None, embed=_default_embed
             label = f" ({u['symbol']})" if u["symbol"] else ""
             body = "\n".join(f"{n:>6}\t{ln}" for n, ln in enumerate(u["text"].split("\n"), u["start"]))
             parts.append(f"### {f}:{u['start']}-{u['end']}{label}\n{body}")
-    return "\n\n".join(parts), chosen
+    return "\n\n".join(parts)
+
+
+# the measured second round (evals/context_pack/second_round.py: 68% -> 76% of needed pieces at 8K, Zen's backend
+# 54% -> 69%): the model reads a first pack of 60% of the budget and names what is missing; exact names come first
+ASK_SHARE = 0.6
+ASK_PROMPT = ("You are helping find the code needed to answer a question about a codebase. Below are the question and "
+              "the code found so far.\n\nQUESTION:\n{q}\n\nCODE FOUND SO FAR:\n{pack}\n\n"
+              "What code is still missing to answer the question fully? Name up to 6 items: exact function, method "
+              "(Class.method) or class names you need to see, file names, or short search phrases for code you expect "
+              "but cannot name. Do not list code that is already shown above. Reply with JSON only: "
+              '{{"missing": ["name or phrase", ...]}}')
+
+
+def parse_missing(reply):
+    """The model's list of missing items (JSON, else `quoted` names) -> [str]."""
+    text = re.sub(r"<think>.*?</think>", "", reply or "", flags=re.S)
+    m = re.search(r"\{.*\}", text, re.S)
+    if m:
+        try:
+            return [str(x) for x in json.loads(m.group(0)).get("missing", [])][:6]
+        except (ValueError, AttributeError):
+            pass
+    return re.findall(r"`([^`]{2,80})`", text)[:6]
+
+
+def names_in(items):
+    """Code names inside the model's items ('db.py:add_expense function' -> ['db', 'py', 'add_expense', ...]); only
+    the ones the index defines are used, so plain words fall away."""
+    out = []
+    for it in items:
+        out += [w for w in re.findall(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?", it) if len(w) >= 3]
+    return list(dict.fromkeys(out))
+
+
+def two_round_pack(root, goal, budget_tokens, ask, files=None, embed=_default_embed, skip=None):
+    """The measured two-round pack: 60% of the budget for the best matches, `ask(prompt) -> reply` (the model) names
+    what is missing, and the other 40% brings those definitions first, then a search on its words.
+    -> (text, chosen units, the model's items)."""
+    files = list(files) if files is not None else code_files(root)
+    skip = set(skip or ())
+    text1, first = focus_pack(root, goal, int(budget_tokens * ASK_SHARE), files=files, embed=embed, skip=skip)
+    if not first:
+        return text1, first, []
+    try:
+        items = parse_missing(ask(ASK_PROMPT.format(q=goal, pack=text1)))
+    except Exception:
+        items = []
+    if not items:
+        return text1, first, []
+    ix = _index(root, files, embed, None)
+    named = [n for n in names_in(items) if n.split(".")[-1] in ix["defs"]]
+    used = sum(u["tokens"] for u in first)
+    _t, more = focus_pack(root, " ".join(items), max(400, budget_tokens - used), files=files, embed=embed,
+                          names=named, skip=skip | {unit_key(u) for u in first})
+    chosen = first + more
+    note = f" Second round: the model asked for {', '.join(items)[:200]}."
+    return render_pack(chosen, goal, note), chosen, items
