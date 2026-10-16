@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { setDensity, storedDensity, type Density } from "@/lib/density"
+import { setTextFx, storedTextFx, TEXT_FX } from "@/lib/textfx"
 import { cn } from "@/lib/utils"
 import { useApp } from "@/lib/store"
 import type { Settings } from "@/lib/types"
@@ -28,7 +29,7 @@ export const inputCls = "w-full rounded-lg border border-input bg-transparent px
 export function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="py-3 first:pt-1">
-      <h3 className="label-tech mb-1 text-muted-foreground/70">{title}</h3>
+      <h3 className="label-tech mb-1 text-faint">{title}</h3>
       {children}
     </section>
   )
@@ -186,7 +187,7 @@ export function SettingsDialog() {
   return (
     <Dialog open={open} onOpenChange={(v) => set({ settingsOpen: v, ...(v ? {} : { settingsTab: undefined }) } as any)}>
       <DialogContent className="flex max-h-[min(88dvh,820px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
-        <DialogHeader className="shrink-0 px-6 pb-3 pt-5"><DialogTitle className="flex items-center gap-2"><span className="label-tech text-muted-foreground/60">Zen Harness</span><span className="text-muted-foreground/30">/</span>Settings</DialogTitle></DialogHeader>
+        <DialogHeader className="shrink-0 px-6 pb-3 pt-5"><DialogTitle className="flex items-center gap-2"><span className="label-tech text-faint">Zen Harness</span><span className="text-muted-foreground/30">/</span>Settings</DialogTitle></DialogHeader>
         <Tabs key={String(open) + tab} defaultValue={tab} className="flex min-h-0 flex-1 flex-col">
           <TabsList className="mx-6 max-w-[calc(100%-3rem)] shrink-0 justify-start overflow-x-auto">
             <TabsTrigger value="general">General</TabsTrigger>
@@ -244,6 +245,18 @@ export function SettingsDialog() {
                         <button key={d} role="radio" aria-checked={on} onClick={() => { setUi({ density: d }); setDensity(d) }}
                           className={cn("rounded-md px-3 py-1 text-ui capitalize transition-ui",
                             on ? "bg-surface-3 text-foreground shadow-elev-2" : "text-muted-foreground hover:text-foreground")}>{d}</button>
+                      )
+                    })}
+                  </div>
+                </Field>
+                <Field label="Text effects" hint="How a reply looks while it streams in: glyphs decode into words with a chromatic split, and the line glitches now and then. Full is louder; Calm keeps the decode without the glitches; Off shows a plain cursor. Reduced-motion settings always calm it.">
+                  <div role="radiogroup" aria-label="Text effects" className="inline-flex rounded-lg border border-line-1 bg-surface-1 p-0.5">
+                    {TEXT_FX.map((v) => {
+                      const on = (draft.ui as any).text_fx === v || (!(draft.ui as any).text_fx && v === storedTextFx())
+                      return (
+                        <button key={v} role="radio" aria-checked={on} onClick={() => { setUi({ text_fx: v } as any); setTextFx(v) }}
+                          className={cn("rounded-md px-3 py-1 text-ui capitalize transition-ui",
+                            on ? "bg-surface-3 text-foreground shadow-elev-2" : "text-muted-foreground hover:text-foreground")}>{v}</button>
                       )
                     })}
                   </div>

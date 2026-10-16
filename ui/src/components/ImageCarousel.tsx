@@ -19,14 +19,14 @@ function Card({ im, onOpen, onBroken }: { im: AnswerImage; onOpen: () => void; o
   return (
     <button onClick={onOpen} title={`${label(im)} — ${host(im.page)}`}
       className="group/card relative h-56 w-[13.5rem] shrink-0 snap-start overflow-hidden rounded-[var(--radius-panel)] bg-surface-2 text-left
-        outline-none ring-1 ring-line-1 transition-[box-shadow,transform] duration-300 ease-[var(--ease-out)]
-        hover:-translate-y-0.5 hover:shadow-[0_12px_32px_-12px_rgba(0,0,0,0.6)] hover:ring-line-3 focus-visible:ring-2 focus-visible:ring-info/60">
+        outline-none ring-1 ring-line-1 transition-[box-shadow,transform] duration-(--dur) ease-(--ease-out)
+        pointer-fine:hover:-translate-y-0.5 hover:shadow-[0_12px_32px_-12px_rgba(0,0,0,0.6)] hover:ring-line-3 focus-visible:ring-2 focus-visible:ring-info/60">
       {!loaded && <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-surface-2 via-surface-3 to-surface-2" />}
       <img src={im.src} alt={label(im)} referrerPolicy="no-referrer" loading="lazy" draggable={false}
         ref={(el) => { if (el?.complete && el.naturalWidth && !loaded) setLoaded(true) }}   // cached: no load event
         onLoad={() => setLoaded(true)} onError={onBroken}
-        className={cn("absolute inset-0 size-full object-cover transition-[opacity,transform] duration-700 ease-[var(--ease-out)]",
-          "group-hover/card:scale-[1.05]", loaded ? "opacity-100" : "opacity-0")} />
+        className={cn("absolute inset-0 size-full object-cover transition-[opacity,transform] duration-(--dur-slow) ease-(--ease-out)",
+          "pointer-fine:group-hover/card:scale-[1.04]", loaded ? "opacity-100" : "opacity-0")} />
       <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-black/0" />
       <div className="absolute left-2.5 top-2.5 flex gap-1">
         {im.cited && <span className="rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-black">Cited</span>}
@@ -63,13 +63,13 @@ function Lightbox({ list, start, onClose }: { list: AnswerImage[]; start: number
   const nav = "grid size-10 place-items-center rounded-full bg-white/10 text-white/90 ring-1 ring-white/15 backdrop-blur-md transition-colors hover:bg-white/20"
   return createPortal(
     <div role="dialog" aria-modal="true" aria-label="Images" onClick={onClose}
-      className="fixed inset-0 z-[100] flex animate-in flex-col items-center justify-center bg-black/80 px-4 py-6 backdrop-blur-xl fade-in duration-200">
+      className="fixed inset-0 z-[100] flex animate-in flex-col items-center justify-center bg-black/80 px-4 py-6 backdrop-blur-lg fade-in duration-(--dur)">
       <button onClick={onClose} aria-label="Close" className={cn(nav, "absolute right-4 top-4 size-9")}><X className="size-4" /></button>
       <div className="flex w-full max-w-5xl flex-1 items-center gap-3" onClick={(e) => e.stopPropagation()}>
         {list.length > 1 && <button className={nav} onClick={() => go(-1)} aria-label="Previous image"><ChevronLeft className="size-5" /></button>}
         <div className="flex min-w-0 flex-1 flex-col items-center gap-3">
           <img key={cur.src} src={cur.src} alt={label(cur)} referrerPolicy="no-referrer" draggable={false}
-            className="max-h-[72vh] max-w-full animate-in rounded-[var(--radius-panel)] object-contain shadow-2xl ring-1 ring-white/10 fade-in zoom-in-95 duration-300" />
+            className="max-h-[72vh] max-w-full animate-in rounded-[var(--radius-panel)] object-contain shadow-2xl ring-1 ring-white/10 fade-in zoom-in-95 duration-(--dur)" />
           <div className="flex w-full max-w-2xl items-center gap-3 rounded-[var(--radius-panel)] bg-white/[0.06] px-3 py-2 ring-1 ring-white/10 backdrop-blur-md">
             <img src={favicon(cur.page)} alt="" referrerPolicy="no-referrer" className="size-5 shrink-0 rounded" onError={hideBroken} />
             <div className="min-w-0 flex-1">
@@ -89,7 +89,7 @@ function Lightbox({ list, start, onClose }: { list: AnswerImage[]; start: number
         <div className="mt-3 flex max-w-full gap-2 overflow-x-auto pb-1" onClick={(e) => e.stopPropagation()}>
           {list.map((im, j) => (
             <button key={im.src} onClick={() => setI(j)} aria-label={`Image ${j + 1}`}
-              className={cn("h-12 w-[72px] shrink-0 overflow-hidden rounded-lg ring-2 transition-all",
+              className={cn("h-12 w-[72px] shrink-0 overflow-hidden rounded-lg ring-2 transition-[opacity,box-shadow] duration-(--dur-fast)",
                 j === i ? "opacity-100 ring-white/80" : "opacity-50 ring-transparent hover:opacity-90")}>
               <img src={im.src} alt="" referrerPolicy="no-referrer" draggable={false} className="size-full object-cover" />
             </button>
@@ -130,11 +130,11 @@ export function ImageCarousel({ images }: { images: AnswerImage[] }) {
   const arrow = "absolute top-1/2 z-10 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-surface-1/90 text-foreground " +
     "shadow-lg ring-1 ring-line-2 backdrop-blur-md transition-opacity hover:bg-surface-2"
   return (
-    <div className="not-prose mb-4 max-w-3xl animate-in fade-in slide-in-from-bottom-1 duration-500">
+    <div className="not-prose mb-4 max-w-3xl animate-in fade-in slide-in-from-bottom-1 duration-(--dur-slow)">
       <div className="mb-2 flex items-center gap-1.5 text-meta text-muted-foreground">
         <Images className="size-3.5" />
         <span className="label-tech">{places ? (places === 1 ? "1 place" : `${places} places`) : "From the web"}</span>
-        {places > 0 && list.length > places && <span className="text-muted-foreground/60">· {list.length - places} more from articles</span>}
+        {places > 0 && list.length > places && <span className="text-faint">· {list.length - places} more from articles</span>}
       </div>
       <div className="group/rail relative">
         <div ref={rail} onScroll={measure}

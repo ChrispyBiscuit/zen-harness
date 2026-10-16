@@ -95,7 +95,7 @@ export function BrowserView() {
     <div className="flex h-full flex-col items-center justify-center gap-2 px-8 text-center text-ui text-muted-foreground">
       <Globe className="size-6 opacity-60" />
       The agent's browser shows here when it browses. You can also type an address above to open a page.
-      <span className="text-caption text-muted-foreground/70">Click and type in the page to use it yourself at any time.</span>
+      <span className="text-caption text-faint">Click and type in the page to use it yourself at any time.</span>
     </div>
   )
 

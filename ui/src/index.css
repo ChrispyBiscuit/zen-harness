@@ -22,6 +22,7 @@
     --shadow-elev-2: var(--elev-2);
     --shadow-elev-3: var(--elev-3);
     --color-ink: var(--ink);
+    --color-faint: var(--faint);
     /* type scale: text-meta 11 · caption 12 · ui 13 · body 14 · chat 15 · title 18 · display 22 (density-aware) */
     --text-meta: var(--fs-meta);
     --text-meta--line-height: 1.45;
@@ -35,15 +36,17 @@
     --text-chat--line-height: 1.7;
     --text-title: 18px;
     --text-title--line-height: 1.35;
-    --text-display: 22px;
-    --text-display--line-height: 1.25;
+    --text-title--letter-spacing: -0.01em;
+    --text-display: 24px;
+    --text-display--line-height: 1.2;
+    --text-display--letter-spacing: -0.02em;
     /* radius: chips 6 · cards 10 · panels 12 · modals 16 */
     --radius-chip: 6px;
     --radius-card: 10px;
     --radius-panel: 12px;
     --radius-modal: 16px;
     /* motion */
-    --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
     --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
     --color-success: var(--success);
     --color-warning: var(--warning);
@@ -154,6 +157,8 @@
     --secondary-foreground: oklch(0.94 0.003 265);
     --muted: oklch(0.235 0.006 265);
     --muted-foreground: oklch(0.66 0.01 265);
+    /* the quietest text tier (meta, hints, placeholders): still 4.5:1 on every surface up to the popover's */
+    --faint: oklch(0.63 0.008 265);
     --accent: oklch(0.255 0.007 265);
     --accent-foreground: oklch(0.96 0.003 265);
     --destructive: oklch(0.68 0.19 22);
@@ -204,10 +209,12 @@
     --row-h: 32px;
     --row-py: 6px;
 
-    /* motion: subtle, Linear-style; no bounce */
+    /* motion: subtle, Linear-style; no bounce. Exits run faster than entrances. */
     --dur-fast: 120ms;
     --dur: 200ms;
     --dur-slow: 320ms;
+    --dur-pop: 190ms;       /* popovers, menus, selects open */
+    --dur-exit: 140ms;      /* anything closing */
 }
 /* compact density: one font step down and a tighter rhythm, in the transcript and the sidebar */
 :root[data-density="compact"] [data-density-scope] {
@@ -244,7 +251,11 @@
   :where(input, textarea, select):focus-visible { outline-offset: 0; }
   * { scrollbar-width: thin; scrollbar-color: oklch(1 0 0 / 14%) transparent; }
 }
-@utility mono { font-family: var(--font-mono); font-feature-settings: "liga" 0, "calt" 0; }
+@utility mono { font-family: var(--font-mono); font-feature-settings: "liga" 0, "calt" 0, "zero" 1; }
+/* links and paths are ink (blue means "working"); the underline is quiet until hover */
+@utility link-ink { color: color-mix(in oklab, var(--foreground) 92%, transparent); text-decoration-line: underline;
+  text-decoration-color: var(--line-3); text-underline-offset: 2px; transition: text-decoration-color var(--dur-fast) ease;
+  &:hover { text-decoration-color: currentColor; } }
 /* brand utilities */
 @utility text-brand { background: linear-gradient(100deg, var(--brand-a), var(--brand-b)); -webkit-background-clip: text;
   background-clip: text; color: transparent; }
@@ -271,9 +282,13 @@
 @utility collapse { animation: collapse-out var(--dur-fast) var(--ease-out) both; }
 @utility transition-ui { transition-property: color, background-color, border-color, opacity, transform, box-shadow;
   transition-duration: var(--dur-fast); transition-timing-function: var(--ease-out); }
+/* Reduced motion means gentler, not none: things still fade (opacity and colour carry meaning), but nothing slides,
+   scales, bounces or loops for decoration. The movement keyframes are redefined below as plain fades; transitions on
+   transform are cut; decorative loops stop. Status spinners keep turning (they say "working"). */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important;
-    transition-duration: 1ms !important; scroll-behavior: auto !important; }
+  *, *::before, *::after { scroll-behavior: auto !important; }
+  *:active { scale: none !important; }
+  .animate-ping, .animate-bounce { animation: none !important; }
 }
 /* technical label: small caps-like mono for meters, section headers, badges */
 @utility label-tech { font-family: var(--font-mono); font-size: var(--fs-meta); letter-spacing: 0.12em; text-transform: uppercase;
@@ -291,9 +306,12 @@
 .shiki, .shiki span { background-color: transparent !important; }
 .prose-chat { line-height: 1.7; font-size: var(--fs-chat); }
 .prose-chat > * + * { margin-top: 0.75em; }
-.prose-chat h1 { font-size: 1.35em; font-weight: 600; margin-top: 1.2em; }
-.prose-chat h2 { font-size: 1.18em; font-weight: 600; margin-top: 1.1em; }
+.prose-chat h1 { font-size: 1.35em; font-weight: 600; margin-top: 1.2em; letter-spacing: -0.015em; }
+.prose-chat h2 { font-size: 1.18em; font-weight: 600; margin-top: 1.1em; letter-spacing: -0.01em; }
 .prose-chat h3 { font-size: 1.04em; font-weight: 600; margin-top: 1em; }
+.prose-chat :is(h1, h2, h3, h4) { text-wrap: balance; }
+.prose-chat :is(p, li) { text-wrap: pretty; }
+.prose-chat code, .prose-chat pre { font-feature-settings: "liga" 0, "calt" 0, "zero" 1; }
 .prose-chat ul { list-style: disc; padding-left: 1.4em; }
 .prose-chat ol { list-style: decimal; padding-left: 1.4em; }
 .prose-chat li + li { margin-top: 0.25em; }
@@ -324,6 +342,9 @@
 
 /* Native controls (select popups, scrollbars, date pickers) follow the dark theme */
 html.dark { color-scheme: dark; }
+/* scrolling inside a panel, dialog or menu never scrolls what is behind it */
+.dockview-theme-app .dv-content-container, [data-slot="dialog-content"], [data-slot="popover-content"],
+[data-slot="dropdown-menu-content"], [data-slot="select-content"] { overscroll-behavior: contain; }
 select { background-color: transparent; }
 select option, select optgroup { background-color: var(--popover); color: var(--popover-foreground); }
 select optgroup { color: var(--muted-foreground); font-weight: 600; }
@@ -334,49 +355,109 @@ select optgroup { color: var(--muted-foreground); font-weight: 600; }
 .typing .prose-chat > :is(ul, ol):last-child > li:last-child::after,
 .typing .prose-chat:empty::after {
   content: ""; display: inline-block; width: 0.55em; height: 1.1em; margin-left: 2px; vertical-align: -0.18em;
-  border-radius: 2px; background: var(--color-info, #60a5fa); box-shadow: 0 0 8px var(--color-info, #60a5fa);
+  border-radius: 2px; background: color-mix(in oklab, var(--foreground) 88%, transparent);
+  box-shadow: calc(-1 * var(--ca-x)) 0 0 var(--ca-r), var(--ca-x) 0 0 var(--ca-c);
   animation: caret-blink 1s steps(1) infinite;
 }
+:root[data-text-fx="off"] .typing { --ca-x: 0px; }
 .typing .prose-chat > :is(pre, table):last-child + *::after { content: none; }
 
-/* decode effect: glyphs ahead of the typewriter cursor */
-.scramble { color: var(--color-info, #60a5fa); opacity: 0.85; font-family: ui-monospace, "Cascadia Code", monospace;
-  font-size: 0.92em; text-shadow: 0 0 6px color-mix(in oklab, var(--color-info, #60a5fa) 70%, transparent); }
+/* ===================================================================== the signal look (polish v3 §3)
+   A reply resolves like a signal: glyphs ahead of the cursor decode into words with a red/cyan chromatic split, and
+   every second or two (Transcript useGlitch) the decode tail slices into offset copies while the line being written
+   jumps a pixel or two. Settled text is always plain ink. Strength: Settings → App → Text effects (data-text-fx). */
+:root {
+  --ca-r: oklch(0.68 0.2 25 / 0.6);       /* red fringe */
+  --ca-c: oklch(0.8 0.13 210 / 0.6);      /* cyan fringe */
+  --ca-x: 1px;                             /* split offset */
+}
+:root[data-text-fx="full"] { --ca-x: 1.5px; }
+@media (prefers-reduced-motion: reduce) { :root { --ca-x: 0.5px; } }
+
+/* the decode tail: glyphs ahead of the typewriter cursor (Markdown rehypeScramble; aria-hidden, never selected) */
+.scramble { position: relative; color: color-mix(in oklab, var(--foreground) 82%, transparent);
+  font-family: var(--font-mono); font-size: 0.92em; user-select: none;
+  text-shadow: calc(-1 * var(--ca-x)) 0 var(--ca-r), var(--ca-x) 0 var(--ca-c); }
+
+/* a burst: the tail splits into a red and a cyan copy, each sliced and offset (steps, so it reads as a glitch, not
+   a slide); the block being written jumps sideways with a wider split. Transform, clip-path and text-shadow on a few
+   dozen glyphs and one block for ~150 ms: small, isolated paint. */
+@keyframes zen-glitch-slice {
+  0% { clip-path: inset(10% 0 55% 0); translate: calc(-3 * var(--ca-x)) 0; }
+  50% { clip-path: inset(55% 0 10% 0); translate: calc(3 * var(--ca-x)) 0; }
+  100% { clip-path: inset(0 0 100% 0); translate: 0 0; }
+}
+@keyframes zen-glitch-shift {
+  0% { translate: calc(-2 * var(--ca-x)) 0;
+    text-shadow: calc(-3 * var(--ca-x)) 0 var(--ca-r), calc(3 * var(--ca-x)) 0 var(--ca-c); }
+  45% { translate: calc(2 * var(--ca-x)) 0;
+    text-shadow: calc(3 * var(--ca-x)) 0 var(--ca-r), calc(-3 * var(--ca-x)) 0 var(--ca-c); }
+  100% { translate: 0 0; text-shadow: none; }
+}
+.is-glitching .scramble::before, .is-glitching .scramble::after {
+  content: attr(data-text); position: absolute; inset: 0; pointer-events: none; text-shadow: none;
+  animation: zen-glitch-slice var(--glitch-dur, 150ms) steps(2, end) both; }
+.is-glitching .scramble::before { color: var(--ca-r); }
+.is-glitching .scramble::after { color: var(--ca-c); animation-delay: 30ms; }
+.is-glitching .prose-chat > :last-child { animation: zen-glitch-shift var(--glitch-dur, 150ms) steps(3, end) both; }
+/* a label decoding in (components/Decode.tsx) wears the same split; a tool card that just failed glitches once */
+.decoding { text-shadow: calc(-1 * var(--ca-x)) 0 var(--ca-r), var(--ca-x) 0 var(--ca-c); }
+:root[data-text-fx="off"] .decoding { text-shadow: none; }
+.glitch-once { animation: zen-glitch-shift 160ms steps(3, end) 1 both; }
+:root:is([data-text-fx="off"], [data-text-fx="calm"]) .glitch-once { animation: none; }
+@media (prefers-reduced-motion: reduce) { .glitch-once { animation: none; } }
 
 /* ===================================================================== open / close motion (polish v2)
    Transform and opacity only (cheap in the embedded Qt window); timings and easings from the motion tokens;
    all of it collapses to ~instant under prefers-reduced-motion (rule above). Unlayered, so it wins over the
    stock tw-animate classes on the shadcn primitives. Base UI waits for these to finish before unmounting. */
 
-/* dialogs: rise and settle on a spring; leave quicker, sinking slightly */
-@keyframes zen-dialog-in { from { opacity: 0; transform: translateY(12px) scale(0.965) } to { opacity: 1; transform: none } }
-@keyframes zen-dialog-out { from { opacity: 1; transform: none } to { opacity: 0; transform: translateY(6px) scale(0.98) } }
+/* dialogs: rise and settle on a spring; leave quicker, sinking slightly. Transitions (with Base UI's
+   data-starting-style / data-ending-style), not keyframes, so a dialog closed mid-open turns around from where it is. */
 @keyframes zen-fade-in { from { opacity: 0 } to { opacity: 1 } }
 @keyframes zen-fade-out { from { opacity: 1 } to { opacity: 0 } }
-[data-slot="dialog-content"][data-open], [data-slot="sheet-content"][data-open] {
-  animation: zen-dialog-in var(--dur-slow) var(--ease-spring) backwards; }
-[data-slot="dialog-content"][data-closed], [data-slot="sheet-content"][data-closed] {
-  animation: zen-dialog-out 140ms var(--ease-out) both; }
-[data-slot="dialog-overlay"][data-open], [data-slot="sheet-overlay"][data-open] { animation: zen-fade-in var(--dur) var(--ease-out) backwards; }
-[data-slot="dialog-overlay"][data-closed], [data-slot="sheet-overlay"][data-closed] { animation: zen-fade-out 160ms var(--ease-out) both; }
+[data-slot="dialog-content"] {
+  transition: opacity var(--dur-slow) var(--ease-spring), transform var(--dur-slow) var(--ease-spring);
+  &[data-starting-style] { opacity: 0; transform: translateY(12px) scale(0.965); }
+  /* a heavy dialog (Settings) can mount and drop Base UI's one-frame starting attribute in the same style pass:
+     the native rule always gets its frame */
+  @starting-style { opacity: 0; transform: translateY(12px) scale(0.965); }
+  &[data-ending-style] { opacity: 0; transform: translateY(6px) scale(0.98);
+    transition-duration: var(--dur-exit); transition-timing-function: var(--ease-out); }
+}
+[data-slot="dialog-overlay"] {
+  transition: opacity var(--dur) var(--ease-out);
+  &[data-starting-style], &[data-ending-style] { opacity: 0; }
+  &[data-ending-style] { transition-duration: var(--dur-exit); }
+  @starting-style { opacity: 0; }
+}
 
 /* popovers, menus, selects, hover cards: grow out of the trigger (transform-origin from Base UI), nudged from
    the side they open on; close as a quick fade-shrink back towards it */
-@keyframes zen-pop-in { from { opacity: 0; transform: translate(var(--pop-dx, 0), var(--pop-dy, -4px)) scale(0.94) }
-  to { opacity: 1; transform: none } }
-@keyframes zen-pop-out { from { opacity: 1; transform: none } to { opacity: 0; transform: scale(0.97) } }
 :is([data-slot="popover-content"], [data-slot="dropdown-menu-content"], [data-slot="dropdown-menu-sub-content"],
   [data-slot="select-content"], [data-slot="hover-card-content"]) {
   &[data-side="top"] { --pop-dx: 0; --pop-dy: 4px; }
   &[data-side="bottom"] { --pop-dx: 0; --pop-dy: -4px; }
   &[data-side="left"], &[data-side="inline-start"] { --pop-dx: 4px; --pop-dy: 0; }
   &[data-side="right"], &[data-side="inline-end"] { --pop-dx: -4px; --pop-dy: 0; }
-  &[data-open] { animation: zen-pop-in 190ms var(--ease-spring) backwards; }
-  &[data-closed] { animation: zen-pop-out 110ms var(--ease-out) both; }
+  transition: opacity var(--dur-pop) var(--ease-spring), transform var(--dur-pop) var(--ease-spring);
+  &[data-starting-style] { opacity: 0; transform: translate(var(--pop-dx, 0), var(--pop-dy, -4px)) scale(0.94); }
+  @starting-style { opacity: 0; transform: translate(var(--pop-dx, 0), var(--pop-dy, -4px)) scale(0.94); }
+  &[data-ending-style] { opacity: 0; transform: scale(0.97);
+    transition-duration: var(--dur-exit); transition-timing-function: var(--ease-out); }
 }
-@keyframes zen-tip-in { from { opacity: 0; transform: scale(0.96) } to { opacity: 1; transform: none } }
-[data-slot="tooltip-content"][data-open] { animation: zen-tip-in var(--dur-fast) var(--ease-out) backwards; }
-[data-slot="tooltip-content"][data-closed] { animation: zen-fade-out 90ms var(--ease-out) both; }
+/* tooltips: a short fade-grow; once one is open, the next opens instantly (Base UI sets data-instant) */
+[data-slot="tooltip-content"] {
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+  &[data-starting-style] { opacity: 0; transform: scale(0.96); }
+  &[data-ending-style] { opacity: 0; transition-duration: 90ms; }
+  &[data-instant] { transition-duration: 0ms; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :is([data-slot="dialog-content"], [data-slot="popover-content"], [data-slot="dropdown-menu-content"],
+    [data-slot="dropdown-menu-sub-content"], [data-slot="select-content"], [data-slot="hover-card-content"],
+    [data-slot="tooltip-content"]):is([data-starting-style], [data-ending-style]) { transform: none; }
+}
 
 /* dock: a group (side panel column) or floating window that appears rises into place; the content of a tab
    that is shown fades up. Closing is animated in lib/dock.ts (it plays zen-panel-out, then closes). */
@@ -388,15 +469,7 @@ select optgroup { color: var(--muted-foreground); font-weight: 600; }
 .dockview-theme-app .dv-resize-container .dv-groupview { animation: none; }
 .zen-panel-in { animation: zen-content-in var(--dur) var(--ease-out) backwards; }
 
-/* the sidebar slides; the main column glides with it (App.tsx drives the classes) */
-@keyframes zen-side-in { from { opacity: 0.4; transform: translateX(-100%) } to { opacity: 1; transform: none } }
-@keyframes zen-side-out { from { opacity: 1; transform: none } to { opacity: 0.2; transform: translateX(-100%) } }
-@keyframes zen-main-from-left { from { transform: translateX(calc(-1 * var(--side-w, 264px))) } to { transform: none } }
-@keyframes zen-main-from-right { from { transform: translateX(var(--side-w, 264px)) } to { transform: none } }
-.zen-side-in { animation: zen-side-in var(--dur-slow) var(--ease-spring) backwards; }
-.zen-side-out { animation: zen-side-out var(--dur) var(--ease-out) both; }
-.zen-main-from-left { animation: zen-main-from-left var(--dur-slow) var(--ease-spring) backwards; }
-.zen-main-from-right { animation: zen-main-from-right var(--dur) var(--ease-out) backwards; }
+/* the sidebar slides; the main column glides with it: App.tsx useSidebarSlide (Web Animations, interruptible) */
 
 /* Clip, the paperclip (components/Clip.tsx): a gentle bob, a blink, eyebrows that bounce while it talks, a springy
    entrance and a bubble that pops from it. Transform/opacity only; reduced motion stops the loops (rule above). */
@@ -415,3 +488,17 @@ select optgroup { color: var(--muted-foreground); font-weight: 600; }
 /* narration: an assistant's running commentary inside a folded run (Transcript RunBlock): quiet, smaller text */
 .narration .prose-chat { font-size: var(--fs-ui); line-height: 1.55; color: var(--muted-foreground); }
 .narration .prose-chat strong { color: color-mix(in oklab, var(--foreground) 80%, transparent); }
+
+/* reduced motion: every entrance and exit above becomes a plain fade of the same length (redefined keyframes win
+   while the media query matches); decorative loops stop; the mascot holds still */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes enter-rise { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes collapse-out { from { opacity: 1 } to { opacity: 0 } }
+  @keyframes zen-group-in { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes zen-float-in { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes zen-content-in { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes clip-enter { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes clip-bubble { from { opacity: 0 } to { opacity: 1 } }
+  .clip-bob, .clip-eyes, .clip-talking .clip-brows { animation: none; }
+  .shimmer-text { animation: none; background: none; color: var(--muted-foreground); }
+}

@@ -121,7 +121,7 @@ export function CodeIndexSection() {
   }
   return (
     <div className="border-b border-border pb-1">
-      <div className="label-tech flex items-center gap-1.5 px-3 pb-1 pt-2 text-muted-foreground/60">
+      <div className="label-tech flex items-center gap-1.5 px-3 pb-1 pt-2 text-faint">
         <Database className="size-3" /> Code index
       </div>
       {projects.map((p) => {

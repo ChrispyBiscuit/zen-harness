@@ -24,7 +24,7 @@ function FileLink({ path, children }: { path: string; children?: React.ReactNode
         ? api.open(path.replace(/[\\/]+$/, ""), "default").catch((e: any) => toast.error(`Can't open ${path}: ${e.message}`))
         : openFile(path)}
       title={path}
-      className="inline-flex max-w-full items-baseline gap-1 rounded px-1 align-baseline text-info underline decoration-info/30 underline-offset-2 hover:bg-info/10 hover:decoration-info"
+      className="inline-flex max-w-full items-baseline gap-1 rounded px-1 align-baseline link-ink underline-offset-2 hover:bg-surface-2"
     >
       {folder ? <Folder className="size-3.5 shrink-0 translate-y-0.5" /> : <FileText className="size-3.5 shrink-0 translate-y-0.5" />}
       <span className="truncate">{children ?? basename(path)}</span>
@@ -60,7 +60,7 @@ function rehypeScramble() {
         const [before, rest] = ch.value.split(SCR_OPEN)
         const [inside, after = ""] = rest.split(SCR_CLOSE)
         if (before) out.push({ type: "text", value: before })
-        out.push({ type: "element", tagName: "span", properties: { className: ["scramble"] }, children: [{ type: "text", value: inside }] })
+        out.push({ type: "element", tagName: "span", properties: { className: ["scramble"], ariaHidden: "true", dataText: inside }, children: [{ type: "text", value: inside }] })
         if (after) out.push({ type: "text", value: after })
       } else {
         walk(ch)
@@ -120,14 +120,14 @@ const host = (u: string) => { try { return new URL(u).hostname.replace(/^www\./,
 
 function SourcesList({ sources }: { sources: Source[] }) {
   return (
-    <div className="mt-4 max-w-full border-t border-border/50 pt-1.5 text-meta leading-[1.6] text-muted-foreground/75">
+    <div className="mt-4 max-w-full border-t border-border/50 pt-1.5 text-meta leading-[1.6] text-faint">
       <ol>
         {sources.map((s) => (
           <li key={s.n + s.url} className="flex min-w-0 items-baseline gap-1.5">
             <sup className="w-3 shrink-0 text-right text-meta tabular-nums">{s.n}</sup>
             <a href={s.url} target="_blank" rel="noreferrer" title={s.url}
               className="min-w-0 truncate no-underline hover:text-foreground hover:underline">{s.title || host(s.url)}</a>
-            {s.title && <span className="shrink-0 text-muted-foreground/50">· {host(s.url)}</span>}
+            {s.title && <span className="shrink-0 text-faint">· {host(s.url)}</span>}
           </li>
         ))}
       </ol>
@@ -148,17 +148,17 @@ export const Markdown = memo(function Markdown({ text, className }: { text: stri
             if (href && /^cite:/i.test(href)) {        // inline citation [1] → small numbered link to the source
               const url = decodeURIComponent(href.slice(5))
               return <sup className="cite ml-px leading-none"><a href={url} target="_blank" rel="noreferrer" title={host(url)}
-                className="text-[0.68em] tabular-nums text-muted-foreground/80 no-underline hover:text-foreground">{children}</a></sup>
+                className="text-[0.68em] tabular-nums text-faint no-underline hover:text-foreground">{children}</a></sup>
             }
             const art = href ? /^artifact:(?:\/\/)?([\w-]+)/i.exec(href) : null
             if (art) return (                         // [title](artifact://a3): open it in the Artifacts pane
               <button onClick={() => { useApp.getState().set({ artifactSel: art[1], artifactOpen: art[1] } as any); showPanel("artifacts") }}
-                className="text-info underline decoration-info/30 underline-offset-2 hover:decoration-info">{children}</button>
+                className="link-ink">{children}</button>
             )
             const p = href ? fromHref(href) : null
             if (p) return <FileLink path={p}>{children}</FileLink>
             return (
-              <a href={href} target="_blank" rel="noreferrer" className="text-info underline decoration-info/30 underline-offset-2 hover:decoration-info">
+              <a href={href} target="_blank" rel="noreferrer" className="link-ink">
                 {children}
               </a>
             )

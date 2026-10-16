@@ -2,6 +2,7 @@ import { useMemo, useState } from "react"
 import { Loader2, MoreHorizontal, Pencil, Search, SquarePen, Trash2, Workflow } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { api } from "@/lib/api"
+import { deleteWithUndo } from "@/lib/undo"
 import { useApp } from "@/lib/store"
 import type { Thread } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -27,6 +28,11 @@ function ThreadRow({ t, child }: { t: Thread; child?: boolean }) {
   const [editing, setEditing] = useState(false)
   const [title, setTitle] = useState(t.title)
   const active = current === t.id
+  // another chat starts with the same words: show two lines, or the rows look identical once truncated
+  const collides = useApp((s) => {
+    const head = t.title.replace(/^⇢\s*/, "").slice(0, 28).toLowerCase()
+    return head.length >= 20 && s.threads.some((o) => o.id !== t.id && o.title.replace(/^⇢\s*/, "").slice(0, 28).toLowerCase() === head)
+  })
   return (
     <div className={cn("group relative flex min-h-(--row-h) items-center rounded-lg transition-ui", active ? "bg-surface-2" : "hover:bg-surface-1 active:bg-surface-2", child && "ml-4")}>
       {editing ? (
@@ -35,9 +41,9 @@ function ThreadRow({ t, child }: { t: Thread; child?: boolean }) {
           onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") { setTitle(t.title); setEditing(false) } }}
           className="m-1 w-full rounded bg-background px-2 py-1 text-ui outline-none ring-1 ring-ring" />
       ) : (
-        <button onClick={() => select(t.id)} className="flex min-w-0 flex-1 items-center gap-2 self-stretch rounded-lg px-2 py-(--row-py) text-left">
+        <button onClick={() => select(t.id)} title={t.title.replace(/^⇢\s*/, "")} className="flex min-w-0 flex-1 items-center gap-2 self-stretch rounded-lg px-2 py-(--row-py) text-left">
           {child && <Workflow className="size-3.5 shrink-0 text-muted-foreground" />}
-          <span className={cn("truncate text-ui", active ? "text-sidebar-accent-foreground" : "text-sidebar-foreground/85")}>
+          <span className={cn(collides ? "line-clamp-2 break-words" : "truncate", "text-ui", active ? "text-sidebar-accent-foreground" : "text-sidebar-foreground/85")}>
             {t.title.replace(/^⇢\s*/, "")}
           </span>
           <span className="ml-auto flex shrink-0 items-center gap-1 pl-1">
@@ -54,10 +60,17 @@ function ThreadRow({ t, child }: { t: Thread; child?: boolean }) {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-40">
             <DropdownMenuItem onClick={() => setEditing(true)}><Pencil /> Rename</DropdownMenuItem>
-            <DropdownMenuItem variant="destructive" onClick={async () => {
-              if (!confirm(`Delete “${t.title}”?`)) return
-              await api.remove(t.id)
-              if (useApp.getState().current === t.id) select(null)
+            <DropdownMenuItem variant="destructive" onClick={() => {
+              const hidden = () => ((useApp.getState() as any).hiddenThreads || []) as string[]
+              deleteWithUndo({
+                label: `Deleted “${t.title.replace(/^⇢\s*/, "").slice(0, 60)}”`,
+                hide: () => {
+                  useApp.getState().set({ hiddenThreads: [...hidden(), t.id] } as any)
+                  if (useApp.getState().current === t.id) select(null)
+                },
+                restore: () => useApp.getState().set({ hiddenThreads: hidden().filter((x) => x !== t.id) } as any),
+                commit: () => api.remove(t.id),
+              })
             }}><Trash2 /> Delete</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -68,7 +81,10 @@ function ThreadRow({ t, child }: { t: Thread; child?: boolean }) {
 
 export function Sidebar() {
   const drag = useWindowDrag()
-  const threads = useApp((s) => s.threads)
+  const allThreads = useApp((s) => s.threads)
+  const hiddenThreads = useApp((s) => (s as any).hiddenThreads as string[] | undefined)
+  const threads = useMemo(() => (hiddenThreads?.length ? allThreads.filter((t) => !hiddenThreads.includes(t.id)) : allThreads),
+    [allThreads, hiddenThreads])
   const select = useApp((s) => s.select)
   const [q, setQ] = useState("")
 
@@ -104,20 +120,20 @@ export function Sidebar() {
           className="group flex min-h-(--row-h) w-full items-center gap-2.5 rounded-lg px-2.5 py-(--row-py) text-left text-ui text-sidebar-foreground/90 transition-ui hover:bg-surface-1 active:bg-surface-2">
           <SquarePen className="size-4 text-muted-foreground transition-ui group-hover:text-foreground" />
           <span className="flex-1">New chat</span>
-          <kbd className="mono text-meta text-muted-foreground/50 opacity-0 transition-ui group-hover:opacity-100">Ctrl N</kbd>
+          <kbd className="mono text-meta text-faint opacity-0 transition-ui group-hover:opacity-100">Ctrl N</kbd>
         </button>
       </div>
       <div className="px-3 pb-2">
         <div className="flex items-center gap-2 rounded-lg bg-surface-1 px-2 py-1.5 focus-within:outline-2 focus-within:outline-(--focus-ring)">
           <Search className="size-3.5 text-muted-foreground" />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search chats"
-            aria-label="Search chats" className="w-full bg-transparent text-ui outline-none focus-visible:outline-none placeholder:text-muted-foreground/70" />
+            aria-label="Search chats" className="w-full bg-transparent text-ui outline-none focus-visible:outline-none placeholder:text-faint" />
         </div>
       </div>
       <div data-density-scope className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
         {groups.map(([name, items]) => (
           <div key={name} className="mt-3">
-            <div className="label-tech px-2 pb-1 text-muted-foreground/60">{name}</div>
+            <div className="label-tech px-2 pb-1 text-faint">{name}</div>
             {items.map(({ t, kids }) => (
               <div key={t.id}>
                 <ThreadRow t={t} />

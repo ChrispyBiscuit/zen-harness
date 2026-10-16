@@ -74,7 +74,7 @@ export function PlaybooksPanel() {
               <div className="flex items-center gap-2 px-3 py-2">
                 <button onClick={() => setOpen(isOpen ? null : b.name)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
                   <ChevronRight className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", isOpen && "rotate-90")} />
-                  <BookOpen className="size-3.5 shrink-0 text-info" />
+                  <BookOpen className="size-3.5 shrink-0 text-muted-foreground" />
                   <span className="truncate text-ui">{b.title}</span>
                   {b.notes.length > 0 && <span className="shrink-0 text-meta text-muted-foreground">{b.notes.length} note{b.notes.length === 1 ? "" : "s"}</span>}
                 </button>
@@ -105,7 +105,7 @@ export function PlaybooksPanel() {
                   )}
                   {b.notes.length > 0 && (
                     <div className="rounded-md bg-muted/30 px-2.5 py-2">
-                      <div className="mb-1 text-meta uppercase tracking-wide text-muted-foreground/70">From earlier runs</div>
+                      <div className="mb-1 text-meta uppercase tracking-wide text-faint">From earlier runs</div>
                       {b.notes.map((n) => (
                         <div key={n.id} className="group flex items-start gap-2 py-0.5 text-caption">
                           <span className="min-w-0 flex-1">{n.text} <span className="text-meta text-muted-foreground">{n.date}{n.auto ? " · detected by the app" : ""}</span></span>

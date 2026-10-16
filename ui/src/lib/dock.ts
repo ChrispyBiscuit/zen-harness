@@ -72,8 +72,27 @@ export function trayCollapsed() {
   return !g || g.isCollapsed() || !findTray()?.panels.length
 }
 
+/** Tray panels shown as a drawer (floating) because the window was too narrow to dock them: their home stays the tray. */
+const drawers = new Set<string>()
+
+/** Width the tray may take beside a chat of CHAT_MIN (the dock shell's width less the chat's). */
+function trayRoom() {
+  const shell = (api?.groups[0]?.element.closest(".dv-shell") as HTMLElement | null)?.clientWidth
+  return shell ? shell - CHAT_MIN - 12 : Infinity
+}
+
 export function expandTray() {
   if (!api || !trayApi()) return
+  if (trayRoom() < TRAY_MIN) {           // a narrow window: open the panel as a drawer over the chat instead of docking
+    const p = findTray()?.activePanel
+    if (p) {
+      drawers.add(p.id)
+      const H = window.innerHeight, width = Math.min(TRAY_SIZE, window.innerWidth - 60)
+      api.addFloatingGroup(p, onScreen({ width, height: H - 90, x: window.innerWidth - width - 12, y: 48 }) as any)
+      emit()
+      return
+    }
+  }
   api.pinEdgeGroup("right")
   trayApi()?.expand()
   emit()
@@ -108,6 +127,7 @@ function saveHomes() { try { localStorage.setItem(HOMES_KEY, JSON.stringify(home
 function rememberHome(p: IDockviewPanel) {
   const g = p.group, loc = g.api.location.type
   if (loc === "edge") homes[p.id] = { kind: g.id === CONSOLE ? "console" : "tray" }
+  else if (loc === "floating" && drawers.has(p.id)) { drawers.delete(p.id); homes[p.id] = { kind: "tray" } }
   else if (loc === "floating") {
     const box = (g.element.closest(".dv-resize-container") as HTMLElement | null)?.getBoundingClientRect()
     homes[p.id] = box ? { kind: "float", x: box.left, y: box.top, width: box.width, height: box.height } : { kind: "tray" }
@@ -126,9 +146,10 @@ export function showPanel(id: PanelId) {
   if (!api) return
   const existing = api.getPanel(id)
   if (existing) {
-    if (existing.group.api.location.type === "edge" && existing.group.id === TRAY && trayCollapsed()) expandTray()
+    const folded = existing.group.api.location.type === "edge" && existing.group.id === TRAY && trayCollapsed()
+    existing.api.setActive()                // first, so a narrow window's drawer opens the panel that was asked for
+    if (folded) expandTray()
     if (existing.group.api.location.type === "edge" && existing.group.id === CONSOLE) api.pinEdgeGroup("bottom")
-    existing.api.setActive()
     return
   }
   if (id === "chat") { api.addPanel({ id, component: id, title: PANEL_TITLES[id] }); return }
@@ -244,6 +265,26 @@ function constrainChat() {
   }
 }
 
+/** The tray is an edge group beside the grid, so the chat's minimum width doesn't hold it back: in a narrow window
+ *  an expanded tray kept its full width and squeezed the chat to a sliver. Shrink the tray so the chat keeps
+ *  CHAT_MIN (never below TRAY_MIN); if even that doesn't fit, fold the tray to its rail. */
+let fitting = false
+function fitTray() {
+  if (!api || fitting) return
+  const t = trayApi()
+  if (!t || t.isCollapsed()) return
+  const width = findTray()!.element.getBoundingClientRect().width
+  const room = trayRoom()
+  if (width <= room + 1) return
+  fitting = true
+  try {
+    if (room >= TRAY_MIN) t.setSize({ width: room })
+    else collapseTray()
+  } finally { fitting = false }
+}
+let fitQueued = 0
+const queueFitTray = () => { cancelAnimationFrame(fitQueued); fitQueued = requestAnimationFrame(fitTray) }
+
 function defaultLayout() {
   if (!api) return
   api.clear()
@@ -300,7 +341,7 @@ export function initDock(a: DockviewApi) {
   constrainChat()
   tabsOnInside(findTray())
   syncChatHeader()
-  api.onDidLayoutChange(() => { syncChatHeader(); emit(); scheduleSave() })
+  api.onDidLayoutChange(() => { syncChatHeader(); emit(); scheduleSave(); queueFitTray() })
   api.onDidAddPanel(() => setTimeout(syncChatHeader, 0))
   api.onDidRemovePanel(() => setTimeout(syncChatHeader, 0))
   scheduleSave()
@@ -308,7 +349,8 @@ export function initDock(a: DockviewApi) {
   // remember where panels are as they move, so a closed one reopens in the same place
   api.onDidRemovePanel((p) => { try { if (p.id !== "chat" && !homes[p.id]) rememberHome(p) } catch { /* group gone */ } })
   api.onDidMovePanel?.((e: any) => { try { if (e?.panel) rememberHome(e.panel) } catch { /* mid-move */ } })
-  window.addEventListener("resize", () => keepFloatsOnScreen())
+  window.addEventListener("resize", () => { keepFloatsOnScreen(); queueFitTray() })
+  queueFitTray()
   // the desktop window asks for panels too (F12 in the agent's browser opens DevTools)
   ;(window as any).__zenShowPanel = (id: PanelId) => showPanel(id)
   ;(window as any).__zenHidePanel = (id: string) => hidePanel(id)

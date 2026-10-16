@@ -99,3 +99,7 @@
 .dockview-theme-app .dv-groupview-header-vertical > .dv-scrollable { display: none; }
 .dockview-theme-app .dv-groupview-header-vertical > .dv-pre-actions-container { width: 100%; }
 .dockview-theme-app .dv-groupview-header-vertical > .dv-right-actions-container { width: 100%; }
+
+/* a group's content is a flex child: without min-size 0, one long unbreakable line (a path, a URL) stretches it past
+   its group and the panel runs off the window */
+.dockview-theme-app .dv-groupview > .dv-content-container { min-width: 0; min-height: 0; }

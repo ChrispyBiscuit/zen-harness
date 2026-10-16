@@ -33,7 +33,7 @@ const fmt = (s: number) => (s >= 60 ? `${Math.floor(s / 60)}m ${Math.round(s % 6
 function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-1.5">
-      <div className="text-meta uppercase tracking-wide text-muted-foreground/70">{label}</div>
+      <div className="text-meta uppercase tracking-wide text-faint">{label}</div>
       <div className="text-ui tabular-nums text-foreground/90">{value}</div>
     </div>
   )
@@ -53,14 +53,14 @@ function WorkerModal({ w, model, onClose }: { w: Worker; model: string; onClose:
         </div>
         <div className="text-caption text-muted-foreground">Model: {model} (CPU)</div>
         <div>
-          <div className="mb-1 text-meta font-medium uppercase tracking-wide text-muted-foreground/70">Brief</div>
+          <div className="mb-1 text-meta font-medium uppercase tracking-wide text-faint">Brief</div>
           <div className="whitespace-pre-wrap rounded-lg bg-muted/30 px-3 py-2 text-ui text-foreground/85">{w.brief}</div>
         </div>
         {w.status === "running" && w.action && (
           <div className="text-ui"><span className="text-muted-foreground">Now: </span><span className="mono text-caption">{w.action}</span></div>
         )}
         <div>
-          <div className="mb-1 text-meta font-medium uppercase tracking-wide text-muted-foreground/70">Tool calls ({w.steps?.length || 0})</div>
+          <div className="mb-1 text-meta font-medium uppercase tracking-wide text-faint">Tool calls ({w.steps?.length || 0})</div>
           <div className="space-y-1">
             {(w.steps || []).map((s, i) => (
               <details key={i} className="rounded-lg border border-border/50 px-3 py-1.5 text-caption">
@@ -78,7 +78,7 @@ function WorkerModal({ w, model, onClose }: { w: Worker; model: string; onClose:
         </div>
         {w.report && (
           <div>
-            <div className="mb-1 text-meta font-medium uppercase tracking-wide text-muted-foreground/70">Report</div>
+            <div className="mb-1 text-meta font-medium uppercase tracking-wide text-faint">Report</div>
             <Markdown text={w.report} className="text-ui" />
           </div>
         )}

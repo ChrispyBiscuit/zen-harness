@@ -13,7 +13,7 @@ export function StepIcon({ status, className }: { status: string; className?: st
   if (status === "in_progress") return <CircleDot data-tone="info" className={cn(c, "tone-text animate-pulse")} />
   if (status === "blocked") return <AlertTriangle data-tone="warning" className={cn(c, "tone-text")} />
   if (status === "skipped") return <MinusCircle data-tone="muted" className={cn(c, "tone-text")} />
-  return <CircleDashed className={cn(c, "text-muted-foreground/60")} />
+  return <CircleDashed className={cn(c, "text-faint")} />
 }
 
 /** Old flat trackers (steps) show as one milestone. */
@@ -79,7 +79,7 @@ export function ChecklistView({ t, compact }: { t: Checklist; compact?: boolean 
             <div className="flex items-center gap-2">
               <StepIcon status={m.status} />
               <span className={cn("text-ui font-medium", finished && "text-muted-foreground")}>
-                <span className="mr-1 text-muted-foreground/70">{i + 1}.</span>{m.title}
+                <span className="mr-1 text-faint">{i + 1}.</span>{m.title}
               </span>
               {subs.length > 0 && <span className="ml-auto text-meta text-muted-foreground">{d}/{subs.length}</span>}
             </div>
@@ -105,7 +105,7 @@ export function ChecklistView({ t, compact }: { t: Checklist; compact?: boolean 
       })}
       {t.next && (
         <div className="flex items-start gap-2 rounded-lg bg-muted/60 px-2.5 py-1.5 text-caption">
-          <ChevronRight className="mt-0.5 size-3.5 shrink-0 text-info" />
+          <ChevronRight className="mt-0.5 size-3.5 shrink-0 text-foreground/70" />
           <span><span className="text-muted-foreground">Next: </span>{t.next}</span>
         </div>
       )}

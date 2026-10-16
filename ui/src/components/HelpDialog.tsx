@@ -89,7 +89,7 @@ function LicensesPane() {
       </div>
       {groups.map(([kind, list]) => (
         <section key={kind}>
-          <h3 className="label-tech mb-1 text-muted-foreground/70">{KIND_LABEL[kind] || kind} · {list.length}</h3>
+          <h3 className="label-tech mb-1 text-faint">{KIND_LABEL[kind] || kind} · {list.length}</h3>
           <div className="divide-y divide-line-1 rounded-lg border border-line-1">
             {list.map((c) => (
               <div key={c.id} className="px-3 py-1.5">
@@ -99,7 +99,7 @@ function LicensesPane() {
                 </button>
                 {open === c.id && (
                   <div className="mt-1.5 space-y-1.5">
-                    {c.url && <a href={c.url} target="_blank" rel="noreferrer" className="block truncate text-caption text-info underline">{c.url}</a>}
+                    {c.url && <a href={c.url} target="_blank" rel="noreferrer" className="block truncate text-caption link-ink">{c.url}</a>}
                     {c.text ? <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-md bg-surface-1 p-2 text-[11px] leading-relaxed">{text || "Loading…"}</pre>
                       : <div className="text-caption text-muted-foreground">Licence: {c.license}. {c.url ? "Full terms at the link above." : ""}</div>}
                   </div>
@@ -141,7 +141,7 @@ export function HelpDialog() {
     <Dialog open={!!open} onOpenChange={(v) => set({ helpOpen: v, ...(v ? {} : { helpPage: undefined }) } as any)}>
       <DialogContent className="flex h-[min(88dvh,820px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
         <DialogHeader className="shrink-0 border-b border-line-1 px-6 pb-3 pt-5">
-          <DialogTitle className="flex items-center gap-2"><span className="label-tech text-muted-foreground/60">Zen Harness</span><span className="text-muted-foreground/30">/</span>Help</DialogTitle>
+          <DialogTitle className="flex items-center gap-2"><span className="label-tech text-faint">Zen Harness</span><span className="text-muted-foreground/30">/</span>Help</DialogTitle>
         </DialogHeader>
         <div className="flex min-h-0 flex-1">
           <nav className="w-56 shrink-0 space-y-0.5 overflow-y-auto border-r border-line-1 p-3">

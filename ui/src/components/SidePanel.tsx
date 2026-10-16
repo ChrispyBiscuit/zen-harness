@@ -97,9 +97,9 @@ export function TasksView() {
             Background processes and delegated threads appear here.
           </div>
         )}
-        {active.length > 0 && <div className="px-2.5 pb-1 pt-2 text-meta uppercase tracking-wider text-muted-foreground/60">Active</div>}
+        {active.length > 0 && <div className="px-2.5 pb-1 pt-2 text-meta uppercase tracking-wider text-faint">Active</div>}
         {active.map(row)}
-        {done.length > 0 && <div className="px-2.5 pb-1 pt-3 text-meta uppercase tracking-wider text-muted-foreground/60">Finished</div>}
+        {done.length > 0 && <div className="px-2.5 pb-1 pt-3 text-meta uppercase tracking-wider text-faint">Finished</div>}
         {done.map(row)}
       </div>
       {chosen && (
@@ -233,7 +233,7 @@ function ApproachSection() {
   return (
     <div className="border-b border-border px-4 py-2.5">
       <button onClick={() => setOpen(!open)} className="flex w-full items-center gap-2 text-left text-caption">
-        <Compass className={cn("size-3.5 text-info", plan.streaming && "animate-pulse")} />
+        <Compass className={cn("size-3.5", plan.streaming ? "animate-pulse text-info" : "text-muted-foreground")} />
         <span className="font-medium">{plan.streaming ? "Planning…" : "Approach"}</span>
         <span className="text-meta text-muted-foreground">{plan.streaming ? "" : `${plan.tokens ?? "?"} tokens`}</span>
         <ChevronRight className={cn("ml-auto size-3.5 text-muted-foreground transition-transform", open && "rotate-90")} />
@@ -266,7 +266,7 @@ export function ChecklistPanel() {
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-border px-4 pb-3 pt-3.5">
-        <div className="mb-1 flex items-center gap-2 text-meta uppercase tracking-wider text-muted-foreground/70">
+        <div className="mb-1 flex items-center gap-2 text-meta uppercase tracking-wider text-faint">
           {running && <Loader2 className="size-3 animate-spin text-info" />} Checklist
           <span className="ml-auto normal-case tracking-normal">{done}/{total} done</span>
         </div>
@@ -278,7 +278,7 @@ export function ChecklistPanel() {
         <ChecklistView t={t} />
         {notes.length > 0 && (
           <div className="mt-5">
-            <button onClick={() => setShowNotes(!showNotes)} className="text-meta uppercase tracking-wider text-muted-foreground/70 hover:text-foreground">
+            <button onClick={() => setShowNotes(!showNotes)} className="text-meta uppercase tracking-wider text-faint hover:text-foreground">
               Notes ({notes.length})
             </button>
             {showNotes && (
@@ -291,7 +291,7 @@ export function ChecklistPanel() {
       </div>
       {t.path && (
         <div className="border-t border-border px-4 py-2">
-          <button onClick={() => openFile(t.path)} className="mono truncate text-caption text-info hover:underline" title={t.path}>
+          <button onClick={() => openFile(t.path)} className="mono truncate text-caption text-foreground/90 hover:underline" title={t.path}>
             {t.path}
           </button>
         </div>
