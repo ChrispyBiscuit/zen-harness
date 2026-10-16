@@ -43,7 +43,7 @@
     --radius-panel: 12px;
     --radius-modal: 16px;
     /* motion */
-    --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
     --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
     --color-success: var(--success);
     --color-warning: var(--warning);
@@ -204,10 +204,12 @@
     --row-h: 32px;
     --row-py: 6px;
 
-    /* motion: subtle, Linear-style; no bounce */
+    /* motion: subtle, Linear-style; no bounce. Exits run faster than entrances. */
     --dur-fast: 120ms;
     --dur: 200ms;
     --dur-slow: 320ms;
+    --dur-pop: 190ms;       /* popovers, menus, selects open */
+    --dur-exit: 140ms;      /* anything closing */
 }
 /* compact density: one font step down and a tighter rhythm, in the transcript and the sidebar */
 :root[data-density="compact"] [data-density-scope] {
@@ -271,9 +273,13 @@
 @utility collapse { animation: collapse-out var(--dur-fast) var(--ease-out) both; }
 @utility transition-ui { transition-property: color, background-color, border-color, opacity, transform, box-shadow;
   transition-duration: var(--dur-fast); transition-timing-function: var(--ease-out); }
+/* Reduced motion means gentler, not none: things still fade (opacity and colour carry meaning), but nothing slides,
+   scales, bounces or loops for decoration. The movement keyframes are redefined below as plain fades; transitions on
+   transform are cut; decorative loops stop. Status spinners keep turning (they say "working"). */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important;
-    transition-duration: 1ms !important; scroll-behavior: auto !important; }
+  *, *::before, *::after { scroll-behavior: auto !important; }
+  *:active { scale: none !important; }
+  .animate-ping, .animate-bounce { animation: none !important; }
 }
 /* technical label: small caps-like mono for meters, section headers, badges */
 @utility label-tech { font-family: var(--font-mono); font-size: var(--fs-meta); letter-spacing: 0.12em; text-transform: uppercase;
@@ -348,35 +354,52 @@ select optgroup { color: var(--muted-foreground); font-weight: 600; }
    all of it collapses to ~instant under prefers-reduced-motion (rule above). Unlayered, so it wins over the
    stock tw-animate classes on the shadcn primitives. Base UI waits for these to finish before unmounting. */
 
-/* dialogs: rise and settle on a spring; leave quicker, sinking slightly */
-@keyframes zen-dialog-in { from { opacity: 0; transform: translateY(12px) scale(0.965) } to { opacity: 1; transform: none } }
-@keyframes zen-dialog-out { from { opacity: 1; transform: none } to { opacity: 0; transform: translateY(6px) scale(0.98) } }
+/* dialogs: rise and settle on a spring; leave quicker, sinking slightly. Transitions (with Base UI's
+   data-starting-style / data-ending-style), not keyframes, so a dialog closed mid-open turns around from where it is. */
 @keyframes zen-fade-in { from { opacity: 0 } to { opacity: 1 } }
 @keyframes zen-fade-out { from { opacity: 1 } to { opacity: 0 } }
-[data-slot="dialog-content"][data-open], [data-slot="sheet-content"][data-open] {
-  animation: zen-dialog-in var(--dur-slow) var(--ease-spring) backwards; }
-[data-slot="dialog-content"][data-closed], [data-slot="sheet-content"][data-closed] {
-  animation: zen-dialog-out 140ms var(--ease-out) both; }
-[data-slot="dialog-overlay"][data-open], [data-slot="sheet-overlay"][data-open] { animation: zen-fade-in var(--dur) var(--ease-out) backwards; }
-[data-slot="dialog-overlay"][data-closed], [data-slot="sheet-overlay"][data-closed] { animation: zen-fade-out 160ms var(--ease-out) both; }
+[data-slot="dialog-content"] {
+  transition: opacity var(--dur-slow) var(--ease-spring), transform var(--dur-slow) var(--ease-spring);
+  &[data-starting-style] { opacity: 0; transform: translateY(12px) scale(0.965); }
+  /* a heavy dialog (Settings) can mount and drop Base UI's one-frame starting attribute in the same style pass:
+     the native rule always gets its frame */
+  @starting-style { opacity: 0; transform: translateY(12px) scale(0.965); }
+  &[data-ending-style] { opacity: 0; transform: translateY(6px) scale(0.98);
+    transition-duration: var(--dur-exit); transition-timing-function: var(--ease-out); }
+}
+[data-slot="dialog-overlay"] {
+  transition: opacity var(--dur) var(--ease-out);
+  &[data-starting-style], &[data-ending-style] { opacity: 0; }
+  &[data-ending-style] { transition-duration: var(--dur-exit); }
+  @starting-style { opacity: 0; }
+}
 
 /* popovers, menus, selects, hover cards: grow out of the trigger (transform-origin from Base UI), nudged from
    the side they open on; close as a quick fade-shrink back towards it */
-@keyframes zen-pop-in { from { opacity: 0; transform: translate(var(--pop-dx, 0), var(--pop-dy, -4px)) scale(0.94) }
-  to { opacity: 1; transform: none } }
-@keyframes zen-pop-out { from { opacity: 1; transform: none } to { opacity: 0; transform: scale(0.97) } }
 :is([data-slot="popover-content"], [data-slot="dropdown-menu-content"], [data-slot="dropdown-menu-sub-content"],
   [data-slot="select-content"], [data-slot="hover-card-content"]) {
   &[data-side="top"] { --pop-dx: 0; --pop-dy: 4px; }
   &[data-side="bottom"] { --pop-dx: 0; --pop-dy: -4px; }
   &[data-side="left"], &[data-side="inline-start"] { --pop-dx: 4px; --pop-dy: 0; }
   &[data-side="right"], &[data-side="inline-end"] { --pop-dx: -4px; --pop-dy: 0; }
-  &[data-open] { animation: zen-pop-in 190ms var(--ease-spring) backwards; }
-  &[data-closed] { animation: zen-pop-out 110ms var(--ease-out) both; }
+  transition: opacity var(--dur-pop) var(--ease-spring), transform var(--dur-pop) var(--ease-spring);
+  &[data-starting-style] { opacity: 0; transform: translate(var(--pop-dx, 0), var(--pop-dy, -4px)) scale(0.94); }
+  @starting-style { opacity: 0; transform: translate(var(--pop-dx, 0), var(--pop-dy, -4px)) scale(0.94); }
+  &[data-ending-style] { opacity: 0; transform: scale(0.97);
+    transition-duration: var(--dur-exit); transition-timing-function: var(--ease-out); }
 }
-@keyframes zen-tip-in { from { opacity: 0; transform: scale(0.96) } to { opacity: 1; transform: none } }
-[data-slot="tooltip-content"][data-open] { animation: zen-tip-in var(--dur-fast) var(--ease-out) backwards; }
-[data-slot="tooltip-content"][data-closed] { animation: zen-fade-out 90ms var(--ease-out) both; }
+/* tooltips: a short fade-grow; once one is open, the next opens instantly (Base UI sets data-instant) */
+[data-slot="tooltip-content"] {
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+  &[data-starting-style] { opacity: 0; transform: scale(0.96); }
+  &[data-ending-style] { opacity: 0; transition-duration: 90ms; }
+  &[data-instant] { transition-duration: 0ms; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :is([data-slot="dialog-content"], [data-slot="popover-content"], [data-slot="dropdown-menu-content"],
+    [data-slot="dropdown-menu-sub-content"], [data-slot="select-content"], [data-slot="hover-card-content"],
+    [data-slot="tooltip-content"]):is([data-starting-style], [data-ending-style]) { transform: none; }
+}
 
 /* dock: a group (side panel column) or floating window that appears rises into place; the content of a tab
    that is shown fades up. Closing is animated in lib/dock.ts (it plays zen-panel-out, then closes). */
@@ -415,3 +438,17 @@ select optgroup { color: var(--muted-foreground); font-weight: 600; }
 /* narration: an assistant's running commentary inside a folded run (Transcript RunBlock): quiet, smaller text */
 .narration .prose-chat { font-size: var(--fs-ui); line-height: 1.55; color: var(--muted-foreground); }
 .narration .prose-chat strong { color: color-mix(in oklab, var(--foreground) 80%, transparent); }
+
+/* reduced motion: every entrance and exit above becomes a plain fade of the same length (redefined keyframes win
+   while the media query matches); decorative loops stop; the mascot holds still */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes enter-rise { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes collapse-out { from { opacity: 1 } to { opacity: 0 } }
+  @keyframes zen-group-in { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes zen-float-in { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes zen-content-in { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes clip-enter { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes clip-bubble { from { opacity: 0 } to { opacity: 1 } }
+  .clip-bob, .clip-eyes, .clip-talking .clip-brows { animation: none; }
+  .shimmer-text { animation: none; background: none; color: var(--muted-foreground); }
+}
