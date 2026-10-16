@@ -20,7 +20,7 @@ type Status = {
   commits?: Commit[]; busy?: string | null; error?: string | null; run_busy?: boolean; can_rollback?: boolean
   last_check?: number; rolled_back?: { from: string; reason: string; at: number } | null
   declined?: string | null; auto?: boolean
-  progress?: { steps: Step[]; current: string | null; step_started?: number; started?: number } | null
+  progress?: { steps: Step[]; current: string | null; step_started?: number; started?: number; frac?: number | null } | null
 }
 
 const ago = (t?: number) => {
@@ -57,6 +57,7 @@ function installPct(p: Status["progress"], restarting: boolean) {
   for (const s of steps) {
     if (s.state === "done") done += s.typical
     else if (s.state === "running") {
+      if (p.frac != null) { done += s.typical * Math.min(1, p.frac); continue }      // a measured step (the file copy)
       const t = Date.now() / 1000 - (p.step_started || Date.now() / 1000)
       done += s.typical * 0.9 * (1 - Math.exp(-1.6 * t / Math.max(1, s.typical)))
     }

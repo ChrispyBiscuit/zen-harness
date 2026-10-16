@@ -53,7 +53,7 @@ def _step(key):
         if _progress["steps"].get(k) in ("pending", "running"):
             _progress["steps"][k] = "done" if _progress["steps"][k] == "running" else "skipped"
     _progress["steps"][key] = "running"
-    _progress.update(current=key, step_started=time.time())
+    _progress.update(current=key, step_started=time.time(), frac=None)
 
 
 def progress_end(ok=True):
@@ -71,6 +71,7 @@ def progress():
     return {"steps": [{"key": k, "label": lab, "typical": t, "state": _progress["steps"].get(k, "pending")}
                       for k, lab, t in STEPS],
             "current": _progress["current"], "step_started": _progress.get("step_started"),
+            "frac": _progress.get("frac"),          # the running step's own measured share done, when it has one
             "started": _progress["started"]}
 
 
@@ -320,7 +321,9 @@ def apply(sha):
             os.makedirs(bk, exist_ok=True)
             m = {"from": st.get("installed_sha"), "to": sha, "replaced": [], "created": [], "deleted": [],
                  "web_dist": False}
-            for rel in _tracked(sha):
+            files = _tracked(sha)
+            for n, rel in enumerate(files):
+                _progress["frac"] = n / max(1, len(files))          # the install step's bar: files gone through
                 s, d = os.path.join(src, rel), os.path.join(dst, rel)
                 if not os.path.isfile(s) or (os.path.exists(d) and _same(s, d)):
                     continue
