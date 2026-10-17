@@ -1,20 +1,56 @@
 /** The JSON body of an answer block, read leniently: small models write trailing commas, smart quotes, a "json"
- *  line or a stray note after the closing brace. The decode effect's markers are removed first. */
+ *  line, a stray note after the closing brace, or drop a closing bracket (the live 27B: `"items":[["a","b"]}`).
+ *  Each repair is tried only when the text before it doesn't parse. The decode effect's markers go first. */
 export function parseBlock(src: string): { ok: true; data: any } | { ok: false; error: string } {
-  let s = src.replace(/[\uE000\uE001]/g, "").trim()
+  let s = src.replace(/[]/g, "").trim()
   s = s.replace(/^json\s*\n/i, "")
-  s = s.replace(/[“”]/g, '"').replace(/[‘’]/g, "'")
   const start = s.search(/[[{]/)
   if (start < 0) return { ok: false, error: "no data" }
   const close = s[start] === "[" ? "]" : "}"
   const end = s.lastIndexOf(close)
   if (end < start) return { ok: false, error: "unfinished" }
-  s = s.slice(start, end + 1).replace(/,\s*([\]}])/g, "$1")
-  try {
-    return { ok: true, data: JSON.parse(s) }
-  } catch (e: any) {
-    return { ok: false, error: String(e?.message || e).replace(/^JSON\.parse: /, "") }
+  s = s.slice(start, end + 1)
+  const tries = [
+    (x: string) => x,
+    (x: string) => x.replace(/,\s*([\]}])/g, "$1"),
+    (x: string) => x.replace(/[“”]/g, '"').replace(/[‘’]/g, "'"),
+    balance,
+  ]
+  let err = ""
+  for (const fix of tries) {
+    s = fix(s)
+    try {
+      return { ok: true, data: JSON.parse(s) }
+    } catch (e: any) {
+      err ||= String(e?.message || e).replace(/^JSON\.parse: /, "")
+    }
   }
+  return { ok: false, error: err }
+}
+
+/** Closing brackets put back where a model left one out: a closer that doesn't match the open bracket first closes
+ *  what is still open inside it; anything open at the end is closed. Strings are skipped. */
+export function balance(s: string): string {
+  const stack: string[] = []
+  let out = "", inStr = false, esc = false
+  for (const ch of s) {
+    if (inStr) {
+      out += ch
+      if (esc) esc = false
+      else if (ch === "\\") esc = true
+      else if (ch === '"') inStr = false
+      continue
+    }
+    if (ch === '"') inStr = true
+    else if (ch === "[" || ch === "{") stack.push(ch === "[" ? "]" : "}")
+    else if (ch === "]" || ch === "}") {
+      if (stack.includes(ch)) while (stack.length && stack[stack.length - 1] !== ch) out += stack.pop()
+      if (stack[stack.length - 1] === ch) stack.pop()
+      else continue                                   // a closer for nothing open: dropped
+    }
+    out += ch
+  }
+  return out + stack.reverse().join("")
 }
 
 /** A number from a value a model may have written as text ("1,200", "$4.5", "12%"). */
@@ -33,11 +69,13 @@ export const str = (v: any) => (v == null ? "" : typeof v === "string" ? v : typ
 export function pairs(items: any): [string, string][] {
   if (!items) return []
   if (Array.isArray(items)) {
-    return items.map((it): [string, string] | null => {
-      if (Array.isArray(it)) return [str(it[0]), str(it[1])]
-      if (it && typeof it === "object") return [str(it.label ?? it.key ?? it.name ?? it.k), str(it.value ?? it.v ?? it.text)]
-      return null
-    }).filter((x): x is [string, string] => !!x && !!(x[0] || x[1]))
+    return items.flatMap((it): [string, string][] => {
+      // a list of plain points instead of [key, value] pairs (["6 in screen", "IPX8", …]): one row each, no key
+      if (typeof it === "string" || typeof it === "number") return [["", str(it)]]
+      if (Array.isArray(it)) return it.length > 2 ? it.map((x): [string, string] => ["", str(x)]) : [[str(it[0]), str(it[1])]]
+      if (it && typeof it === "object") return [[str(it.label ?? it.key ?? it.name ?? it.k), str(it.value ?? it.v ?? it.text)]]
+      return []
+    }).filter((x) => !!(x[0] || x[1]))
   }
   if (typeof items === "object") return Object.entries(items).map(([k, v]) => [k, str(v)])
   return []

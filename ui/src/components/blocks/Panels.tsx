@@ -20,8 +20,10 @@ export const Facts = memo(function Facts({ d }: { d: any }) {
         <dl className="grid min-w-0 flex-1 grid-cols-[minmax(6rem,auto)_1fr] gap-x-4 text-ui">
           {items.map(([k, v], i) => (
             <div key={i} className="contents">
-              <dt className={"py-1.5 text-faint " + (i ? "border-t border-line-1" : "")}>{k}</dt>
-              <dd className={"py-1.5 text-foreground " + (i ? "border-t border-line-1" : "")}>{v}</dd>
+              {k ? <>
+                <dt className={"py-1.5 text-faint " + (i ? "border-t border-line-1" : "")}>{k}</dt>
+                <dd className={"py-1.5 text-foreground " + (i ? "border-t border-line-1" : "")}>{v}</dd>
+              </> : <dd className={"col-span-2 py-1.5 text-foreground " + (i ? "border-t border-line-1" : "")}>{v}</dd>}
             </div>
           ))}
         </dl>
@@ -82,7 +84,8 @@ export const Cards = memo(function Cards({ d }: { d: any }) {
               <dl className="mt-2 space-y-1 text-meta">
                 {items.map(([k, v], j) => (
                   <div key={j} className="flex gap-2 border-t border-line-1 pt-1">
-                    <dt className="text-faint">{k}</dt><dd className="ml-auto text-right text-foreground">{v}</dd>
+                    {k ? <><dt className="text-faint">{k}</dt><dd className="ml-auto text-right text-foreground">{v}</dd></>
+                      : <dd className="text-muted-foreground">{v}</dd>}
                   </div>
                 ))}
               </dl>
