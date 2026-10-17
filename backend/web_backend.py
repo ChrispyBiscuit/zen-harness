@@ -1099,6 +1099,37 @@ async def api_notes(req):
     return J({"notes": [n for n in NOTES if n["seq"] > since], "seq": _NOTE_SEQ[0]})
 
 
+UI_ERROR_LOG_MAX = 512 * 1024          # ui_errors.log rotates to ui_errors.log.1 past this
+_ui_errors_seen = {}                   # message -> time last written: a render loop logs once a minute, not 1000x
+
+
+@routes.post("/api/ui_error")
+async def api_ui_error(req):
+    """An error in the UI (the root error boundary, window 'error' / 'unhandledrejection'): appended to
+    <data>/ui_errors.log, so a crash that blanked the window leaves its cause behind (it used to vanish with the page)."""
+    try:
+        b = await req.json()
+    except Exception:
+        return J({"ok": False}, 400)
+    kind = str(b.get("kind") or "error")[:40]
+    msg = str(b.get("message") or "")[:4000]
+    extra = "\n".join(str(b.get(k) or "")[:6000] for k in ("stack", "component_stack") if b.get(k))
+    key = kind + msg[:300]
+    if time.time() - _ui_errors_seen.get(key, 0) < 60:
+        return J({"ok": True, "repeat": True})
+    _ui_errors_seen[key] = time.time()
+    path = paths.data("ui_errors.log")
+    try:
+        if os.path.isfile(path) and os.path.getsize(path) > UI_ERROR_LOG_MAX:
+            os.replace(path, path + ".1")
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(f"--- {time.strftime('%Y-%m-%d %H:%M:%S')} {kind} at {str(b.get('url') or '')[:200]} "
+                    f"(version {str(b.get('version') or '?')[:40]})\n{msg}\n{extra}\n")
+    except OSError as e:
+        return J({"ok": False, "error": str(e)[:200]}, 500)
+    return J({"ok": True})
+
+
 @routes.post("/api/shutdown")
 async def api_shutdown(req):
     try:

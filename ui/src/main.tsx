@@ -4,9 +4,14 @@ import './index.css'
 import { useApp } from "./lib/store"
 ;(window as any).__lwsSelect = (id: string) => useApp.getState().select(id)
 import App from './App.tsx'
+import { CrashGuard, installErrorReporting } from './components/CrashGuard'
+
+installErrorReporting()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <CrashGuard>
+      <App />
+    </CrashGuard>
   </StrictMode>,
 )

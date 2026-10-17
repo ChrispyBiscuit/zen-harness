@@ -29,6 +29,7 @@ def _port():
 PORT = _port()
 URL = f"http://127.0.0.1:{PORT}"
 DIST = os.environ.get("LWS_DIST") or paths.resource("web_dist")
+WINDOW_BG = "#131417"                # the UI's dark surface (index.html theme-color): painted before the page loads
 
 
 def port_in_use(port):
@@ -439,6 +440,11 @@ def main():
     from PySide6.QtWebEngineWidgets import QWebEngineView
     view = QWebEngineView()
     _external_links(view)                     # before anything else uses view.page()
+    # the app's own dark background before the page has painted (Chromium's default is white): no white flash on
+    # start, on a reload, or after an update restarts the UI
+    from PySide6.QtGui import QColor
+    view.page().setBackgroundColor(QColor(WINDOW_BG))
+    view.setStyleSheet(f"background: {WINDOW_BG};")
     s = view.settings()
     for attr in ("PluginsEnabled", "PdfViewerEnabled", "LocalStorageEnabled", "JavascriptCanAccessClipboard"):
         if hasattr(QWebEngineSettings.WebAttribute, attr):
