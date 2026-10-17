@@ -2653,7 +2653,7 @@ class AgentEngine:
         for tc in calls or []:
             name = self.reg.canonical(tc["function"]["name"]) if self.reg else ""
             t = self.reg.get(name) if self.reg else None
-            if name not in PARALLEL_SAFE or t is None:
+            if name not in PARALLEL_SAFE or t is None or (name == "encyclopedia" and self._encyclopedia_stop()):
                 continue
             try:
                 raw = tc["function"].get("arguments") or "{}"
@@ -5213,6 +5213,8 @@ class AgentEngine:
             ok, text = False, ("Not run again: you already made this exact call in this request. Repeating it gives "
                                "the same result" + (f" — here it is again:\n{prior}\n" if prior else ". ")
                                + "Use what it says, a different query or source, or move on to the next subtask.")
+        elif name == "encyclopedia" and (ency_stop := self._encyclopedia_stop()):
+            ok, text = False, ency_stop
         elif getattr(self, "_offered", None) is not None and name not in self._offered:
             if self._need_plan and "update_tracker" in self._offered:
                 why = ("Make your checklist first: call update_tracker now with new=true, the goal and the milestones/"
@@ -5310,6 +5312,7 @@ class AgentEngine:
             self._tracker_bounces = 0
         if name == "read_guide" and ok and isinstance(args, dict) and not text.startswith("You already read"):
             self._guides_read = getattr(self, "_guides_read", set()) | {str(args.get("topic") or args.get("name") or "").lower()}
+        text = self._encyclopedia_note(name, ok, text)
         text = self._watch_progress(name, args, ok, text)
         if t and t["kind"] in (at.NET, at.MCP) or name in ("read_file", "read_document", "powershell"):
             self.tainted = True
@@ -5601,11 +5604,77 @@ class AgentEngine:
         except Exception as e:
             _log({"timeline_error": repr(e)[:200], "conv": self.ctx.conv_id})
 
+    def _count_loop(self, kind, text, reset_at, stop_at, reason):
+        """A guard caught the same fruitless pattern again: a recovery note at reset_at, no more tools at stop_at."""
+        n = self.turn[kind] = self.turn.get(kind, 0) + 1
+        _log({"loop_guard": kind, "n": n, "conv": self.ctx.conv_id})
+        if n >= stop_at and not self._force_answer:
+            self._force_answer = True
+            return text + ("\n\nNo more tool calls: answer the user now with what you have found, and say plainly "
+                           "what you could not find or check.")
+        if n == reset_at:
+            note = self._stuck_reset(f"{n} times you {reason}")
+            if note:
+                return text + "\n\n" + note
+        return text
+
+    # Offline Wikipedia lookups in a row (no web search or fetch between them) before the next one is refused. A 27B
+    # made 24 lookups for "US GDP growth 2019-2024" — each rephrased, so no repeat guard saw them — and read the saved
+    # results over and over; the snapshot's articles had no year-by-year table to find.
+    ENCY_LIMIT_WEB, ENCY_LIMIT_OFFLINE = 3, 5   # web on: web_search is the better source; off: it is the only one
+    ENCY_REFUSALS_STOP = 2                      # refused lookups after which the model answers without tools
+
+    def _web_available(self):
+        return (not getattr(self.ctx, "web_off", False) and self.reg is not None
+                and "web_search" in self.reg.by_name)
+
+    def _encyclopedia_stop(self):
+        """The refusal for one offline-Wikipedia lookup too many ('' = let it run)."""
+        streak = self.turn.get("ency_streak", 0)
+        web = self._web_available()
+        if streak < (self.ENCY_LIMIT_WEB if web else self.ENCY_LIMIT_OFFLINE):
+            return ""
+        if web:
+            return (f"encyclopedia did not run: you already made {streak} offline Wikipedia lookups in a row without "
+                    f"getting what you need — rephrasing the query will not add a table the snapshot doesn't have. "
+                    f"Web access is ON: call web_search now (e.g. the figure and years you need, plus a source such as "
+                    f"the official statistics agency), or answer with what you have.")
+        return (f"encyclopedia did not run: you already made {streak} offline Wikipedia lookups in a row. Web access "
+                f"is off, so there is no other source: answer the user now with what those lookups found, and say "
+                f"plainly which figures you could not find offline (the user can turn web access on with the globe "
+                f"button).")
+
+    def _encyclopedia_note(self, name, ok, text):
+        """Count lookups in a row; the one before the limit gets a heads-up appended to its result."""
+        if name in ("web_search", "web_fetch", "browser_open", "deep_search"):
+            self.turn["ency_streak"] = 0
+            return text
+        if name != "encyclopedia" or text.startswith("encyclopedia did not run: "):
+            return text
+        streak = self.turn["ency_streak"] = self.turn.get("ency_streak", 0) + 1
+        web = self._web_available()
+        limit = self.ENCY_LIMIT_WEB if web else self.ENCY_LIMIT_OFFLINE
+        if streak != limit - 1:
+            return text
+        if web:
+            return text + (f"\n\n(Offline Wikipedia lookups in a row: {streak} of {limit}. It is a dated snapshot and "
+                           f"often lacks year-by-year figures. If these results don't have what you need, use "
+                           f"web_search next — web access is on.)")
+        return text + (f"\n\n(Offline Wikipedia lookups in a row: {streak} of {limit}. Web access is off, so if the "
+                       f"figure is not in these results, answer with what you found and say what you couldn't check.)")
+
     def _watch_progress(self, name, args, ok, text):
         """Loop and failure detection: warn the model, then make it stop and report."""
         self._note_turning_point(name, args, ok, text)
         refused = text.startswith(("Not run again", "Not saved")) or " did not run" in text[:120] or (
             " was not enabled, so it did not run" in text[:120])
+        if name == "available_tools" and getattr(self, "_ask_loop", False):
+            self._ask_loop, refused = False, True
+            text = self._count_loop("ask_loops", text, self.ASK_LOOP_RESET, self.ASK_LOOP_STOP,
+                                    "asked available_tools for the same thing again instead of calling a tool")
+        elif name == "encyclopedia" and text.startswith("encyclopedia did not run: "):
+            text = self._count_loop("ency_refusals", text, 99, self.ENCY_REFUSALS_STOP,
+                                    "kept looking things up in the offline encyclopedia after it was refused")
         passes = self._test_passes(name, text)
         # a test run that reports results ran fine, even when tests fail: that is information, not a failed action
         failed = (not ok and not refused) or (name == "powershell" and not text.startswith(("exit code 0", "still running"))
@@ -6277,10 +6346,69 @@ class AgentEngine:
                 names.append(tool)
         return self._enable(names)[0]
 
+    # the start of an available_tools answer to a request it already answered this turn: _watch_progress counts it
+    # as a loop. A 27B asked {"query": "memory"} / {"enable": ["memory"]} 22 times in one run, was told "all tools are
+    # available" each time, and never called a memory tool.
+    ASK_AGAIN = "Already "
+    ASK_LOOP_RESET, ASK_LOOP_STOP = 2, 4      # repeated asks: a recovery note, then answer without tools
+
+    @staticmethod
+    def _ask_key(a):
+        want = a.get("enable")
+        if want:
+            want = want if isinstance(want, list) else re.split(r"[,\s]+", str(want))
+            return "enable:" + ",".join(sorted({str(w).strip().lower() for w in want if str(w).strip()}))
+        return "q:" + " ".join(str(a.get("query") or "").lower().split()) + "|g:" + str(a.get("group") or "").lower()
+
+    def _asked_tools(self, want):
+        """The tools a list of tool / group names means, in catalog order (unknown names left out)."""
+        groups = {g: ns for g, _b, ns in at.tool_groups(self.reg)}
+        out = []
+        for w in want or []:
+            key = str(w).strip()
+            names = groups.get(key.lower()) or groups.get(key)
+            if names is None:
+                c = self.reg.canonical(key)
+                names = [c] if c in self.reg.by_name else []
+            out += [n for n in names if n not in out]
+        return out
+
+    def _ask_again(self, a, key):
+        """The short answer to an available_tools request already answered this turn ('' = first time)."""
+        asked = self.turn.setdefault("tool_asks", {})
+        asked[key] = asked.get(key, 0) + 1
+        whole = key == "q:|g:"                 # the whole catalog: the plan phase opens with it, and its older
+        if asked[key] < (3 if whole else 2):   # result gets shortened in history, so one more look is fair
+            return ""
+        self._ask_loop = True                  # _watch_progress counts it as a loop
+        if whole:
+            return (f"{self.ASK_AGAIN}shown — you asked for the whole tool catalog {asked[key]} times this request "
+                    f"(this is a loop). Here it is once more; pick a tool from it and call it directly:\n"
+                    + at.tool_catalog_compact(self.reg, set(self._active_names())))
+        if key.startswith("enable:"):
+            names = self._asked_tools(key[len("enable:"):].split(","))
+            what = "enabled"
+        else:
+            q = str(a.get("query") or a.get("group") or "").strip().lower()
+            names = [n for g, _b, ns in at.tool_groups(self.reg) for n in ns
+                     if q and (q in g.lower() or q in n.lower())] or self._asked_tools([q])
+            what = "answered"
+        tools = ", ".join(names[:8]) or "(no tool by that name)"
+        return (f"{self.ASK_AGAIN}{what} — you asked available_tools for this {asked[key]} times this request, "
+                f"and asking again changes nothing (this is a loop). The tools: {tools}. They are callable now: call "
+                f"one of them directly with real arguments, use a different tool, or answer with what you have.")
+
     def _available_tools(self, a):
+        again = self._ask_again(a, self._ask_key(a)) if isinstance(a, dict) and getattr(self, "turn", None) is not None             else ""
+        if again:
+            return again
         if self._stable_tools() and a.get("enable"):
-            return ("All tools are already available on this model — no need to enable anything. Use the catalog to "
-                    "plan which tool you'll use for each step, then call them directly.")
+            want = a["enable"] if isinstance(a["enable"], list) else re.split(r"[,\s]+", str(a["enable"]))
+            names = self._asked_tools(want)
+            return ("All tools are already available on this model — no need to enable anything"
+                    + (f"; {', '.join(want)} means: {', '.join(names[:8])}. Call one of those directly now"
+                       if names else "") + ". Use the catalog to plan which tool you'll use for each step, then call "
+                    "them directly.")
         if self._gated() and a.get("enable"):
             want = a["enable"] if isinstance(a["enable"], list) else re.split(r"[,\s]+", str(a["enable"]))
             added, unknown = self._enable(want)
@@ -6288,10 +6416,14 @@ class AgentEngine:
             if added:
                 msg.append("Enabled (callable from your next step): " + "; ".join(
                     f"{n} — {at._first_sentence(self.reg.by_name[n]['description'], 110)}" for n in added))
-            already = [w for w in want if w not in unknown and self.reg.canonical(str(w)) in self.enabled_tools
-                       and self.reg.canonical(str(w)) not in added]
+            # a group name counts too: "memory" is never a tool name, and its tools are always on, so it used to get
+            # "Nothing to enable." — read as "not enabled yet", and asked again
+            active = self.enabled_tools | self._always_on()
+            already = [w for w in want if w not in unknown and (ns := self._asked_tools([w]))
+                       and all(n in active for n in ns) and not any(n in added for n in ns)]
             if already:
-                msg.append("Already enabled: " + ", ".join(already))
+                msg.append("Already enabled (call them directly now): " + "; ".join(
+                    f"{w} = {', '.join(self._asked_tools([w])[:8])}" for w in already))
             if unknown:
                 msg.append("Unknown (not a tool or group): " + ", ".join(unknown) + ". Call available_tools to see names.")
             return "\n".join(msg) or "Nothing to enable."
