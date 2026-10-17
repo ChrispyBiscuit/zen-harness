@@ -310,6 +310,8 @@ def test_a_task_the_agent_rates_as_needing_no_plan_is_never_a_module_build():
     e._effort = {"plan": "none", "think": "low", "size": "quick"}
     assert e._project_build() is False                       # the agent's own rating: no plan, so no modules
     assert e._project_build(fresh=False) is True             # a "continue" keeps the build it already was
+    e._effort = {"plan": "brief", "think": "low", "size": "standard"}
+    assert e._project_build() is False                       # a few steps: not a project either
     e._effort = {"plan": "full", "think": "high", "size": "deep"}
     assert e._project_build() is True                        # a planned build still gets modules
     e._effort = None

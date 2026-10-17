@@ -2257,7 +2257,9 @@ class AgentEngine:
         if not getattr(self, "_build_profile", False):
             return False
         effort = getattr(self, "_effort", None) or {}
-        return not (fresh and effort.get("plan") == "none")
+        # "brief" = a few steps (a basic task's brief plan becomes "none" a few lines after this decision): not a
+        # from-scratch project either (the same task, re-run, was rated brief and was refused 9 times)
+        return not (fresh and effort.get("plan") in ("none", "brief"))
 
     def _closes_open_items(self, args):
         """Does this update_tracker call mark a still-open checklist item done / skipped / blocked?"""
