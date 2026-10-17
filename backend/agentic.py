@@ -4503,8 +4503,13 @@ class AgentEngine:
             # engine saw only "continue" and dropped both mid-build (the lean pass that used to decide them is skipped
             # while a checklist is open)
             task_text = self._task_text(user_text)
-            if getattr(self, "_project", False) or self._BUILD_REQ_RX.search(task_text):
-                self._build_profile = True           # set before the first step: the prompt start stays fixed
+            small = (not (continuing or resuming or forced_deep) and not getattr(self, "_project", False)
+                     and (self._effort or {}).get("plan") in ("none", "brief"))
+            if (getattr(self, "_project", False) or self._BUILD_REQ_RX.search(task_text)) and not small:
+                # set before the first step: the prompt start stays fixed. Not for a task the agent rated as needing
+                # no plan or a brief one: gpt-5-nano, asked for a 2-line sort script, followed the build prompt into
+                # a PRD, a test suite and a 4-item checklist (battery code-045)
+                self._build_profile = True
             if getattr(self, "_build_profile", False) or self._CODE_REQ_RX.search(task_text):
                 self._code_work = True               # focus_pack loads (decided once: the tool list stays fixed)
             # a build request: a from-scratch project folder gets the module workflow (verification_ledger decides,

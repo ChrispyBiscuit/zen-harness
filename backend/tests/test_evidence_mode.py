@@ -318,3 +318,15 @@ def test_a_task_the_agent_rates_as_needing_no_plan_is_never_a_module_build():
     assert e._project_build() is True                        # no rating (no lean pass): as before
     e._build_profile = False
     assert e._project_build() is False
+
+
+def test_checklist_updates_written_as_text_become_statuses_or_notes(tmp_path):
+    # gpt-5-nano (battery code-045) sent updates as sentences: the tool crashed 6 times with "'str' has no .get"
+    c = at.Ctx([str(tmp_path)]); c.cwd = str(tmp_path); c.tracker_path = str(tmp_path / "PROGRESS.md")
+    r = at.Registry(c, enabled={"update_tracker"})
+    r.call("update_tracker", {"checklist": "GOAL: g\n## Build\n- [ ] a\n- [ ] b"})
+    text, _ = r.call("update_tracker", {"updates": ["1.1 done", "Initialized plan and checklist.", {"id": "1.2",
+                                                                                             "status": "started"}]})
+    assert "1/2 done" in text
+    assert any("Initialized plan" in n for n in c.tracker["notes"])
+    assert c.tracker["milestones"][0]["subtasks"][1]["status"] == "in_progress"

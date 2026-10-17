@@ -2239,6 +2239,24 @@ def _expand_simple_tracker_args(a, c):
         if "new" not in a:
             a["new"] = not (c.tracker and tracker_open(c.tracker) and goal and goal == c.tracker.get("goal"))
     ups = list(a.get("updates") or []) if isinstance(a.get("updates"), list) else a.get("updates")
+    if isinstance(ups, list) and any(not isinstance(u, dict) for u in ups):
+        # updates written as text: "1.2 done" is a status change, anything else a note. gpt-5-nano sent
+        # updates=['Initialized plan and checklist…'] and the tool crashed ('str' has no .get) 6 times on one task
+        notes, keep = [], []
+        for u in ups:
+            if isinstance(u, dict):
+                keep.append(u)
+                continue
+            m = re.match(r"^\s*(\d+(?:\.\d+)?)\.?\s*[:\-–]?\s*(done|complete[d]?|finished|started|in[ _]progress|"
+                         r"blocked|skipped|pending)\b", str(u), re.I)
+            if m:
+                keep.append({"id": m.group(1), "status": m.group(2)})
+            elif str(u).strip():
+                notes.append(str(u).strip())
+        if notes:
+            have = a.get("notes")
+            a["notes"] = (have if isinstance(have, list) else [have] if have else []) + notes
+        ups = keep
     for key, status in (("done", "done"), ("started", "in_progress"), ("blocked", "blocked"), ("skipped", "skipped")):
         v = a.pop(key, None)
         if v in (None, "", []):
