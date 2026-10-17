@@ -2248,6 +2248,17 @@ class AgentEngine:
                 f"it is the current file. Read a different range, or search_text for a name, if you need something "
                 f"else; an edit's result shows the lines it changed.")
 
+    def _project_build(self, fresh=True):
+        """Is this a from-scratch project (module mode in an empty folder)? A build request, unless the agent itself
+        rated a new task as needing no plan: gpt-5-nano was asked for a 2-line sort script, the word "script" made it a
+        build, the empty folder made it modules, and the build gate refused its write 8 times in 28 turns (battery
+        code-045). fresh=False (a "continue", a resumed checklist, "deep:") keeps what the task already had: those
+        also carry plan "none" without the agent judging the task small."""
+        if not getattr(self, "_build_profile", False):
+            return False
+        effort = getattr(self, "_effort", None) or {}
+        return not (fresh and effort.get("plan") == "none")
+
     def _closes_open_items(self, args):
         """Does this update_tracker call mark a still-open checklist item done / skipped / blocked?"""
         try:
@@ -4496,7 +4507,7 @@ class AgentEngine:
                 self._code_work = True               # focus_pack loads (decided once: the tool list stays fixed)
             # a build request: a from-scratch project folder gets the module workflow (verification_ledger decides,
             # once per folder: only an empty one); everything else is evidence mode
-            self.ctx.project_build = bool(getattr(self, "_build_profile", False))
+            self.ctx.project_build = self._project_build(fresh=not (continuing or resuming or forced_deep))
             self._decide_turn_tools()
             need, decided = False, False
             if self._effort:
