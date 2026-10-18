@@ -22,6 +22,7 @@ type Status = {
   commits?: Commit[]; busy?: string | null; error?: string | null; run_busy?: boolean; can_rollback?: boolean
   last_check?: number; rolled_back?: { from: string; reason: string; at: number } | null
   declined?: string | null; auto?: boolean; auto_install?: boolean
+  installer?: boolean; release?: { url?: string; page?: string; name?: string; size?: number; notes?: string } | null
   progress?: { steps: Step[]; current: string | null; step_started?: number; started?: number; frac?: number | null } | null
 }
 
@@ -131,6 +132,12 @@ export function UpdateChip() {
   }, [st.available, st.auto, st.auto_install, st.latest, st.declined, working, st.busy])
 
   const install = async (kind: "apply" | "rollback") => {
+    if (st.installer && kind === "apply") {         // an installed copy: download and run the new installer
+      setPrompt(false)
+      if (st.release?.url) window.open(st.release.url, "_blank")
+      else if (st.release?.page) window.open(st.release.page, "_blank")
+      return
+    }
     setErr(null); setPrompt(false); setQueued(false)
     setWorking(kind)
     try {
@@ -171,19 +178,21 @@ export function UpdateChip() {
           <DialogTitle className="flex items-center gap-2"><ArrowDownToLine className="size-4 text-muted-foreground" /> An update is available</DialogTitle>
           <DialogDescription className="text-ui">
             <span className="mono">{st.installed_short || "current"} → {st.latest_short}</span> · {commits.length} change{commits.length === 1 ? "" : "s"}.
-            Installing downloads and tests the new version, then restarts the app's server (about a minute).
+            {st.installer
+              ? <>Download the new installer{st.release?.size ? ` (${Math.round(st.release.size / 1048576)} MB)` : ""} and run it: it updates the app in place, and your chats, settings and models are kept.</>
+              : "Installing downloads and tests the new version, then restarts the app's server (about a minute)."}
           </DialogDescription>
         </DialogHeader>
         {changes}
-        {st.run_busy && <div className="text-caption text-muted-foreground">An agent run is going: it can install as soon as the run finishes.</div>}
+        {st.run_busy && !st.installer && <div className="text-caption text-muted-foreground">An agent run is going: it can install as soon as the run finishes.</div>}
         <DialogFooter>
-          <Button variant="ghost" className="sm:mr-auto" title="New versions will install by themselves when no run is going"
+          {!st.installer && <Button variant="ghost" className="sm:mr-auto" title="New versions will install by themselves when no run is going"
             onClick={async () => { await setAutoInstall(true); setSt((x) => ({ ...x, auto_install: true })); if (st.run_busy) { setQueued(true); setPrompt(false) } else install("apply") }}>
-            Enable automatic updates</Button>
+            Enable automatic updates</Button>}
           <Button variant="ghost" onClick={notNow}>Not now</Button>
-          {st.run_busy
+          {st.run_busy && !st.installer
             ? <Button autoFocus onClick={() => { setQueued(true); setPrompt(false) }}>Install after this run</Button>
-            : <Button autoFocus onClick={() => install("apply")}><ArrowDownToLine /> Install now</Button>}
+            : <Button autoFocus onClick={() => install("apply")}><ArrowDownToLine /> {st.installer ? "Download installer" : "Install now"}</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -259,10 +268,10 @@ export function UpdateChip() {
                 </Button>
               )}
               <div className="flex-1" />
-              <button disabled={!!working} onClick={async () => { const on = !st.auto_install; await setAutoInstall(on); setSt((x) => ({ ...x, auto_install: on })) }}
+              {!st.installer && <button disabled={!!working} onClick={async () => { const on = !st.auto_install; await setAutoInstall(on); setSt((x) => ({ ...x, auto_install: on })) }}
                 className="text-meta text-muted-foreground hover:text-foreground disabled:opacity-40">
                 {st.auto_install ? "Disable automatic updates" : "Enable automatic updates"}
-              </button>
+              </button>}
               <button disabled={!!working} onClick={check} className="text-meta text-muted-foreground hover:text-foreground disabled:opacity-40">
                 Check again
               </button>

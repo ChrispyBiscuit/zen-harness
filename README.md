@@ -104,9 +104,11 @@ from Kiwix). No telemetry, no account. Details: [Your data and privacy](docs/dat
 
 ## Getting it
 
-The newest code is on `main`. The last packaged installer,
-[0.1.0-alpha.3](https://github.com/ChrispyBiscuit/zen-harness/releases), predates the multi-vendor hardware setup
-described here (it supports NVIDIA only and asks for models during install). A new installer is coming; until then,
+Download `ZenHarness-Setup-<version>.exe` from the
+[latest release](https://github.com/ChrispyBiscuit/zen-harness/releases/latest) and run it. It installs per user
+with no administrator rights, and isn't code-signed yet: if Windows says "Windows protected your PC", choose
+**More info → Run anyway**. Each release lists the installer's SHA-256 to check it against. Installed copies offer new
+versions as a download when one is published. To run the newest code on `main` instead,
 [build from source](docs/BUILD_FROM_SOURCE.md).
 
 On first run the app checks your hardware and downloads what it needs: the runtime for your graphics card, the

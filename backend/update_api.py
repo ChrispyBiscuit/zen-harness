@@ -49,6 +49,11 @@ def _restart():
 
 
 async def apply(req):
+    if updater.paths.FROZEN:
+        # an installed build can't swap in source files: the UI opens the new installer's download instead
+        rel = updater.status().get("release") or {}
+        return J({"ok": False, "installer": True, "url": rel.get("url"), "page": rel.get("page"),
+                  "error": "This is an installed copy: download and run the new installer to update."}, 409)
     if _ctx["busy"]():
         return J({"ok": False, "error": "an agent run is in progress: install when it finishes"}, 409)
     st = updater.status()
@@ -83,6 +88,8 @@ async def decline(req):
 
 
 async def rollback(req):
+    if updater.paths.FROZEN:
+        return J({"ok": False, "error": "An installed copy goes back a version by running that version's installer."}, 409)
     if _ctx["busy"]():
         return J({"ok": False, "error": "an agent run is in progress"}, 409)
     try:

@@ -109,3 +109,24 @@ def test_installing_by_itself_is_opt_in(env):
         s["update"]["auto_install"] = value
         (data / "settings.json").write_text(json.dumps(s))
         assert updater.settings()["auto_install"] is expect
+
+
+def test_an_installed_build_offers_the_newer_installer(env, monkeypatch):
+    # a PyInstaller build can't run copied source files: it compares release versions and offers the download
+    import io
+    import urllib.request
+    monkeypatch.setattr(updater.paths, "FROZEN", True)
+    monkeypatch.setattr(updater, "own_version", lambda: "0.1.0-alpha.4")
+    releases = [
+        {"tag_name": "v0.1.0-alpha.10", "name": "0.1.0-alpha.10", "draft": False, "published_at": "2026-11-01T00:00:00Z",
+         "html_url": "https://example/rel/10", "body": "notes",
+         "assets": [{"name": "ZenHarness-Setup-0.1.0-alpha.10.exe", "size": 300 << 20, "browser_download_url": "https://example/10.exe"}]},
+        {"tag_name": "v0.1.0-alpha.3", "name": "old", "draft": False, "published_at": "2026-10-12T00:00:00Z",
+         "assets": [{"name": "ZenHarness-Setup-0.1.0-alpha.3.exe", "size": 1, "browser_download_url": "x"}]},
+        {"tag_name": "v0.2.0", "name": "draft", "draft": True, "assets": []}]
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=0: io.BytesIO(json.dumps(releases).encode()))
+    st = updater.check()
+    assert st["available"] and st["installer"] and st["latest_short"] == "0.1.0-alpha.10"      # alpha.10 > alpha.4
+    assert st["release"]["url"] == "https://example/10.exe" and not st["can_rollback"] and not st["auto_install"]
+    monkeypatch.setattr(updater, "own_version", lambda: "0.1.0-alpha.10")
+    assert not updater.check()["available"]

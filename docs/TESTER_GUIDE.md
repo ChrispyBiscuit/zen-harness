@@ -1,7 +1,7 @@
 # Zazen — tester guide (give this whole file to your Claude)
 
-> **To the tester:** from <https://github.com/ChrispyBiscuit/zen-harness/releases/tag/v0.1.0-alpha.3> download
-> `ZenHarness-Setup-0.1.0-alpha.3.exe` and `zen-harness-tester-kit-0.1.0-alpha.3.zip`. Install Zazen
+> **To the tester:** from <https://github.com/ChrispyBiscuit/zen-harness/releases/tag/v0.1.0-alpha.4> download
+> `ZenHarness-Setup-0.1.0-alpha.4.exe` and `zen-harness-tester-kit-0.1.0-alpha.4.zip`. Install Zazen
 > (section 1), unzip the kit (e.g. to `%USERPROFILE%\zen-tester-kit`), then open Claude Code in the kit folder and say:
 > *"Read TESTER_GUIDE.md and run the test plan in it. Ask me before anything it says to ask about."* Everything
 > below is written for Claude.
@@ -11,8 +11,8 @@
 ## Your role (Claude)
 
 You are helping test **Zazen**, a Windows desktop app that runs a local AI agent on local GGUF models with
-llama.cpp. You will drive the app through its local HTTP API (as its developer does), run two benchmarks on up to
-three local models, grade the results, and write one report. Work in the folder this file is in (the **kit
+llama.cpp. You will drive the app through its local HTTP API (as its developer does), run two benchmarks on its
+local model (Ternary Bonsai 2 27B), grade the results, and write one report. Work in the folder this file is in (the **kit
 folder**).
 
 ### Rules — follow them exactly
@@ -55,15 +55,19 @@ reported.
 
 ## 1. Install the app (the tester does this)
 
-1. Run `ZenHarness-Setup-0.1.0-alpha.3.exe` (from the GitHub release above). It is not code-signed yet, so Windows
+1. Run `ZenHarness-Setup-0.1.0-alpha.4.exe` (from the GitHub release above). It is not code-signed yet, so Windows
    SmartScreen may say "Windows protected your PC": choose **More info → Run anyway**. Compare its SHA-256 with the
-   `.sha256` file on the release page first (`Get-FileHash .\ZenHarness-Setup-0.1.0-alpha.3.exe`).
-2. On the **Models** page keep all three ticked (≈22 GB download, resumable only by re-running setup):
-   Ornith 1.5 9B, Qwen3.6 35B-A3B REAP-48 (mixture of experts), Ternary Bonsai 2 27B. Setup also fetches the PrismML
-   llama.cpp build Bonsai needs. Each file is checked against its SHA-256.
-3. Finish, and let it start the app. It should open on the Ornith model with no "download a model" dialog.
+   `.sha256` file on the release page first (`Get-FileHash .\ZenHarness-Setup-0.1.0-alpha.4.exe`). The installer
+   downloads nothing.
+2. Start the app. The **Welcome** screen shows the graphics card it found and its plan (runtime, model file, context).
+   Click **Set up this PC**: it downloads the llama.cpp runtime for that card (NVIDIA CUDA, AMD HIP, or Vulkan / SYCL
+   for Intel), Ternary Bonsai 2 27B in the size that fits (5.9 or 7.2 GB), its vision file and, if left ticked,
+   offline Wikipedia (14 GB, downloads last). Each file is checked against its SHA-256; downloads resume.
+3. When the model is ready the app opens on it with no "download a model" dialog. **Note the GPU vendor and what the
+   Welcome screen planned** (Settings → Hardware shows it again): AMD and Intel cards have not been tested before.
 
-Models land in `%LOCALAPPDATA%\ZenHarness\models`; the app in `%LOCALAPPDATA%\Programs\Zen Harness`.
+The model and runtime land in `%LOCALAPPDATA%\ZenHarness\` (`models\`, `runtimes\`); the app in
+`%LOCALAPPDATA%\Programs\Zen Harness`.
 
 ## 2. Connect to the app
 
@@ -72,7 +76,7 @@ uses another port, it is shown in Settings → Connect apps; set `$env:ZEN_PORT`
 
 ```powershell
 py zenctl.py health        # {"ok": true, ...}
-py zenctl.py models        # the three profiles should show ✓ (file present)
+py zenctl.py models        # ternary-bonsai-2-27b should show ✓ (file present)
 py zenctl.py settings model effort think memory_recall
 ```
 
@@ -104,7 +108,7 @@ The request (`build/SPEC.md`): *"I want an expense tracker my roommates and I ca
 the home Wi-Fi. Everyone logs their own expenses, and each month we want to see totals by category. Using it from
 the terminal is fine. Make sure it actually works. Put it in {folder}."*
 
-For each model, **one at a time**, in this order: `ternary-bonsai-2-27b`, `qwen3.6-35b-a3b-reap48`, `ornith-1.5-9b`:
+On the app's model, `ternary-bonsai-2-27b`:
 
 ```powershell
 py zenctl.py set model=ternary-bonsai-2-27b backend=llama effort=high think=true memory_recall=false
@@ -146,18 +150,16 @@ to run while the app's model server (port 8099) is up.
 cd standard
 powershell -ExecutionPolicy Bypass -File setup.ps1        # once: a venv in %USERPROFILE%\venvs\zen-evals
 $py = "$env:USERPROFILE\venvs\zen-evals\Scripts\python.exe"
-& $py run.py --list                                        # the three models should show ✓
+& $py run.py --list                                        # ternary-bonsai-2-27b should show ✓
 # dry run without the GPU, proves the install:
 Start-Process $py "mock_server.py 8150" -WindowStyle Hidden
 & $py run.py --model mock --base-url http://127.0.0.1:8150/v1 --suite quick --limit 3 --no-record
 ```
 
-Then for each model (one at a time; each line can run overnight — start it in the background and check its output):
+Then (it can run overnight — start it in the background and check its output):
 
 ```powershell
 & $py run.py --model ternary-bonsai-2-27b --suite battery
-& $py run.py --model qwen3.6-35b-a3b-reap48 --suite battery
-& $py run.py --model ornith-1.5-9b --suite battery
 ```
 
 `battery` = IFEval (541), BFCL function calling (400), MMLU-Pro (1,000), GPQA Diamond with thinking off (198). If
@@ -175,8 +177,9 @@ Kill a stuck runner by its PID only (rule 1): `Get-CimInstance Win32_Process | ?
 Write `REPORT.md` in the kit folder:
 
 1. **PC**: GPU (+VRAM, driver), CPU, RAM, laptop/desktop, power state, typical GPU temperature and clock under load.
-2. **Install**: did setup and the downloads work; first start (did it open on a model?); smoke test result.
-3. **Benchmark A**: per model, the rubric table + score /11, wall time, tool calls, notes, interventions.
+2. **Install**: did setup and the downloads work; what the Welcome screen detected and planned (GPU vendor, runtime,
+   model file, context); first start (did it open on the model?); smoke test result.
+3. **Benchmark A**: the rubric table + score /11, wall time, tool calls, notes, interventions.
 4. **Benchmark B**: paste `standard\results.md`.
 5. **Problems**: every error, crash, hang or confusing moment, with the exact text and what you did.
 6. Then zip `REPORT.md`, `standard\results.*`, `standard\logs\`, `build\runs\` and the build folders
@@ -187,5 +190,5 @@ When everything is done: `py zenctl.py set memory_recall=true`.
 
 ### Time budget (an 8 GB laptop GPU)
 
-Setup + downloads 1–2 h · smoke test 5 min · Benchmark A ≈ 2–4 h × 3 models · Benchmark B ≈ 4–10 h × 3 models.
-Benchmark A on all three models is the priority; then B's `quick` suite (`--suite quick`) if time is short.
+Setup + downloads 30–90 min · smoke test 5 min · Benchmark A ≈ 2–4 h · Benchmark B ≈ 4–10 h.
+Benchmark A is the priority; then B's `quick` suite (`--suite quick`) if time is short.

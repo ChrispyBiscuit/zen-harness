@@ -176,7 +176,9 @@ def ensure_clone():
 
 
 def _short(sha):
-    return (sha or "")[:7]
+    """A commit's short form; a version ('0.1.0-alpha.4', installed builds) is kept whole."""
+    sha = sha or ""
+    return sha[:7] if all(ch in "0123456789abcdef" for ch in sha) else sha
 
 
 def _has(sha):
@@ -188,8 +190,65 @@ def _has(sha):
 
 
 # ---------------------------------------------------------------- check
+# ---------------------------------------------------------------- installed builds (setup.exe)
+RELEASES_API = "https://api.github.com/repos/ChrispyBiscuit/zen-harness/releases"
+
+
+def _vkey(v):
+    """'0.1.0-alpha.4' -> sortable key; a final release sorts after its alphas."""
+    import re
+    m = re.match(r"v?(\d+)\.(\d+)\.(\d+)(?:-([a-z]+)\.?(\d+))?", str(v or "").strip())
+    if not m:
+        return (0, 0, 0, 0, 0)
+    pre = {"alpha": 0, "beta": 1, "rc": 2}.get(m.group(4) or "", 9)
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3)), pre, int(m.group(5) or 0))
+
+
+def own_version():
+    try:
+        with open(paths.resource("VERSION"), encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def check_release():
+    """An installed build (PyInstaller): copying source files into it would do nothing, so it looks for a newer
+    installer on GitHub Releases instead and offers it for download. -> status()."""
+    import urllib.request
+    with _lock:
+        st = load_state()
+        req = urllib.request.Request(RELEASES_API + "?per_page=10", headers={"User-Agent": "Zazen",
+                                                                            "Accept": "application/vnd.github+json"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            rel = json.load(r)
+        best = None
+        for x in rel:
+            if x.get("draft"):
+                continue
+            asset = next((a for a in x.get("assets") or [] if a.get("name", "").lower().endswith(".exe")), None)
+            if asset and (best is None or _vkey(x.get("tag_name")) > _vkey(best[0].get("tag_name"))):
+                best = (x, asset)
+        mine = own_version()
+        st.update(last_check=time.time(), check_error=None, installed_sha=mine, latest_sha=mine, commits=[],
+                  release=None)
+        if best and _vkey(best[0].get("tag_name")) > _vkey(mine):
+            x, asset = best
+            st.update(latest_sha=str(x.get("tag_name") or "").lstrip("v"),
+                      release={"url": asset.get("browser_download_url"), "page": x.get("html_url"),
+                               "name": x.get("name") or x.get("tag_name"), "size": asset.get("size"),
+                               "notes": str(x.get("body") or "")[:3000]},
+                      commits=[{"sha": x.get("tag_name"), "subject": x.get("name") or x.get("tag_name"),
+                                "when": int(time.mktime(time.strptime(x["published_at"][:19], "%Y-%m-%dT%H:%M:%S")))
+                                if x.get("published_at") else 0}])
+        save_state(st)
+        return status()
+
+
 def check():
     """Fetch and compare. -> status(): available, installed, latest, commits [{sha, subject, when}]."""
+    if paths.FROZEN:
+        return check_release()
     with _lock:
         s = settings()
         st = load_state()
@@ -217,10 +276,13 @@ def status():
     return {"installed": installed, "installed_short": _short(installed), "latest": latest,
             "latest_short": _short(latest), "available": bool(latest and latest != installed),
             "commits": st.get("commits") or [], "last_check": st.get("last_check"), "channel": st.get("channel"),
-            "applied_at": st.get("applied_at"), "can_rollback": bool(bk and os.path.isdir(bk)),
+            "applied_at": st.get("applied_at"), "can_rollback": bool(bk and os.path.isdir(bk)) and not paths.FROZEN,
             "busy": _busy["stage"], "error": st.get("apply_error") or st.get("check_error"),
             "rolled_back": st.get("rolled_back"), "declined": st.get("declined_sha"),
-            "auto": settings()["auto_check"], "auto_install": settings()["auto_install"], "progress": progress()}
+            "auto": settings()["auto_check"], "auto_install": settings()["auto_install"] and not paths.FROZEN,
+            "progress": progress(),
+            # an installed build updates by downloading the new installer (release: url, page, name, size, notes)
+            "installer": paths.FROZEN, "release": st.get("release") if paths.FROZEN else None}
 
 
 # ---------------------------------------------------------------- stage
