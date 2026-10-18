@@ -105,7 +105,7 @@ from Kiwix). No telemetry, no account. Details: [Your data and privacy](docs/dat
 ## Getting it
 
 Download `ZenHarness-Setup-<version>.exe` from the
-[latest release](https://github.com/ChrispyBiscuit/zen-harness/releases/latest) and run it. It installs per user
+[releases page](https://github.com/ChrispyBiscuit/zen-harness/releases) (newest at the top) and run it. It installs per user
 with no administrator rights, and isn't code-signed yet: if Windows says "Windows protected your PC", choose
 **More info → Run anyway**. Each release lists the installer's SHA-256 to check it against. Installed copies offer new
 versions as a download when one is published. To run the newest code on `main` instead,
