@@ -65,7 +65,9 @@ class Store:
         self._index, self._index_of = {}, None
         self.dirty = set()             # conv ids with unsent changes
         self.meta_dirty = False
-        self._save_at = 0.0
+        # chats read from the old single file: write them to their own files shortly after start, not at the first
+        # change (until then every start re-read the 58 MB file)
+        self._save_at = time.time() + 10 if self.unsaved else 0.0
 
     def _load_settings(self):
         s = copy.deepcopy(DEFAULT_SETTINGS)
