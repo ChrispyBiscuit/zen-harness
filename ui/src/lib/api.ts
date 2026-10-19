@@ -22,6 +22,17 @@ export const api = {
   revert: (conv_id: string, index: number) => call<{ message: string }>("POST", "/api/revert", { conv_id, index }),
   remove: (id: string) => call("DELETE", `/api/conv/${id}`),
   rename: (id: string, title: string) => call("POST", `/api/conv/${id}/rename`, { title }),
+  importChats: async (files: File[], replace: boolean) => {
+    const fd = new FormData()
+    fd.append("replace", replace ? "1" : "0")
+    files.forEach((f) => fd.append("file", f, f.name))
+    const r = await fetch("/api/chats/import", { method: "POST", body: fd })
+    const data = await r.json().catch(() => ({}))
+    if (!r.ok) throw new Error(data.error || "import failed")
+    return data as { imported: number; skipped: number; backup: string }
+  },
+  exportChats: (ids?: string[]) => call<{ path: string; count: number }>("POST", "/api/chats/export", { ids }),
+  deleteAllChats: () => call<{ backup: string }>("POST", "/api/chats/delete_all", {}),
   settings: (patch: Partial<Settings>) => call<{ settings: Settings }>("PUT", "/api/settings", patch),
   file: (path: string) =>
     call<{ path: string; text: string; size: number; mtime: number; binary: boolean; truncated: boolean; crlf: boolean; kind: string }>(

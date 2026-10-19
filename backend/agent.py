@@ -164,7 +164,7 @@ CHAT_SUMMARY_PROMPT = (
     "threads. Be specific; at most 350 words. Do not add anything that was not said.")
 
 
-def compress_history(history, model, num_ctx, summary="", force=False):
+def compress_history(history, model, num_ctx, summary="", force=False, base=None):
     """Automatic chat compression. If the history would use more than ~60% of the context window,
     summarise all but the most recent part. -> (new_summary, n_old) where history[:n_old] is now
     covered by new_summary, or (None, 0) when nothing needed compressing."""
@@ -187,19 +187,117 @@ def compress_history(history, model, num_ctx, summary="", force=False):
     text = "\n".join(lines)
     if len(text) > num_ctx * 2:
         text = text[:num_ctx // 2] + "\n…\n" + text[-num_ctx * 3 // 2:]
-    backend = model
-    r = ollama.Client().chat(model=backend, stream=False, think=False,
-                             messages=[{"role": "user", "content": f"{CHAT_SUMMARY_PROMPT}\n\n{text}"}],
+    msgs = [{"role": "user", "content": f"{CHAT_SUMMARY_PROMPT}\n\n{text}"}]
+    if base:
+        body = {"messages": msgs, "max_tokens": 900, "temperature": 0.2,
+                "chat_template_kwargs": {"enable_thinking": False}}
+        with _llama_post(base, body) as r:
+            out = _strip_leaked_think(json.load(r)["choices"][0]["message"].get("content") or "")
+        return (out, keep) if out else (None, 0)
+    r = ollama.Client().chat(model=model, stream=False, think=False, messages=msgs,
                              options={"num_ctx": num_ctx, "temperature": 0.2, "num_predict": 900})
     out = _strip_leaked_think(r.message.content or "")
     return (out, keep) if out else (None, 0)
+
+
+def _llama_post(base, body, timeout=600):
+    import urllib.request
+    req = urllib.request.Request(base + "/v1/chat/completions", data=json.dumps(body).encode(),
+                                 headers={"Content-Type": "application/json"})
+    return urllib.request.urlopen(req, timeout=timeout)
+
+
+def _llama_turn(base, messages, think, temperature, say, stopped):
+    """One streamed turn on a llama.cpp server (OpenAI-compatible) with the chat tools.
+    -> (content, [{"id", "name", "arguments"}], had_thinking, was_stopped)"""
+    body = {"messages": messages, "tools": TOOL_SCHEMAS, "temperature": temperature, "stream": True,
+            "stream_options": {"include_usage": True}, "chat_template_kwargs": {"enable_thinking": bool(think)}}
+    content, calls, had_thinking, n_tok, t_first, t_emit, usage = [], {}, False, 0, None, 0.0, None
+    with _llama_post(base, body) as r:
+        for raw in r:
+            if stopped():
+                return "".join(content), [], had_thinking, True
+            line = raw.decode("utf-8", "replace").strip()
+            if not line.startswith("data:"):
+                continue
+            data = line[5:].strip()
+            if data == "[DONE]":
+                break
+            try:
+                chunk = json.loads(data)
+            except ValueError:
+                continue
+            usage = chunk.get("usage") or usage
+            if not chunk.get("choices"):
+                continue
+            d = chunk["choices"][0].get("delta") or {}
+            if d.get("content") or d.get("reasoning_content"):
+                n_tok += 1
+                now = time.time()
+                t_first = t_first or now
+                if now - t_emit >= 0.4:          # live tokens/s for the app's meter
+                    t_emit = now
+                    say("tps_live", round(n_tok / max(0.25, now - t_first), 1))
+            if d.get("reasoning_content"):
+                had_thinking = True
+                say("think_delta", d["reasoning_content"])
+            if d.get("content"):
+                content.append(d["content"])
+                say("ans_delta", d["content"])
+            for tc in d.get("tool_calls") or []:
+                c = calls.setdefault(tc.get("index", 0), {"id": "", "name": "", "arguments": ""})
+                c["id"] = tc.get("id") or c["id"]
+                fn = tc.get("function") or {}
+                c["name"] += fn.get("name") or ""
+                c["arguments"] += fn.get("arguments") or ""
+    if usage:
+        gen = int(usage.get("completion_tokens") or n_tok)
+        say("stats", {"model": "llama.cpp", "gen_tokens": gen, "prompt_tokens": int(usage.get("prompt_tokens") or 0),
+                      "gen_tps": round(gen / max(0.25, time.time() - (t_first or time.time())), 1), "prompt_tps": 0.0})
+    return "".join(content), [calls[i] for i in sorted(calls)], had_thinking, False
+
+
+def _run_llama_chat(base, messages, think, temperature, max_steps, say, stopped):
+    """run_agent_events' chat loop on the agent model's llama.cpp server."""
+    for _ in range(max_steps):
+        if stopped():
+            say("answer_end")
+            return
+        say("status", "Thinking…" if think else "Working…")
+        content, calls, had_thinking, was_stopped = _llama_turn(base, messages, think, temperature, say, stopped)
+        if had_thinking:
+            say("think_end")
+        if was_stopped or not calls:
+            say("answer_end")
+            return
+        say("tool_turn")
+        messages.append({"role": "assistant", "content": content, "tool_calls": [
+            {"id": c["id"] or f"call_{i}", "type": "function",
+             "function": {"name": c["name"], "arguments": c["arguments"] or "{}"}} for i, c in enumerate(calls)]})
+        for i, c in enumerate(calls):
+            try:
+                args = json.loads(c["arguments"] or "{}")
+            except ValueError:
+                args = {}
+            if c["name"] == "web_search":
+                say("status", f"🔍 Searching: {args.get('query', '')}")
+            elif c["name"] == "web_fetch":
+                say("status", f"📄 Reading: {args.get('url', '')}")
+            func = DISPATCH.get(c["name"])
+            try:
+                result = func(**args) if func else f"(unknown tool {c['name']})"
+            except Exception as e:
+                result = f"(tool error: {e})"
+            messages.append({"role": "tool", "tool_call_id": c["id"] or f"call_{i}", "content": str(result)[:8000]})
+    say("ans_delta", "(Reached the tool-call limit without a final answer.)")
+    say("answer_end")
 
 
 def run_agent_events(question: str, model: str = MODEL, emit=None,
                      num_ctx: int = NUM_CTX, think: bool = False,
                      temperature: float = 0.7, system_prompt: str = None,
                      max_steps: int = MAX_STEPS, history: list = None,
-                     should_stop=None):
+                     should_stop=None, base=None):
     """
     Same agent loop, but reports progress through emit(kind, data):
       emit('status',   'human-readable status line')
@@ -207,12 +305,24 @@ def run_agent_events(question: str, model: str = MODEL, emit=None,
       emit('answer',   'final answer text')         # terminal
       emit('error',    'error text')                # terminal
     Designed to be driven from a GUI worker thread.
+    base: the agent model's llama.cpp server; given, the chat runs there instead of on Ollama.
     """
     def say(kind, data=None):
         if emit:
             emit(kind, data)
 
     try:
+        if base:
+            today = datetime.date.today().strftime("%B %d, %Y")
+            import answer_shapes
+            sys_text = (system_prompt if system_prompt is not None else SYSTEM).replace("{today}", today) \
+                + CHAT_MODE_NOTE + "\n" + answer_shapes.TEXT
+            messages = [{"role": "system", "content": sys_text}]
+            messages += [{"role": t["role"], "content": t["content"]} for t in (history or []) if t.get("content")]
+            messages.append({"role": "user", "content": question})
+            _run_llama_chat(base, messages, think, temperature, max_steps, say,
+                            lambda: bool(should_stop and should_stop()))
+            return
         client = ollama.Client()
 
         backend = model

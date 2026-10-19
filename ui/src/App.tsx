@@ -129,9 +129,12 @@ function StatusBar() {
   const connected = useApp((s) => s.connected)
   const a = settings?.agent
   const mode = conv?.mode || settings?.ui.mode
-  const model = mode === "chat" ? settings?.ui.chat_model
-    : mode === "speech" ? `Speech mode · ${(settings?.ui as any)?.speech_model || "qwen3:1.7b"}`
-    : a?.model?.split(/[\\/]/).pop()?.replace(/\.gguf$/i, "")
+  // on llama.cpp every mode runs on the agent's model; otherwise chat and speech have their own
+  const shared = (a?.backend || "llama") === "llama"
+  const agentModel = a?.model?.split(/[\\/]/).pop()?.replace(/\.gguf$/i, "")
+  const model = mode === "speech" ? `Speech mode · ${shared ? agentModel : (settings?.ui as any)?.speech_model || "qwen3:1.7b"}`
+    : mode === "chat" && !shared ? settings?.ui.chat_model
+    : agentModel
   return (
     <footer className="@container flex h-7 shrink-0 select-none items-center gap-3 bg-ground px-2 text-meta text-muted-foreground">
       {!sidebarOpen && (

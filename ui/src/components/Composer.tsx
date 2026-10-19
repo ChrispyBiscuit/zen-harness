@@ -304,7 +304,7 @@ export function Composer() {
               </button>
             ))}
           </div>
-          {mode === "speech" && (
+          {mode === "speech" && settings?.agent?.backend && settings.agent.backend !== "llama" && (
             <select value={(settings?.ui as any)?.speech_model || "qwen3:1.7b"}
               onChange={(e) => saveSettings({ ui: { ...settings!.ui, speech_model: e.target.value } as any })}
               title="Speech-mode model (runs alone on the GPU; agent models are unloaded)"
@@ -364,7 +364,7 @@ export function Composer() {
               </Tooltip>
             )
           })()}
-          {mode === "chat" && (
+          {mode === "chat" && settings?.agent?.backend && settings.agent.backend !== "llama" && (
             <select value={settings?.ui.chat_model || models[0]} onChange={(e) => saveSettings({ ui: { ...settings!.ui, chat_model: e.target.value } })}
               className="ml-1 max-w-48 truncate rounded-lg bg-transparent px-2 py-1 text-caption text-muted-foreground outline-none hover:bg-surface-2">
               {models.map((m) => <option key={m} value={m} className="bg-popover">{m}</option>)}

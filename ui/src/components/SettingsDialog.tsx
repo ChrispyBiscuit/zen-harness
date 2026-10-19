@@ -16,6 +16,7 @@ import { VoicePanel } from "@/components/VoicePanel"
 import { HEADLESS_DEFAULTS, ServicePanel, type Headless } from "@/components/ServicePanel"
 import { ModelsPanel } from "@/components/ModelsPanel"
 import { HardwarePanel } from "@/components/HardwarePanel"
+import { ChatsPanel } from "@/components/ChatsPanel"
 
 /* Settings, kept small on purpose: what you actually change. Per-chat run controls (thinking, plan budget) live on
    the message box; per-model tuning (drafter, cache, GPU split) lives in the model's profile; retired experiments
@@ -200,6 +201,7 @@ export function SettingsDialog() {
             <TabsTrigger value="agent">Agent</TabsTrigger>
             <TabsTrigger value="perms">Permissions</TabsTrigger>
             <TabsTrigger value="memory">Memory</TabsTrigger>
+            <TabsTrigger value="chats">Chats</TabsTrigger>
             <TabsTrigger value="chatvoice">Chat & voice</TabsTrigger>
             <TabsTrigger value="extensions">Extensions</TabsTrigger>
             <TabsTrigger value="service">Connect apps</TabsTrigger>
@@ -375,10 +377,12 @@ export function SettingsDialog() {
 
             <TabsContent value="memory"><MemoryPanel /></TabsContent>
 
+            <TabsContent value="chats"><ChatsPanel /></TabsContent>
+
             <TabsContent value="chatvoice">
               <Section title="Chat mode">
-                <Field label="Model">
-                  <select value={draft.ui.chat_model || models[0]} onChange={(e) => setUi({ chat_model: e.target.value })} className={inputCls}>
+                <Field label="Model" hint={(a.backend || "llama") === "llama" ? "Chat and speech use the agent model while it runs on llama.cpp." : undefined}>
+                  <select disabled={(a.backend || "llama") === "llama"} value={draft.ui.chat_model || models[0]} onChange={(e) => setUi({ chat_model: e.target.value })} className={inputCls}>
                     {models.map((m) => <option key={m} value={m}>{m}</option>)}
                   </select>
                 </Field>

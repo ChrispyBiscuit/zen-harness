@@ -702,7 +702,7 @@ class Host:
             w = run.writer
             msgs = [{"role": "system", "content": "You are a gifted storyteller who writes warm, moving stories."},
                     {"role": "user", "content": self.COMFORT_PROMPT}]
-            if mode == "speech":
+            if mode == "speech" and (STORE.settings["agent"].get("backend") or "llama") != "llama":
                 import speech_engine
                 model = STORE.settings["ui"].get("speech_model") or speech_engine.DEFAULT_MODEL
                 base = speech_engine.ensure_model(model, lambda s: w.event("status", {"text": s}))
@@ -726,11 +726,27 @@ class Host:
         run.start()
         STORE.touch(conv, meta=True)
 
+    def shared_base(self, conv, w):
+        """Chat and speech run on the agent's model (Ternary Bonsai): its llama.cpp server, started if needed,
+        so one model serves every mode. None when the agent isn't on llama.cpp (they use their own models)."""
+        if (STORE.settings["agent"].get("backend") or "llama") != "llama":
+            return None
+        import llama_local
+        eng = self.engine_for(conv)
+        eng.emit = lambda kind, /, **d: w.event(kind, d)
+        eng.ctx.emit = eng.emit
+        if eng.reg is None:
+            eng.prepare()
+        elif not llama_local.running("main") and getattr(eng, "_llama_ensure", None):
+            eng.base = eng._llama_ensure()          # the server died or speech mode's model replaced it
+        return eng.base
+
     def start_chat(self, conv, text, model, think):
         s = STORE.settings
 
         def target(run):
             w = run.writer
+            base = self.shared_base(conv, w)
             visible = [m for m in conv["messages"][:-1] if m.get("content") and not m.get("kind")]
             summ = conv.get("chat_summary") or {}
             start = 0
@@ -744,7 +760,7 @@ class Host:
             try:
                 new_sum, n_old = agent.compress_history(history[2 if summ.get("text") else 0:], model,
                                                         int(s["num_ctx"]), summ.get("text", ""),
-                                                        bool(conv.pop("force_compact", False)))
+                                                        bool(conv.pop("force_compact", False)), base=base)
             except Exception:
                 new_sum, n_old = None, 0
             if new_sum:
@@ -776,7 +792,7 @@ class Host:
             agent.run_agent_events(text, model=model, emit=emit, think=think, temperature=s["temperature"],
                                    num_ctx=s["num_ctx"], max_steps=s["max_steps"],
                                    system_prompt=s["system_prompt"], history=history,
-                                   should_stop=run.stop_evt.is_set)
+                                   should_stop=run.stop_evt.is_set, base=base)
             w.event("answer_end", {"text": ""})
         run = Run(conv, "chat", target)
         self.runs[conv["id"]] = run
@@ -792,7 +808,7 @@ class Host:
                        and m.get("role") in ("user", "assistant")]
             history = [{"role": m["role"], "content": (m.get("model_content") or m["content"])[:1500]} for m in visible[-8:]]
             model = STORE.settings["ui"].get("speech_model") or speech_engine.DEFAULT_MODEL
-            final = speech_engine.run(text, history, w.event, run.stop_evt.is_set, model)
+            final = speech_engine.run(text, history, w.event, run.stop_evt.is_set, model, base=self.shared_base(conv, w))
             w.event("answer_end", {"text": final})
         run = Run(conv, "speech", target)
         self.runs[conv["id"]] = run
@@ -1318,7 +1334,8 @@ async def api_send(req):
     elif mode == "speech":
         if running:
             return J({"conv_id": conv["id"], "result": "busy"})
-        if any(r.running() and r.kind == "agent" for r in HOST.runs.values()):
+        if (STORE.settings["agent"].get("backend") or "llama") != "llama" and \
+                any(r.running() and r.kind == "agent" for r in HOST.runs.values()):   # (one shared model otherwise)
             with STORE.lock:
                 conv["messages"].append({"role": "assistant", "content": "An agent task is still running and speech "
                                          "mode needs the GPU it is using. Stop that task (or wait for it), then ask again.",
@@ -1416,6 +1433,103 @@ async def api_rename(req):
             c["titled"] = True                     # the user's name wins over the model's
         STORE.touch(c, meta=True)
     return J({"ok": True})
+
+
+# ---- all chats at once: import / export in Claude's data-export format, delete all (claude_export.py)
+def _backup_convs(why):
+    """Copy conversations.json into agent_trash before a bulk change; returns the copy's path ('' if none)."""
+    if not os.path.isfile(CONV_PATH):
+        return ""
+    d = os.path.join(at.TRASH, f"{why}_conversations_{time.strftime('%Y-%m-%d_%H%M%S')}")
+    os.makedirs(d, exist_ok=True)
+    dest = os.path.join(d, "conversations.json")
+    shutil.copy2(CONV_PATH, dest)
+    return dest
+
+
+def _clear_convs():
+    for cid in list(HOST.runs):
+        HOST.stop(cid)
+    with STORE.lock:
+        STORE.convs = []
+        STORE.dirty = set()
+    BUS.sent.clear()
+
+
+@routes.post("/api/chats/import")
+async def api_chats_import(req):
+    import claude_export
+    reader = await req.multipart()
+    stage = os.path.join(ATTACH, "_staging", "import_" + uuid.uuid4().hex[:10])
+    os.makedirs(stage, exist_ok=True)
+    files, replace = [], False
+    try:
+        while True:
+            part = await reader.next()
+            if part is None:
+                break
+            if part.name == "replace":
+                replace = (await part.text()).strip() in ("1", "true")
+                continue
+            if not part.filename:
+                continue
+            dest = os.path.join(stage, f"{len(files)}_" + os.path.basename(part.filename).replace("..", "_"))
+            with open(dest, "wb") as f:
+                while chunk := await part.read_chunk(1 << 20):
+                    f.write(chunk)
+            files.append(dest)
+        found = []
+        for p in files:
+            found += await asyncio.to_thread(claude_export.read_any, p)
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
+    convs = [c for c in (claude_export.to_zazen(x) for x in found) if c["messages"]]
+    if not convs:
+        return J({"error": "No Claude conversations found in that file. Pick conversations.json or the "
+                           "conversations-000.zip files from your Claude export."}, 400)
+    backup = await asyncio.to_thread(_backup_convs, "before_import") if replace else ""
+    if replace:
+        _clear_convs()
+    with STORE.lock:
+        have = {c["id"] for c in STORE.convs} | {c.get("claude_uuid") for c in STORE.convs if c.get("claude_uuid")}
+        new, seen = [], set()
+        for c in convs:
+            if c["id"] in have or c["claude_uuid"] in have or c["id"] in seen:
+                continue
+            seen.add(c["id"])
+            new.append(c)
+        STORE.convs = sorted(STORE.convs + new, key=lambda c: c.get("updated") or c.get("created") or 0, reverse=True)
+        STORE.meta_dirty = True
+    await asyncio.to_thread(STORE.save_convs)
+    return J({"ok": True, "imported": len(new), "skipped": len(convs) - len(new), "backup": backup})
+
+
+@routes.post("/api/chats/export")
+async def api_chats_export(req):
+    import claude_export
+    b = await req.json() if req.can_read_body else {}
+    ids = set(b.get("ids") or [])
+    with STORE.lock:
+        convs = json.loads(json.dumps([c for c in STORE.convs if c.get("messages") and (not ids or c["id"] in ids)],
+                                      default=str))
+    if not convs:
+        return J({"error": "There are no chats to export."}, 400)
+    out_dir = os.path.join(paths.HOME, "Downloads")
+    if not os.path.isdir(out_dir):
+        out_dir = DATA_DIR
+    path = os.path.join(out_dir, f"zazen-chats-{time.strftime('%Y-%m-%d_%H%M%S')}.zip")
+    n = await asyncio.to_thread(claude_export.write_zip, convs, path)
+    return J({"ok": True, "path": path, "count": n})
+
+
+@routes.post("/api/chats/delete_all")
+async def api_chats_delete_all(req):
+    backup = await asyncio.to_thread(_backup_convs, "cleared")
+    _clear_convs()
+    with STORE.lock:
+        STORE.meta_dirty = True
+    await asyncio.to_thread(STORE.save_convs)
+    return J({"ok": True, "backup": backup})
 
 
 @routes.put("/api/settings")

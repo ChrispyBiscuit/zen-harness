@@ -182,13 +182,14 @@ def _calc(expr):
         return {"error": str(e)}
 
 
-def run(text, history, emit_event, should_stop, model=DEFAULT_MODEL):
+def run(text, history, emit_event, should_stop, model=DEFAULT_MODEL, base=None):
     """One spoken turn. emit(kind, **data) uses the agent event names (status, tool_call, tool_result, plan_*,
-    ans_delta, turn_stats). emit_event(name, data_dict). -> answer text."""
+    ans_delta, turn_stats). emit_event(name, data_dict). base: an already-running llama.cpp server (the agent
+    model's) to use instead of starting the small speech model. -> answer text."""
     def emit(_name, **d):
         emit_event(_name, d)
     t0 = time.time()
-    base = ensure_model(model, lambda s: emit("status", text=s))
+    base = base or ensure_model(model, lambda s: emit("status", text=s))
     convo = history[-8:]
     today = time.strftime("%A %d %B %Y")
 
