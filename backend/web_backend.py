@@ -1478,15 +1478,28 @@ async def api_chats_import(req):
                 while chunk := await part.read_chunk(1 << 20):
                     f.write(chunk)
             files.append(dest)
-        found = []
+        found, failed = [], []
         for p in files:
-            found += await asyncio.to_thread(claude_export.read_any, p)
+            links = claude_export.manifest_links(p)
+            if not links:
+                found += await asyncio.to_thread(claude_export.read_any, p)
+            for name, url in links:                    # a newer export's manifest: fetch the conversation zips
+                dest = os.path.join(stage, f"m{len(files)}_" + name)
+                try:
+                    await asyncio.to_thread(claude_export.download, url, dest)
+                    found += await asyncio.to_thread(claude_export.read_any, dest)
+                except claude_export.LinkError as e:
+                    failed.append(f"{name}: {e}")
     finally:
         shutil.rmtree(stage, ignore_errors=True)
     convs = [c for c in (claude_export.to_zazen(x) for x in found) if c["messages"]]
+    if failed and not convs:
+        return J({"error": "Couldn't download the chats from the export links — " + "; ".join(failed) +
+                           ". Open the links in your browser (signed in to claude.ai), then import the "
+                           "conversations-*.zip files."}, 400)
     if not convs:
-        return J({"error": "No Claude conversations found in that file. Pick conversations.json or the "
-                           "conversations-000.zip files from your Claude export."}, 400)
+        return J({"error": "No Claude conversations found in that file. Pick the export's manifest-*.json, its "
+                           "conversations-*.zip files, or conversations.json."}, 400)
     backup = await asyncio.to_thread(_backup_convs, "before_import") if replace else ""
     if replace:
         _clear_convs()
@@ -1501,7 +1514,8 @@ async def api_chats_import(req):
         STORE.convs = sorted(STORE.convs + new, key=lambda c: c.get("updated") or c.get("created") or 0, reverse=True)
         STORE.meta_dirty = True
     await asyncio.to_thread(STORE.save_convs)
-    return J({"ok": True, "imported": len(new), "skipped": len(convs) - len(new), "backup": backup})
+    return J({"ok": True, "imported": len(new), "skipped": len(convs) - len(new), "backup": backup,
+              "failed": failed})
 
 
 @routes.post("/api/chats/export")

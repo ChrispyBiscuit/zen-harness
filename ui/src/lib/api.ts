@@ -29,7 +29,7 @@ export const api = {
     const r = await fetch("/api/chats/import", { method: "POST", body: fd })
     const data = await r.json().catch(() => ({}))
     if (!r.ok) throw new Error(data.error || "import failed")
-    return data as { imported: number; skipped: number; backup: string }
+    return data as { imported: number; skipped: number; backup: string; failed?: string[] }
   },
   exportChats: (ids?: string[]) => call<{ path: string; count: number }>("POST", "/api/chats/export", { ids }),
   deleteAllChats: () => call<{ backup: string }>("POST", "/api/chats/delete_all", {}),

@@ -4,6 +4,7 @@ Claude's export is a zip (or several: conversations-000.zip, conversations-001.z
 a list of {uuid, name, created_at, updated_at, chat_messages: [{uuid, sender: "human"|"assistant", text,
 content: [{type: "text"|"thinking"|"tool_use"|"tool_result", ...}], created_at, attachments, files}]}.
 
+  manifest_links(path)  the conversation zips a newer export's manifest-*.json links to (downloaded by the importer)
   read_any(path)        every Claude conversation in a .zip / .json / .jsonl file (other files in the zip are skipped)
   to_zazen(c)           one Claude conversation -> a Zazen conversation (a chat-mode thread)
   to_claude(c)          one Zazen conversation -> a Claude conversation (visible user/assistant turns only)
@@ -13,6 +14,9 @@ import datetime as dt
 import io
 import json
 import os
+import urllib.error
+import urllib.parse
+import urllib.request
 import uuid
 import zipfile
 
@@ -58,6 +62,52 @@ def _parse(raw, out):
                     _collect(json.loads(line), out)
                 except ValueError:
                     pass
+
+
+EXPORT_HOST = "claude.ai"
+CHAT_CATEGORIES = ("conversations",)
+
+
+def manifest_links(path):
+    """The conversation zips a Claude export manifest (manifest-*.json: {data_files: [{export_url, category,
+    filename}]}) links to -> [(filename, url)]; [] when the file isn't a manifest. Only claude.ai export links."""
+    try:
+        with open(path, "rb") as f:
+            m = json.loads(f.read(1 << 20).decode("utf-8-sig"))
+    except (OSError, ValueError, UnicodeDecodeError):
+        return []
+    if not isinstance(m, dict) or not isinstance(m.get("data_files"), list):
+        return []
+    out = []
+    for d in m["data_files"]:
+        if not isinstance(d, dict) or d.get("category") not in CHAT_CATEGORIES:
+            continue
+        url = str(d.get("export_url") or "")
+        u = urllib.parse.urlparse(url)
+        if u.scheme == "https" and u.hostname == EXPORT_HOST and u.path.startswith("/export/"):
+            out.append((os.path.basename(str(d.get("filename") or "")) or f"conversations-{len(out):03d}.zip", url))
+    return out
+
+
+class LinkError(Exception):
+    pass
+
+
+def download(url, dest):
+    """One export file -> dest. LinkError with a readable reason when the link has expired, was already used,
+    or needs the browser's claude.ai sign-in."""
+    req = urllib.request.Request(url, headers={"User-Agent": "Zazen/1.0 (chat import)"})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r, open(dest, "wb") as f:
+            while chunk := r.read(1 << 20):
+                f.write(chunk)
+    except urllib.error.HTTPError as e:
+        raise LinkError(f"claude.ai answered {e.code} {e.reason}") from e
+    except (urllib.error.URLError, OSError) as e:
+        raise LinkError(f"could not download it ({getattr(e, 'reason', e)})") from e
+    if not zipfile.is_zipfile(dest):
+        raise LinkError("claude.ai sent a web page instead of the zip (the link needs your browser's sign-in, "
+                        "or it expired)")
 
 
 def read_any(path):

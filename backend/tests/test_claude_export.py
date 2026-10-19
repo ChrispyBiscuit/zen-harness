@@ -4,6 +4,8 @@ import os
 import sys
 import zipfile
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import claude_export as ce
 
@@ -67,3 +69,50 @@ def test_plain_json_and_jsonl(tmp_path):
     l = tmp_path / "c.jsonl"
     l.write_text("\n".join(json.dumps(c) for c in CLAUDE * 2), encoding="utf-8")
     assert len(ce.read_any(str(l))) == 2
+
+
+def _manifest(tmp_path, files):
+    p = tmp_path / "manifest-x.json"
+    p.write_text(json.dumps({"instructions": "…", "total_files": len(files), "data_files": files, "version": "1.0"}))
+    return str(p)
+
+
+def test_manifest_links_keep_only_claude_conversation_zips(tmp_path):
+    p = _manifest(tmp_path, [
+        {"export_url": "https://claude.ai/export/e/download/a", "category": "conversations", "filename": "conversations-000.zip"},
+        {"export_url": "https://claude.ai/export/e/download/b", "category": "conversations", "filename": "../conversations-001.zip"},
+        {"export_url": "https://claude.ai/export/e/download/c", "category": "projects", "filename": "projects-000.zip"},
+        {"export_url": "https://evil.example/export/e/download/d", "category": "conversations", "filename": "x.zip"},
+        {"export_url": "http://claude.ai/export/e/download/e", "category": "conversations", "filename": "y.zip"}])
+    assert ce.manifest_links(p) == [("conversations-000.zip", "https://claude.ai/export/e/download/a"),
+                                    ("conversations-001.zip", "https://claude.ai/export/e/download/b")]
+    j = tmp_path / "conversations.json"
+    j.write_text(json.dumps(CLAUDE))
+    assert ce.manifest_links(str(j)) == []          # an ordinary export file is read, not followed
+
+
+def test_download_checks_for_a_zip(tmp_path, monkeypatch):
+    import io
+    import urllib.error
+    good = io.BytesIO()
+    with zipfile.ZipFile(good, "w") as z:
+        z.writestr("conversations.json", json.dumps(CLAUDE))
+
+    class Resp(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+    bodies = {"zip": good.getvalue(), "page": b"<html>sign in</html>"}
+    monkeypatch.setattr(ce.urllib.request, "urlopen", lambda req, timeout=0: Resp(bodies[req.full_url.rsplit("/", 1)[1]]))
+    ce.download("https://claude.ai/export/e/download/zip", str(tmp_path / "a.zip"))
+    assert len(ce.read_any(str(tmp_path / "a.zip"))) == 1
+    with pytest.raises(ce.LinkError, match="web page"):
+        ce.download("https://claude.ai/export/e/download/page", str(tmp_path / "b.zip"))
+
+    def gone(req, timeout=0):
+        raise urllib.error.HTTPError(req.full_url, 410, "Gone", {}, None)
+    monkeypatch.setattr(ce.urllib.request, "urlopen", gone)
+    with pytest.raises(ce.LinkError, match="410"):
+        ce.download("https://claude.ai/export/e/download/zip", str(tmp_path / "c.zip"))

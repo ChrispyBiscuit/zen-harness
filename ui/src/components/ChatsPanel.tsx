@@ -25,6 +25,7 @@ export function ChatsPanel() {
       if (replace) afterWipe()
       toast.success(`Imported ${r.imported} chat${r.imported === 1 ? "" : "s"}`,
         { description: r.skipped ? `${r.skipped} already here, skipped.` : undefined })
+      if (r.failed?.length) toast.warning("Some export files didn't download", { description: r.failed.join("; ") })
     } catch (e: any) { toast.error(e.message) }
     finally { setBusy(""); if (input.current) input.current.value = "" }
   }
@@ -53,8 +54,9 @@ export function ChatsPanel() {
 
   return (
     <Section title={`Chats (${threads.length})`}>
-      <Field label="Import" hint={<>Claude's data export: pick the <span className="mono">conversations-*.zip</span> files
-        (or <span className="mono">conversations.json</span>). Chats already here are skipped.</>}>
+      <Field label="Import" hint={<>Claude's data export: pick its <span className="mono">manifest-*.json</span> (the chats
+        are downloaded from its links, which expire after 24 hours), the <span className="mono">conversations-*.zip</span> files,
+        or <span className="mono">conversations.json</span>. Chats already here are skipped.</>}>
         <input ref={input} type="file" multiple accept=".zip,.json,.jsonl" className="hidden"
           onChange={(e) => doImport(Array.from(e.target.files || []))} />
         <div className="flex flex-wrap items-center gap-3">
