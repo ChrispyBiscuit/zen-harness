@@ -14,6 +14,10 @@ export function ChatsPanel() {
   const [replace, setReplace] = useState(false)
   const input = useRef<HTMLInputElement>(null)
 
+  // claude.ai serves export files only to a signed-in browser: open them there, then import the zips
+  const openLinks = (links?: string[]) => links?.length
+    ? { action: { label: "Open in browser", onClick: () => { api.openExportLinks(links).catch((e: any) => toast.error(e.message)) } } }
+    : {}
   const afterWipe = () => { const st = useApp.getState(); if (st.current) st.select(null) }
 
   const doImport = async (files: File[]) => {
@@ -25,8 +29,8 @@ export function ChatsPanel() {
       if (replace) afterWipe()
       toast.success(`Imported ${r.imported} chat${r.imported === 1 ? "" : "s"}`,
         { description: r.skipped ? `${r.skipped} already here, skipped.` : undefined })
-      if (r.failed?.length) toast.warning("Some export files didn't download", { description: r.failed.join("; ") })
-    } catch (e: any) { toast.error(e.message) }
+      if (r.failed?.length) toast.warning("Some export files didn't download", { description: r.failed.join("; "), ...openLinks(r.links) })
+    } catch (e: any) { toast.error(e.message, { duration: 20000, ...openLinks(e.links) }) }
     finally { setBusy(""); if (input.current) input.current.value = "" }
   }
 

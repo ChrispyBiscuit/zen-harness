@@ -1478,7 +1478,7 @@ async def api_chats_import(req):
                 while chunk := await part.read_chunk(1 << 20):
                     f.write(chunk)
             files.append(dest)
-        found, failed = [], []
+        found, failed, links_failed = [], [], []
         for p in files:
             links = claude_export.manifest_links(p)
             if not links:
@@ -1490,13 +1490,14 @@ async def api_chats_import(req):
                     found += await asyncio.to_thread(claude_export.read_any, dest)
                 except claude_export.LinkError as e:
                     failed.append(f"{name}: {e}")
+                    links_failed.append(url)
     finally:
         shutil.rmtree(stage, ignore_errors=True)
     convs = [c for c in (claude_export.to_zazen(x) for x in found) if c["messages"]]
     if failed and not convs:
         return J({"error": "Couldn't download the chats from the export links — " + "; ".join(failed) +
                            ". Open the links in your browser (signed in to claude.ai), then import the "
-                           "conversations-*.zip files."}, 400)
+                           "conversations-*.zip files.", "links": links_failed}, 400)
     if not convs:
         return J({"error": "No Claude conversations found in that file. Pick the export's manifest-*.json, its "
                            "conversations-*.zip files, or conversations.json."}, 400)
@@ -1515,7 +1516,18 @@ async def api_chats_import(req):
         STORE.meta_dirty = True
     await asyncio.to_thread(STORE.save_convs)
     return J({"ok": True, "imported": len(new), "skipped": len(convs) - len(new), "backup": backup,
-              "failed": failed})
+              "failed": failed, "links": links_failed})
+
+
+@routes.post("/api/chats/open_links")
+async def api_chats_open_links(req):
+    """Export links claude.ai only serves to a signed-in browser: open them in the default browser."""
+    import webbrowser
+    import claude_export
+    urls = [u for u in (await req.json()).get("urls") or [] if claude_export.is_export_link(str(u))]
+    for u in urls[:10]:
+        webbrowser.open(u)
+    return J({"ok": True, "opened": len(urls[:10])})
 
 
 @routes.post("/api/chats/export")

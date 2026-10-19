@@ -28,9 +28,10 @@ export const api = {
     files.forEach((f) => fd.append("file", f, f.name))
     const r = await fetch("/api/chats/import", { method: "POST", body: fd })
     const data = await r.json().catch(() => ({}))
-    if (!r.ok) throw new Error(data.error || "import failed")
-    return data as { imported: number; skipped: number; backup: string; failed?: string[] }
+    if (!r.ok) throw Object.assign(new Error(data.error || "import failed"), { links: data.links as string[] | undefined })
+    return data as { imported: number; skipped: number; backup: string; failed?: string[]; links?: string[] }
   },
+  openExportLinks: (urls: string[]) => call<{ opened: number }>("POST", "/api/chats/open_links", { urls }),
   exportChats: (ids?: string[]) => call<{ path: string; count: number }>("POST", "/api/chats/export", { ids }),
   deleteAllChats: () => call<{ backup: string }>("POST", "/api/chats/delete_all", {}),
   settings: (patch: Partial<Settings>) => call<{ settings: Settings }>("PUT", "/api/settings", patch),

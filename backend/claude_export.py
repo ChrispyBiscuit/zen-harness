@@ -83,10 +83,14 @@ def manifest_links(path):
         if not isinstance(d, dict) or d.get("category") not in CHAT_CATEGORIES:
             continue
         url = str(d.get("export_url") or "")
-        u = urllib.parse.urlparse(url)
-        if u.scheme == "https" and u.hostname == EXPORT_HOST and u.path.startswith("/export/"):
+        if is_export_link(url):
             out.append((os.path.basename(str(d.get("filename") or "")) or f"conversations-{len(out):03d}.zip", url))
     return out
+
+
+def is_export_link(url):
+    u = urllib.parse.urlparse(url)
+    return u.scheme == "https" and u.hostname == EXPORT_HOST and u.path.startswith("/export/")
 
 
 class LinkError(Exception):
