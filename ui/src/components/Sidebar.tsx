@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { memo, useMemo, useState } from "react"
 import { MoreHorizontal, Pencil, Search, SquarePen, Trash2, Workflow } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { api } from "@/lib/api"
@@ -20,7 +20,10 @@ function bucket(ts: number) {
   return "Older"
 }
 
-function ThreadRow({ t, child }: { t: Thread; child?: boolean }) {
+const SIDEBAR_ROWS = 150
+
+// memo: a streaming update replaces one chat's row; the other rows keep their objects and are not redrawn
+const ThreadRow = memo(function ThreadRow({ t, child }: { t: Thread; child?: boolean }) {
   const current = useApp((s) => s.current)
   const select = useApp((s) => s.select)
   const [editing, setEditing] = useState(false)
@@ -71,7 +74,7 @@ function ThreadRow({ t, child }: { t: Thread; child?: boolean }) {
       )}
     </div>
   )
-}
+})
 
 export function Sidebar() {
   const allThreads = useApp((s) => s.threads)
@@ -80,6 +83,8 @@ export function Sidebar() {
     [allThreads, hiddenThreads])
   const select = useApp((s) => s.select)
   const [q, setQ] = useState("")
+  // 2,800 imported chats drew 2,800 rows: the newest SHOWN are drawn, "Show more" adds more; search sees all
+  const [shown, setShown] = useState(SIDEBAR_ROWS)
 
   const groups = useMemo(() => {
     const ql = q.toLowerCase()
@@ -97,8 +102,18 @@ export function Sidebar() {
       g[1].push({ t, kids })
     }
     const order = ["Active", "Today", "Yesterday", "Previous 7 days", "Previous 30 days", "Older"]
-    return out.sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]))
-  }, [threads, q])
+    const sorted = out.sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]))
+    const total = sorted.reduce((n, g) => n + g[1].length, 0)
+    if (q || total <= shown) return { groups: sorted, hidden: 0 }
+    let left = shown
+    const cut: typeof sorted = []
+    for (const [name, items] of sorted) {
+      if (left <= 0) break
+      cut.push([name, items.slice(0, left)])
+      left -= items.length
+    }
+    return { groups: cut, hidden: total - shown }
+  }, [threads, q, shown])
 
   return (
     <aside className="flex h-full w-[264px] shrink-0 flex-col bg-ground">
@@ -120,7 +135,7 @@ export function Sidebar() {
         </div>
       </div>
       <div data-density-scope className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
-        {groups.map(([name, items]) => (
+        {groups.groups.map(([name, items]) => (
           <div key={name} className="mt-3">
             <div className="label-tech px-2 pb-1 text-faint">{name}</div>
             {items.map(({ t, kids }) => (
@@ -131,6 +146,12 @@ export function Sidebar() {
             ))}
           </div>
         ))}
+        {groups.hidden > 0 && (
+          <button onClick={() => setShown((n) => n + SIDEBAR_ROWS * 2)}
+            className="mt-2 w-full rounded-lg px-2.5 py-1.5 text-left text-meta text-muted-foreground transition-ui hover:bg-surface-1 hover:text-foreground">
+            Show more ({groups.hidden.toLocaleString()} older chats) · or search above
+          </button>
+        )}
       </div>
       {/* scheduled tasks at the bottom; its bottom row also holds the sidebar's fold button (bottom-right) */}
       <Schedules />

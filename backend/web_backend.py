@@ -41,7 +41,8 @@ import paths
 DIST = os.environ.get("LWS_DIST") or paths.resource("web_dist")     # LWS_DIST: test a UI build elsewhere
 DATA_DIR = paths.data_dir()       # LWS_DATA_DIR / %LOCALAPPDATA%\ZenHarness when installed (see paths.py)
 SETTINGS_PATH = os.path.join(DATA_DIR, "settings.json")
-CONV_PATH = os.path.join(DATA_DIR, "conversations.json")
+CONV_PATH = os.path.join(DATA_DIR, "conversations.json")      # the old single file: read once, then left as a backup
+CONV_DIR = os.path.join(DATA_DIR, "conversations")             # one <id>.json per chat + _order.json
 ATTACH = paths.data("agent_attachments")
 PORT = int(os.environ.get("LWS_PORT", "8765"))
 INLINE_DOC_CHARS = 14000          # attached documents up to this size go straight into the message
@@ -55,7 +56,13 @@ class Store:
     def __init__(self):
         self.lock = threading.RLock()
         self.settings = self._load_settings()
+        self._on_disk = set()          # chat ids that have a file in CONV_DIR
+        self.unsaved = set()           # chat ids changed since their file was written
+        self._saved_order = None
+        self._stamps = {}              # chat id -> (messages, updated, title) as last saved
+        self._save_lock = threading.Lock()
         self.convs = self._load_convs()
+        self._index, self._index_of = {}, None
         self.dirty = set()             # conv ids with unsent changes
         self.meta_dirty = False
         self._save_at = 0.0
@@ -88,12 +95,40 @@ class Store:
         return s
 
     def _load_convs(self):
-        try:
-            with open(CONV_PATH, encoding="utf-8") as f:
-                data = json.load(f)
-            convs = [c for c in data if isinstance(c, dict) and c.get("messages")]
-        except Exception:
-            convs = []
+        """One file per chat (CONV_DIR), in the saved order. The first start after this change reads the old single
+        conversations.json and writes every chat to its own file; the old file is left as it was (a backup, and what
+        an older version reads after a rollback). Saving 2,800 imported chats as one 58 MB file every 1.5 s during a
+        run took 0.8 s each time, under the lock every request waits on."""
+        convs = []
+        order_path = os.path.join(CONV_DIR, "_order.json")
+        if os.path.isfile(order_path):
+            try:
+                with open(order_path, encoding="utf-8") as f:
+                    order = json.load(f)
+            except (OSError, ValueError):
+                order = []
+            names = {n[:-5] for n in os.listdir(CONV_DIR) if n.endswith(".json") and not n.startswith("_")}
+            ids = [i for i in order if i in names] + sorted(names - set(order))     # files the order file missed
+            for cid in ids:
+                try:
+                    with open(os.path.join(CONV_DIR, cid + ".json"), encoding="utf-8") as f:
+                        c = json.load(f)
+                except (OSError, ValueError) as e:
+                    print(f"chat {cid} could not be read ({e}): skipped", flush=True)
+                    continue
+                if isinstance(c, dict) and c.get("messages"):
+                    convs.append(c)
+                    self._on_disk.add(c["id"])
+            self._saved_order = [c["id"] for c in convs]
+            self._stamps = {c["id"]: (len(c["messages"]), c.get("updated"), c.get("title")) for c in convs}
+        else:
+            try:
+                with open(CONV_PATH, encoding="utf-8") as f:
+                    data = json.load(f)
+                convs = [c for c in data if isinstance(c, dict) and c.get("messages")]
+            except Exception:
+                convs = []
+            self.unsaved = {c["id"] for c in convs}            # first save writes them all to CONV_DIR
         for c in convs:                                        # a crash can leave a live message
             for m in c["messages"]:
                 if m.get("streaming"):
@@ -113,23 +148,72 @@ class Store:
         os.replace(tmp, SETTINGS_PATH)
 
     def save_convs(self):
+        """Write the chats that changed (touch), are new (an import, a new chat) or were removed (a delete): each to
+        its own file. Only those are serialised under the lock; files are written after it is released."""
+        with self._save_lock:                      # one save at a time (the ticker, shutdown, an import)
+            with self.lock:
+                live = {c["id"]: c for c in self.convs if c.get("messages")}
+                # a safety net for a change made without touch(): the old save rewrote everything, so it was caught
+                stamps = {cid: (len(c["messages"]), c.get("updated"), c.get("title")) for cid, c in live.items()}
+                changed = {cid for cid, st in stamps.items() if self._stamps.get(cid) != st}
+                ids = (self.unsaved | changed | (set(live) - self._on_disk)) & set(live)
+                out = {cid: json.dumps(live[cid], ensure_ascii=False) for cid in ids}
+                self._stamps = stamps
+                gone = self._on_disk - set(live)
+                order = [c["id"] for c in self.convs if c["id"] in live]
+                self.unsaved -= ids
+            os.makedirs(CONV_DIR, exist_ok=True)
+            for cid, data in out.items():
+                tmp = os.path.join(CONV_DIR, cid + ".json.tmp")
+                try:
+                    with open(tmp, "w", encoding="utf-8") as f:
+                        f.write(data)
+                    os.replace(tmp, os.path.join(CONV_DIR, cid + ".json"))
+                    self._on_disk.add(cid)
+                except OSError as e:
+                    print(f"chat {cid} not saved: {e}", flush=True)
+                    with self.lock:
+                        self.unsaved.add(cid)          # try again on the next save
+            for cid in gone:
+                try:
+                    os.remove(os.path.join(CONV_DIR, cid + ".json"))
+                except FileNotFoundError:
+                    pass
+                except OSError as e:
+                    print(f"chat {cid} file not removed: {e}", flush=True)
+                    continue
+                self._on_disk.discard(cid)
+            if order != self._saved_order:
+                tmp = os.path.join(CONV_DIR, "_order.json.tmp")
+                with open(tmp, "w", encoding="utf-8") as f:
+                    json.dump(order, f)
+                os.replace(tmp, os.path.join(CONV_DIR, "_order.json"))
+                self._saved_order = order
+
+    def all_json(self):
+        """Every chat as one JSON list (backups before bulk changes)."""
         with self.lock:
-            data = json.dumps([c for c in self.convs if c.get("messages")], ensure_ascii=False)
-        tmp = CONV_PATH + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            f.write(data)
-        os.replace(tmp, CONV_PATH)
+            return json.dumps([c for c in self.convs if c.get("messages")], ensure_ascii=False)
 
     def touch(self, conv, meta=False):
         with self.lock:
             self.dirty.add(conv["id"])
+            self.unsaved.add(conv["id"])
             if meta:
                 self.meta_dirty = True
             if not self._save_at:
                 self._save_at = time.time() + 1.5
 
     def get(self, cid):
+        """By id, through an index rebuilt whenever the list is replaced or changes length (imports, deletes)."""
         with self.lock:
+            key = (id(self.convs), len(self.convs))
+            if self._index_of != key:
+                self._index = {c["id"]: c for c in self.convs}
+                self._index_of = key
+            c = self._index.get(cid)
+            if c is not None and c.get("id") == cid:
+                return c
             return next((c for c in self.convs if c["id"] == cid), None)
 
     def new_conv(self, title="New chat", **extra):
@@ -195,8 +279,14 @@ class Bus:
                     payloads.append({"t": "msgs", "conv": cid, "len": len(hashes), "upd": upd})
         for p in payloads:
             self.send(p)
-        if meta or dirty:
+        if meta:
             self.send({"t": "threads", "threads": thread_list()})
+        elif dirty:
+            # streaming: only the rows of the chats that changed. The whole list (2,800 imported chats, ~1 MB) went
+            # out up to 10 times a second, and the page redrew every row each time
+            rows = thread_list(dirty)
+            if rows:
+                self.send({"t": "thread_upd", "threads": rows})
         if save:
             threading.Thread(target=STORE.save_convs, daemon=True).start()
 
@@ -204,11 +294,12 @@ class Bus:
 BUS = Bus()
 
 
-def thread_list():
+def thread_list(only=None):
+    """Sidebar rows, newest first: every chat, or (only=ids) just those chats' rows."""
     waiting = HOST.waiting_convs()
     with STORE.lock:
         out = []
-        for c in STORE.convs:
+        for c in (STORE.convs if only is None else [x for x in (STORE.get(i) for i in only) if x]):
             if not c.get("messages") and not HOST.running(c["id"]):
                 continue
             last = next((m for m in reversed(c["messages"]) if m.get("content") and not m.get("kind")), None)
@@ -1437,13 +1528,14 @@ async def api_rename(req):
 
 # ---- all chats at once: import / export in Claude's data-export format, delete all (claude_export.py)
 def _backup_convs(why):
-    """Copy conversations.json into agent_trash before a bulk change; returns the copy's path ('' if none)."""
-    if not os.path.isfile(CONV_PATH):
+    """Every chat as one conversations.json in agent_trash before a bulk change; returns its path ('' if none)."""
+    if not STORE.convs:
         return ""
     d = os.path.join(at.TRASH, f"{why}_conversations_{time.strftime('%Y-%m-%d_%H%M%S')}")
     os.makedirs(d, exist_ok=True)
     dest = os.path.join(d, "conversations.json")
-    shutil.copy2(CONV_PATH, dest)
+    with open(dest, "w", encoding="utf-8") as f:
+        f.write(STORE.all_json())
     return dest
 
 

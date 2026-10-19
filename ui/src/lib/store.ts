@@ -168,6 +168,17 @@ export function applyEvent(m: any) {
       useApp.setState({ threads, convs })
       break
     }
+    case "thread_upd": {             // only the chats that changed (while text streams); the order is unchanged
+      const rows: Thread[] = m.threads
+      const byId = new Map(rows.map((t) => [t.id, t]))
+      const threads = st.threads.map((t) => byId.get(t.id) || t)
+      const known = new Set(st.threads.map((t) => t.id))
+      const added = rows.filter((t) => !known.has(t.id))
+      const convs = { ...st.convs }
+      for (const t of rows) if (convs[t.id]) convs[t.id] = { ...convs[t.id], running: t.running, title: t.title }
+      useApp.setState({ threads: added.length ? [...added, ...threads] : threads, convs })
+      break
+    }
     case "status":
       useApp.setState({ status: { ...st.status, [m.conv]: m.text } })
       break
