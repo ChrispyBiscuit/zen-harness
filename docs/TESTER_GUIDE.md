@@ -1,7 +1,7 @@
 # Zazen — tester guide (give this whole file to your Claude)
 
-> **To the tester:** from <https://github.com/ChrispyBiscuit/zen-harness/releases/tag/v0.1.0-alpha.4> download
-> `ZenHarness-Setup-0.1.0-alpha.4.exe` and `zen-harness-tester-kit-0.1.0-alpha.4.zip`. Install Zazen
+> **To the tester:** from <https://github.com/ChrispyBiscuit/zen-harness/releases/tag/v0.1.0-alpha.5> download
+> `ZenHarness-Setup-0.1.0-alpha.5.exe` and `zen-harness-tester-kit-0.1.0-alpha.5.zip`. Install Zazen
 > (section 1), unzip the kit (e.g. to `%USERPROFILE%\zen-tester-kit`), then open Claude Code in the kit folder and say:
 > *"Read TESTER_GUIDE.md and run the test plan in it. Ask me before anything it says to ask about."* Everything
 > below is written for Claude.
@@ -55,9 +55,9 @@ reported.
 
 ## 1. Install the app (the tester does this)
 
-1. Run `ZenHarness-Setup-0.1.0-alpha.4.exe` (from the GitHub release above). It is not code-signed yet, so Windows
+1. Run `ZenHarness-Setup-0.1.0-alpha.5.exe` (from the GitHub release above). It is not code-signed yet, so Windows
    SmartScreen may say "Windows protected your PC": choose **More info → Run anyway**. Compare its SHA-256 with the
-   `.sha256` file on the release page first (`Get-FileHash .\ZenHarness-Setup-0.1.0-alpha.4.exe`). The installer
+   `.sha256` file on the release page first (`Get-FileHash .\ZenHarness-Setup-0.1.0-alpha.5.exe`). The installer
    downloads nothing.
 2. Start the app. The **Welcome** screen shows the graphics card it found and its plan (runtime, model file, context).
    Click **Set up this PC**: it downloads the llama.cpp runtime for that card (NVIDIA CUDA, AMD HIP, or Vulkan / SYCL
