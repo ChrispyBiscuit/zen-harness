@@ -1052,6 +1052,58 @@ def _callees(path, line):
     return []
 
 
+def t_code_graph(a, c):
+    """P2 of plans/code-graph-prd.md: one structure question about the project's code, answered from its tree-sitter
+    graph in one call (a slow model spent several search_text/read_file calls on each)."""
+    import code_graph as cg
+    action = str(a.get("action") or "").strip().lower()
+    name = str(a.get("name") or "").strip()
+    if action not in ("callers", "callees", "impact", "path", "explain"):
+        raise ToolError("action must be one of: callers, callees, impact, path, explain")
+    if not name:
+        raise ToolError("give name: the function, method or class (e.g. 'make_board' or 'Board.move')")
+    root = c.resolve(a.get("root") or (c.cwd or c.roots[0]), True)
+    if os.path.isfile(root):
+        root = os.path.dirname(root)
+    if not cg.available():
+        raise ToolError("the code graph needs tree-sitter, which isn't installed; use trace_symbol instead")
+    return cg.question(root, action, name, str(a.get("name2") or ""))
+
+
+def code_graph_note(c, path):
+    """After a code write: broken cross-file references it made or exposed (plans/code-graph-prd.md P1). Keeps the
+    open findings on the ctx for the done check. '' when none, or off, or not a supported language."""
+    if getattr(c, "code_graph_check", True) is False:
+        return ""
+    try:
+        import code_graph as cg
+        if not cg.available() or not cg.LANG_OF.get(os.path.splitext(path)[1].lower()):
+            return ""
+        root = cg.project_root(path, getattr(c, "roots", ()))
+        found = cg.broken_refs(root, [path])
+        openr = c.__dict__.setdefault("_broken_refs", {})
+        checked = {os.path.abspath(path)} | {os.path.abspath(p) for p, _l, _m in found}
+        for k in [k for k in openr if k[0] in checked]:
+            del openr[k]
+        for p, line, msg in found:
+            openr[(os.path.abspath(p), msg)] = (root, line)
+        if not found:
+            return ""
+        return ("\nBroken references (they fail when this code runs; fix them now):\n" + cg.format_refs(found, root))
+    except Exception as e:
+        print("code graph check failed:", repr(e))
+        return ""
+
+
+def open_broken_refs(c):
+    """The broken references still open in this chat -> [(file, line, message)] (files that still exist)."""
+    out = []
+    for (p, msg), (root, line) in sorted((getattr(c, "_broken_refs", None) or {}).items()):
+        if os.path.isfile(p):
+            out.append((os.path.relpath(p, root).replace("\\", "/"), line, msg))
+    return out
+
+
 def t_trace_symbol(a, c):
     """A function/class/variable and everything connected to it, across files: its definition and every place that
     uses it, each shown inside its whole enclosing function, plus what it calls. Python names are resolved the way
@@ -2829,7 +2881,7 @@ def t_query_data(a, c):
 # groups shown by available_tools (a tool not listed falls under "other")
 TOOL_GROUPS = [
     ("files", "read, find, write and edit files in the allowed folders; search their contents by meaning",
-     ["list_dir", "find_files", "search_text", "trace_symbol", "search_documents", "focus_pack", "read_file", "read_document", "write_file", "edit_file", "make_dir",
+     ["list_dir", "find_files", "search_text", "trace_symbol", "code_graph", "search_documents", "focus_pack", "read_file", "read_document", "write_file", "edit_file", "make_dir",
       "move_path", "trash_path"]),
     ("documents", "create professionally styled Word, Excel, PowerPoint and PDF files (the only way to make them)",
      ["create_document"]),
@@ -4743,6 +4795,11 @@ BUILTIN = [
      "in a caller and a callee, a renamed field the tests still expect). root = project folder (or a file in it); "
      "file = which definition when several share the name.",
      _obj({"name": S, "root": S, "file": S, "max_lines": I}, ["name"]), t_trace_symbol),
+    ("code_graph", READ, "One question about a project's code structure, answered in one call: action='callers' (who "
+     "calls name), 'callees' (what name calls), 'impact' (what breaks if name's signature or name changes: call "
+     "sites, importers, tests), 'path' (call chain from name to name2), 'explain' (definition, signature, doc, "
+     "callers, callees). Python, JavaScript, TypeScript. root = project folder.",
+     _obj({"action": S, "name": S, "name2": S, "root": S}, ["action", "name"]), t_code_graph),
     ("write_file", WRITE, "Create a new text file, or overwrite one with the full new content "
      "(append=true adds to the end). Folders are created as needed. For small changes to an "
      "existing file use edit_file instead.",
@@ -5459,6 +5516,12 @@ class Registry:
                                                            args.get("new") or args.get("content"))
         except Exception as e:
             print("obligations failed:", repr(e))
+        if name in ("edit_file", "write_file") and isinstance(args, dict) and args.get("path") \
+                and not str(text).startswith("Error"):
+            try:                                        # broken cross-file references (plans/code-graph-prd.md P1)
+                text = str(text) + code_graph_note(self.ctx, self.ctx.resolve(args["path"]))
+            except Exception as e:
+                print("code graph note failed:", repr(e))
         try:
             if looks_green(name, args, str(text)):
                 mark_green(self.ctx)                  # tests passed: the baseline for changes_since_green

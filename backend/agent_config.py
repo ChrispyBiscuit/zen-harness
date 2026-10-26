@@ -114,6 +114,8 @@ DEFAULT_AGENT["slow_compaction"] = True           # False: no smaller budget for
 # vision_gpu (on/off). auto false = the model profile exactly as written
 DEFAULT_AGENT["hardware"] = {"auto": True, "backend": "auto", "gpu": "auto", "model_file": "auto", "num_ctx": "auto",
                              "kv_cache": "auto", "kv_cache_v": "auto", "vision_gpu": "auto"}
+# after a code write: names that resolve to nothing across files (code_graph.py, plans/code-graph-prd.md P1)
+DEFAULT_AGENT["code_graph_check"] = True
 DEFAULT_AGENT["program_run_gate"] = True        # False: no "run the program before done" reminder or label
 DEFAULT_AGENT["trim_old_writes"] = "all"          # "superseded": strip only writes of files touched again later
 DEFAULT_AGENT["occ"] = {"enabled": False, "experimental": True, "max_pages_per_turn": 2}

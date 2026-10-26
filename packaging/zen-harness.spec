@@ -35,7 +35,10 @@ for pkg in ("trafilatura", "justext", "courlan", "htmldate", "dateparser", "ddgs
             "onnxruntime", "tokenizers", "pptx", "docx", "openpyxl", "pint", "jedi", "parso",
             "duckdb", "playwright", "tiktoken_ext",
             # the Python tool's kernel runs from this program (ZenHarness.exe -m ipykernel_launcher)
-            "ipykernel", "jupyter_client", "jupyter_core", "zmq", "tornado", "matplotlib", "comm", "debugpy"):
+            "ipykernel", "jupyter_client", "jupyter_core", "zmq", "tornado", "matplotlib", "comm", "debugpy",
+            # the code graph's parsers: imported by name at run time (code_graph.py), grammars inside the wheels
+            "tree_sitter", "tree_sitter_python", "tree_sitter_javascript", "tree_sitter_typescript", "tree_sitter_c",
+            "tree_sitter_cpp", "tree_sitter_go", "tree_sitter_rust", "tree_sitter_c_sharp", "tree_sitter_java"):
     try:
         d, b, h = collect_all(pkg)
         datas += d

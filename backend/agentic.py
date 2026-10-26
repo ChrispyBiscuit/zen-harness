@@ -226,7 +226,7 @@ FAN_GATE_TOOLS = {"web_search", "web_fetch", "browser_open", "read_document", "s
 BASIC_FREE_TOOLS = {"go_extensive", "update_tracker", "available_tools", "read_guide", "memory_save", "playbook_note"}
 # read-only tools that may run at the same time when the model puts several in one step (own ctx copy each)
 PARALLEL_SAFE = {"encyclopedia", "web_search", "web_fetch", "read_file", "read_document", "list_dir", "find_files", "search_text",
-                 "trace_symbol", "search_documents", "calculate", "memory_search", "query_data"}
+                 "trace_symbol", "code_graph", "search_documents", "calculate", "memory_search", "query_data"}
 EXEC_EXCLUDE = {"update_tracker", "ask_user", "delegate_task", "wait_task", "consult_advisor", "enable_screen_control",
                 "memory_save", "memory_update", "memory_delete", "artifact_create", "artifact_edit", "playbook_note",
                 "gather"}
@@ -1691,6 +1691,7 @@ class AgentEngine:
         use_fan = (bool(fan.get("enabled") and fan.get("model")) and be in ("llama", "openai")
                    and llama_local.available() and not self.ctx.is_subagent)
         self.ctx.web_off = c.get("web", True) is False         # the composer's Web switch: a hard off, not a request
+        self.ctx.code_graph_check = c.get("code_graph_check", True) is not False   # broken-reference check on writes
         self.reg = at.Registry(self.ctx, self.mcp, c.get("tools"), screen=bool(c.get("screen_control")),
                                delegate=self.ctx.host is not None and c.get("delegation", True),
                                advisor=bool(adv.get("enabled")) and bool(swarm.api_key()), fanout=use_fan)
@@ -3423,7 +3424,7 @@ class AgentEngine:
                 return ("bg", str(a.get("id")))
             if name == "http_request":
                 return ("http", str(a.get("method") or "GET").upper(), str(a.get("url")))
-            if name in ("search_text", "trace_symbol", "list_dir", "find_files", "trace_call", "port_info", "bg_list", "stack_dump",
+            if name in ("search_text", "trace_symbol", "code_graph", "list_dir", "find_files", "trace_call", "port_info", "bg_list", "stack_dump",
                         "changes_since_green"):
                 return (name, json.dumps(a, sort_keys=True))
             return None
@@ -4403,6 +4404,7 @@ class AgentEngine:
         self._intent_nags, self._said, self._turn_calls = 0, set(), {}
         self._evidence_nagged = False                                  # one "run the tests first" reminder per turn
         self._run_nagged = False                                       # one "run the program first" reminder per turn
+        self._refs_nagged = False                                      # one "fix the broken references" reminder
         self._gather_job = None          # fan-out workers running in the background while the main model works
         self._gather_nudges = 0          # times it was sent back to keep working while the workers run
         self._fan_due, self._fan_gate_refusals = False, 0    # fan-out expected before its own research
@@ -4887,6 +4889,20 @@ class AgentEngine:
                             self._require_call = True
                             _log({"program_run_gate": need[1], "conv": self.ctx.conv_id})
                             continue
+                    if (self.cfg.get("code_graph_check", True) is not False and not asks_user
+                            and not self._force_answer and not getattr(self, "_refs_nagged", False)):
+                        broken = at.open_broken_refs(self.ctx)
+                        if broken:              # names that resolve to nothing: the code fails where they run
+                            self._refs_nagged = True
+                            self.emit("answer_retract", reason="broken references")
+                            self.history.append({"role": "user", "content": REMINDER_TAG + "\nBefore you finish: these "
+                                                 "references in the code resolve to nothing and fail when that code "
+                                                 "runs:\n" + "\n".join(f"- {p}:{l}: {m}" for p, l, m in broken[:8])
+                                                 + "\nFix each one (or say in your answer why it is not a problem)."
+                                                 "\n</system-reminder>"})
+                            self._require_call = True
+                            _log({"broken_refs_gate": len(broken), "conv": self.ctx.conv_id})
+                            continue
                     if final:
                         self._keep_servers_in_answer(final)
                     if final and self._math_rounds < 1 and not self._force_answer and self._verify():
@@ -4968,6 +4984,13 @@ class AgentEngine:
                     self.emit("answer_retract",reason="untested changes")
                     self.emit("ans_delta",text=final)
                 state=None
+            if self.cfg.get("code_graph_check", True) is not False:
+                broken = at.open_broken_refs(self.ctx)
+                if broken:
+                    final = ("Broken references still in the code: " + "; ".join(f"{p}:{l}" for p, l, _m in broken[:6])
+                             + ".\n\n" + final)
+                    self.emit("answer_retract", reason="broken references")
+                    self.emit("ans_delta", text=final)
             if self.cfg.get("program_run_gate", True) is not False:
                 need = vl.ctx_run_needed(self.ctx)
                 if need:

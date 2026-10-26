@@ -29,6 +29,17 @@ duckdb==1.5.6
 jedi==0.20.0
 Pygments==2.21.0
 networkx==3.6.1
+# code graph (code_graph.py): parsers with their grammars bundled, no download at run time (MIT)
+tree-sitter==0.26.0
+tree-sitter-python==0.25.0
+tree-sitter-javascript==0.25.0
+tree-sitter-typescript==0.23.2
+tree-sitter-c==0.24.2
+tree-sitter-cpp==0.23.4
+tree-sitter-go==0.25.0
+tree-sitter-rust==0.24.2
+tree-sitter-c-sharp==0.23.5
+tree-sitter-java==0.23.5
 pillow==12.3.0
 scipy==1.18.1
 

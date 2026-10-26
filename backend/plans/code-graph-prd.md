@@ -1,6 +1,18 @@
 # Code graph for the coding harness — PRD
 
-Status: proposal, 2026-10-26. Nothing built. Inspired by graphify (Apache 2.0, a code knowledge-graph tool for
+Status: P1–P3 built 2026-10-26 (code_graph.py, repomap.py); P4 not started. Setting: `agent.code_graph_check`
+(on). Results:
+- P1: regression set (tests/test_code_graph.py) catches 13/13 seeded bugs, both FPS-run bugs included, with 0 false
+  alarms in 15 tricky clean cases; a warm check on a 200-file project is well under 200 ms. On this app's own code it
+  reports 1 finding in 204 backend files (a real broken reference in legacy/bench.py) and 0 in 92 UI files.
+- P2: `code_graph` tool (callers / callees / impact / path / explain). The tool-call reduction target needs model
+  runs on recorded tasks: not measured yet.
+- P3: tree-sitter definitions under the code map for JS/TS/JSX/TSX, C, C++, Go, Rust, C#, Java (regex fallback kept).
+  On this app's UI it finds 804 definitions vs 786 (28 the regexes missed, none real lost); hand-checked fixtures in
+  six languages pass. The context-pack benchmark can't measure P3 (it doesn't use the code map, and its JS corpus was
+  deleted), so coverage is the measure.
+- The PRD named tree-sitter-language-pack: it downloads grammars at run time, so the per-language packages (grammars
+  inside the wheels, ~1.4 MB together, MIT) are used instead. Inspired by graphify (Apache 2.0, a code knowledge-graph tool for
 coding agents); only its local, deterministic ideas are taken. **Constraint: nothing here calls a cloud model.**
 Parsing, graph building, checks and queries are plain code; any wording is done by the local model.
 

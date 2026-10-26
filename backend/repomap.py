@@ -21,7 +21,7 @@ import threading
 import time
 from collections import Counter, defaultdict
 
-_VERSION = 3
+_VERSION = 4                                         # 4: tree-sitter definitions
 _MAX_FILES = 4000
 _MAX_BYTES = 1_000_000
 _MAX_SEARCH_FILES = 20000
@@ -451,7 +451,9 @@ def _extract(text, lang):
                     defs.append({"name": m.group(3), "kind": kind, "line": i, "sig": _sig(ln)})
             return defs, Counter(_WORD.findall(text))
     if lang in ("js", "jsx", "ts", "tsx"):
-        defs = _js_defs(text)
+        defs = _ts_defs(text, lang)                  # tree-sitter (plans/code-graph-prd.md P3), else the regexes
+        if defs is None:
+            defs = _js_defs(text)
         _mark_module_locals(text, defs)
         refs = _token_refs(text, lang)
         for d in defs:                               # a definition is not a reference to itself
@@ -460,7 +462,25 @@ def _extract(text, lang):
                 if not refs[d["name"]]:
                     del refs[d["name"]]
         return defs, refs
-    return _generic_extract(text, lang)
+    defs, refs = _generic_extract(text, lang)
+    ts = _ts_defs(text, lang) if lang in ("c", "cpp", "go", "rust", "csharp", "java") else None
+    if ts:                                           # tree-sitter's definitions; the token references stay
+        for d in ts:
+            if refs.get(d["name"], 0) > 0:
+                refs[d["name"]] -= 1
+                if not refs[d["name"]]:
+                    del refs[d["name"]]
+        return ts, refs
+    return defs, refs
+
+
+def _ts_defs(text, lang):
+    """Definitions from tree-sitter (code_graph.ts_defs), or None (no grammar here, or the file doesn't parse)."""
+    try:
+        import code_graph
+        return code_graph.ts_defs(text, lang)
+    except Exception:
+        return None
 
 
 def _parse_file(path):
