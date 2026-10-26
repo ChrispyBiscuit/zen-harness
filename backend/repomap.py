@@ -590,13 +590,9 @@ def _pagerank(nodes, edges, personalization):
         return r
 
 
-def rank(root, focus_files=(), mentions=()):
-    """-> (files index, {file: pagerank}, {(file, def_idx): score}) — the ranking behind build_map."""
-    root = _norm_root(root)
-    files = index(root)
-    words = _mention_words(mentions)
-    lwords = {w.lower() for w in words}
-    focus = {_rel(root, f) for f in focus_files or ()}
+def _file_graph(files, words=frozenset(), lwords=frozenset()):
+    """The file graph behind the code map: edges {(a, b): weight} where file a uses names file b defines (and Python
+    module references), xref {(definer, name): weight}, and the helpers rank() needs."""
     defines = defaultdict(set)
     member_only = defaultdict(lambda: True)            # name defined only as object/class members
     for f, rec in files.items():
@@ -653,6 +649,17 @@ def rank(root, focus_files=(), mentions=()):
                 if b != a:
                     edges[(a, b)] += w
                     xref[(b, nm)] += w / max(1, len(targets))
+    return edges, xref, defines, mention_boost, ambiguous
+
+
+def rank(root, focus_files=(), mentions=()):
+    """-> (files index, {file: pagerank}, {(file, def_idx): score}) — the ranking behind build_map."""
+    root = _norm_root(root)
+    files = index(root)
+    words = _mention_words(mentions)
+    lwords = {w.lower() for w in words}
+    focus = {_rel(root, f) for f in focus_files or ()}
+    edges, xref, defines, mention_boost, ambiguous = _file_graph(files, words, lwords)
     pers = {}
     for f, rec in files.items():
         p = 1.0

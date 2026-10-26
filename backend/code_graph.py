@@ -14,6 +14,7 @@ Python, JavaScript, TypeScript, JSX/TSX. Facts are cached per file by (mtime, si
 per process and then only changed files are.
 """
 import difflib
+import math
 import os
 import re
 import threading
@@ -840,6 +841,8 @@ def call_graph(root):
 def question(root, action, target, target2="", cap=40):
     """P2: callers / callees / impact / path / explain for a symbol, as short text with file:line."""
     root = os.path.abspath(root)
+    if action == "overview":
+        return overview(root)
     if not available():
         return "The code graph needs tree-sitter, which isn't installed here."
     files, callers, callees = call_graph(root)
@@ -932,9 +935,98 @@ def question(root, action, target, target2="", cap=40):
                 [f"calls: " + ", ".join(sorted(callees.get(key, ()))[:15])] + \
                 ([f"also defined at: " + ", ".join(f"{rel(a)}:{b}" for a, b, _s in defs[1:4])] if len(defs) > 1 else [])
     else:
-        return "action must be callers, callees, impact, path or explain."
+        return "action must be overview, callers, callees, impact, path or explain."
     more = len(lines) - cap
     return head + ":\n" + "\n".join(lines[:cap]) + (f"\n… and {more} more" if more > 0 else "")
+
+
+# ------------------------------------------------------------------------------------------ P4: overview
+def overview(root, max_groups=10, per_group=5, defs_per_file=3):
+    """P4: the project's parts, for the first steps in a large unfamiliar codebase. Files are grouped by how much
+    they use each other (Louvain clustering of the code map's file graph, fixed seed); each group is labelled by
+    the folder most of it shares and lists its most central files (PageRank) with their most-used definitions.
+    Plain graph code: no model."""
+    import networkx as nx
+    import repomap
+    root = repomap._norm_root(root)
+    files = repomap.index(root)
+    if not files:
+        return "No code files found under " + root + "."
+    all_edges, xref, _d, _m, _a = repomap._file_graph(files)
+    # tests use everything and glue unrelated parts together; stylesheets link files through shared CSS variable
+    # names: neither is part of the structure. Tests are counted, not grouped.
+    is_test = lambda f: bool(re.search(r"(^|/)(tests?|__tests__|spec|testing)/|(^|/)test_|_test\.|\.test\.|\.spec\.|"
+                                       r"(^|/)conftest\.py$", f))
+    code = {f for f, rec in files.items() if rec.get("lang") not in ("css", "html") and not is_test(f)}
+    tests = [f for f in files if is_test(f)]
+    edges = {(a, b): w for (a, b), w in all_edges.items() if a in code and b in code and w > 0}
+    pr = repomap._pagerank(sorted(code), edges, {f: 1.0 for f in code})
+    g = nx.Graph()
+    g.add_nodes_from(code)
+    for (a, b), w in edges.items():
+        g.add_edge(a, b, weight=g[a][b]["weight"] + w if g.has_edge(a, b) else w)
+    # a weak pull between files of the same folder: the folder layout counts, real cross-folder use still wins
+    mean_w = (sum(edges.values()) / len(edges)) if edges else 1.0
+    by_dir = defaultdict(list)
+    for f in code:
+        by_dir[os.path.dirname(f)].append(f)
+    for members in by_dir.values():
+        if 1 < len(members) <= 200:
+            w = 0.3 * mean_w / math.sqrt(len(members))
+            for i, a in enumerate(members):
+                for b in members[i + 1:]:
+                    g.add_edge(a, b, weight=g[a][b]["weight"] + w if g.has_edge(a, b) else w)
+    groups = [set(c) for c in nx.community.louvain_communities(g, weight="weight", seed=1)] if code else []
+    loose = set().union(*[c for c in groups if len(c) == 1]) if groups else set()
+    groups = [c for c in groups if len(c) > 1]
+    groups.sort(key=lambda c: -sum(pr.get(f, 0) for f in c))
+
+    def label(members):
+        """Where the group lives: the folder all of it shares, then its main subfolders with file counts
+        (`scrapy/: http (14), utils (9), core (6)`)."""
+        parts = [os.path.dirname(f).split("/") if os.path.dirname(f) else [] for f in members]
+        base = []                                       # descend while >= 60% of the group shares the folder
+        while True:
+            nxt = [p[len(base)] for p in parts if len(p) > len(base) and p[:len(base)] == base]
+            if not nxt:
+                break
+            top = max(set(nxt), key=nxt.count)
+            if nxt.count(top) < 0.6 * len(members):
+                break
+            base.append(top)
+        inside = [p for p in parts if p[:len(base)] == base]
+        sub = [p[len(base)] if len(p) > len(base) else "(top)" for p in inside]
+        counts = sorted(((sub.count(s), s) for s in set(sub)), reverse=True)
+        out = "/".join(base) or "(project top)"
+        if len(counts) > 1 or (counts and counts[0][1] != "(top)"):
+            out += ": " + ", ".join(f"{s} ({n})" for n, s in counts[:3]) + (", …" if len(counts) > 3 else "")
+        if len(inside) < len(members):
+            out += f"; {len(members) - len(inside)} elsewhere"
+        return out
+
+    def key_defs(f):
+        ds = [d for d in files[f]["defs"] if not d.get("local") and d["kind"] != "method"]
+        ds.sort(key=lambda d: -xref.get((f, d["name"]), 0))
+        return [d["name"] for d in ds[:defs_per_file]]
+
+    hubs = sorted(code, key=lambda f: -pr.get(f, 0))[:5]
+    lines = [f"{len(code)} source files in {len(groups)} group(s) of related files"
+             + (f", {len(loose)} standalone" if loose else "")
+             + (f"; {len(tests)} test files (not grouped)" if tests else "") + "."]
+    if len(files) < 30:
+        lines.append("(A small project: the code map shown with your messages already covers it.)")
+    lines.append("Most connected files: " + ", ".join(hubs))
+    for c in groups[:max_groups]:
+        members = sorted(c, key=lambda f: -pr.get(f, 0))
+        lines.append(f"\n## {label(c)} — {len(c)} files")
+        for f in members[:per_group]:
+            kd = key_defs(f)
+            lines.append(f"- {f}" + (f": {', '.join(kd)}" if kd else ""))
+        if len(members) > per_group:
+            lines.append(f"- … {len(members) - per_group} more")
+    if len(groups) > max_groups:
+        lines.append(f"\n… {len(groups) - max_groups} smaller group(s) not shown")
+    return "\n".join(lines)
 
 
 # ------------------------------------------------------------------------------------------ P3: definitions

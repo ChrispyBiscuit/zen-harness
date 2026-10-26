@@ -253,3 +253,20 @@ def test_the_code_map_uses_tree_sitter_and_falls_back(tmp_path):
     assert ("about", "method") in {(d["name"], d["kind"]) for d in defs}
     defs, _refs = repomap._extract("struct Board { int w; };\nint board_new(void) { return 0; }\n", "c")
     assert {"Board", "board_new"} <= {d["name"] for d in defs}
+
+
+def test_p4_overview_groups_related_files_and_skips_tests(tmp_path, monkeypatch):
+    import repomap
+    files = {}
+    for part, n in (("geometry", 4), ("ui", 4)):
+        files[f"src/{part}/{part}0.py"] = f"def {part}_core():\n    return 1\n"
+        for i in range(1, n):
+            files[f"src/{part}/{part}{i}.py"] = (f"from {part}0 import {part}_core\n\ndef {part}_f{i}():\n"
+                                                 f"    return {part}_core()\n")
+    files["tests/test_all.py"] = "from geometry0 import geometry_core\nfrom ui0 import ui_core\n"
+    root = project(tmp_path, files)
+    monkeypatch.setattr(repomap, "_data_dir", lambda: str(tmp_path / "cache"))
+    out = cg.overview(str(root))
+    assert "8 source files in 2 group(s)" in out and "1 test files (not grouped)" in out
+    assert "## src/geometry" in out and "## src/ui" in out
+    assert "small project" in out                                   # under 30 files: says the code map covers it

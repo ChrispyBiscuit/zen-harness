@@ -1058,9 +1058,9 @@ def t_code_graph(a, c):
     import code_graph as cg
     action = str(a.get("action") or "").strip().lower()
     name = str(a.get("name") or "").strip()
-    if action not in ("callers", "callees", "impact", "path", "explain"):
-        raise ToolError("action must be one of: callers, callees, impact, path, explain")
-    if not name:
+    if action not in ("overview", "callers", "callees", "impact", "path", "explain"):
+        raise ToolError("action must be one of: overview, callers, callees, impact, path, explain")
+    if not name and action != "overview":
         raise ToolError("give name: the function, method or class (e.g. 'make_board' or 'Board.move')")
     root = c.resolve(a.get("root") or (c.cwd or c.roots[0]), True)
     if os.path.isfile(root):
@@ -4795,11 +4795,13 @@ BUILTIN = [
      "in a caller and a callee, a renamed field the tests still expect). root = project folder (or a file in it); "
      "file = which definition when several share the name.",
      _obj({"name": S, "root": S, "file": S, "max_lines": I}, ["name"]), t_trace_symbol),
-    ("code_graph", READ, "One question about a project's code structure, answered in one call: action='callers' (who "
+    ("code_graph", READ, "One question about a project's code structure, answered in one call: action='overview' "
+     "(the project's parts: groups of related files and their central files — start here in a large unfamiliar "
+     "codebase), 'callers' (who "
      "calls name), 'callees' (what name calls), 'impact' (what breaks if name's signature or name changes: call "
      "sites, importers, tests), 'path' (call chain from name to name2), 'explain' (definition, signature, doc, "
      "callers, callees). Python, JavaScript, TypeScript. root = project folder.",
-     _obj({"action": S, "name": S, "name2": S, "root": S}, ["action", "name"]), t_code_graph),
+     _obj({"action": S, "name": S, "name2": S, "root": S}, ["action"]), t_code_graph),
     ("write_file", WRITE, "Create a new text file, or overwrite one with the full new content "
      "(append=true adds to the end). Folders are created as needed. For small changes to an "
      "existing file use edit_file instead.",
