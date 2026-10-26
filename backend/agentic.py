@@ -6195,7 +6195,10 @@ class AgentEngine:
     # code work that is not a new build: debugging, refactoring, understanding an existing codebase
     _CODE_REQ_RX = re.compile(r"\b(bugs?|debug\w*|refactor\w*|codebase|repo(sitory)?|traceback|stack ?trace|exception|"
                               r"unit tests?|tests? (fail|pass)\w*)\b|"
-                              r"\.(py|js|mjs|ts|tsx|jsx|java|cs|go|rs|cpp|rb|php)\b", re.I)
+                              r"\.(py|js|mjs|ts|tsx|jsx|java|cs|go|rs|cpp|rb|php)\b|"
+                              # a code name: "why does read_file …", "in Registry._call_unchecked …" (a question
+                              # about how code works named none of the words above: code_graph was never offered)
+                              r"\b_?[a-z][a-z0-9]*(_[a-z0-9]+)+\b|(?-i:\b[A-Z][A-Za-z0-9]+\._?[a-z]\w*\b)", re.I)
     _BUILD_REQ_RX = re.compile(r"\b(build|make|create|write|develop|code|program|implement)\b[^.?!\n]{0,80}\b(app|"
                                r"application|program|game|website|web ?site|tool|script|server|cli|api|bot|tracker|"
                                r"service|backend|frontend)s?\b", re.I)
@@ -6284,8 +6287,9 @@ class AgentEngine:
                 # only when the project folder is in module mode (a from-scratch build); decided at turn start
                 core |= {"module_contract", "begin_module", "verify_module", "module_status"} & set(self.reg.by_name)
             if getattr(self, "_code_work", False):
-                # code work only: research, documents and chat never index code (still loadable: files group)
-                core |= {"focus_pack"} & set(self.reg.by_name)
+                # code work only: research, documents and chat never index code (still loadable: files group).
+                # code_graph answers structure questions in one call (plans/code-graph-prd.md P2): offered with it
+                core |= {"focus_pack", "code_graph"} & set(self.reg.by_name)
             if getattr(self, "_workbook_tools", False):
                 # only once a workbook is open (15 calls in 5,201; ~840 tokens a step otherwise); problem_plan loads
                 # on its first call like any other tool
